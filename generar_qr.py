@@ -28,20 +28,30 @@ import qrcode
 import qrcode.image.svg
 from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_L, ERROR_CORRECT_M
 
-# El QR es una URL 'javascript:' que reconstruye el documento en memoria:
-# atob para el base64url y DecompressionStream para el gzip. Ni una peticion
-# a la red, ni un servidor. El base64url se pega con su relleno '=', que el
-# navegador acepta tal cual y ocupa uno o dos modulos.
+# ---------------------------------------------------------------------------
+# Modos
+# ---------------------------------------------------------------------------
+# 'enlace'      El QR lleva solo la URL del HTML publicado. El documento se
+#               edita y se sube a GitHub, y el QR sigue funcionando sin
+#               regenerarlo. Es el modo normal y el que menos modulos usa.
+# 'servidor'    El QR lleva la URL de una pagina base mas el HTML completo
+#               comprimido en el fragmento. Sirve para que el QR no dependa
+#               del hosting, o para hacer version inmutable.
+# 'sin-servidor' El QR lleva una URL 'javascript:' con el HTML dentro. Chrome
+#               en Android y Safari en iOS la bloquean, asi que NO sirve para
+#               imprimir; queda solo para depurar en el escritorio.
 PREFIJO = "(async()=>{"
 SUFIJO = "})()"
 
-# URL donde se publica la pagina base. En modo 'servidor' el QR apunta aqui
-# seguido del fragmento, asi que esta direccion tiene que existir de verdad.
-# Cámbiala por la tuya antes de imprimir el QR.
+# URL del HTML publicado. En modo 'enlace' el QR contiene exactamente esto, y
+# en modo 'servidor' es la pagina base a la que se le anade el fragmento.
 #
-# Cada caracter de esta URL ocupa un modulo del QR, asi que se ha hecho
-# corta: un solo archivo 'd.html' en la raiz del repo sirve para todos los
-# documentos, en vez de uno por documento dentro de salida/.
+# En modo 'enlace' apunta al archivo fuente: si editas el HTML, subes el
+# cambio y el QR ya abre la version nueva. No hay que regenerar nada.
+URL_HTML = "https://tonycabreram.github.io/OrgulloCimarron/plantilla/croquis.html"
+
+# Pagina base, para el modo 'servidor'. Es un unico archivo que sirve para
+# todos los documentos, porque solo lee location.hash y nunca cambia.
 URL_BASE = "https://tonycabreram.github.io/OrgulloCimarron/d.html"
 
 
@@ -67,15 +77,17 @@ def cuerpo_js(fragmento: str) -> str:
     )
 
 
-def construir_ancla(fragmento: str, url_base: str = URL_BASE, modo: str = "sin-servidor") -> str:
+def construir_ancla(fragmento: str, modo: str = "enlace") -> str:
     """Arma la cadena completa que viajara dentro del QR.
 
-    'sin-servidor' no lleva URL que resolver: el lector abre el 'javascript:' y
-    la pagina se construye en memoria. 'servidor' se apoya en la URL base y
-    deja el fragmento despues del '#', que el navegador nunca envia al servidor.
+    'enlace' es solo la URL del HTML: no lleva fragmento ni JavaScript, y es
+    lo que produce el QR con menos modulos. 'servidor' le anade el fragmento
+    con el HTML comprimido. 'sin-servidor' lo envuelve en un 'javascript:'.
     """
+    if modo == "enlace":
+        return URL_HTML
     if modo == "servidor":
-        return f"{url_base}#{fragmento}"
+        return f"{URL_BASE}#{fragmento}"
     return f"javascript:{PREFIJO}{cuerpo_js(f'{fragmento!r}')}{SUFIJO}"
 
 
@@ -83,10 +95,13 @@ def extraer_fragmento(ancla: str) -> str:
     """Recupera el base64url de un ancla, sea 'javascript:' o 'URL#fragmento'.
 
     Es la operacion inversa de construir_ancla, y sirve para verificar que lo
-    que se leyo del QR devuelve exactamente el documento original.
+    que se leyo del QR devuelve exactamente el documento original. En modo
+    'enlace' no hay fragmento, asi que devuelve cadena vacia.
     """
     if "#" in ancla:
         return ancla.split("#", 1)[1]
+    if not ancla.startswith("javascript:"):
+        return ""
     encontrado = re.search(r"let s='([^']*)'", ancla)
     return encontrado.group(1) if encontrado else ""
 
@@ -313,132 +328,137 @@ def vista_previa(ancla: str, modo: str) -> str:
 
 def main() -> int:
     analizador = argparse.ArgumentParser(
-        description="Genera un QR que abre un HTML animado sin servidor.",
+        description="Genera un QR que abre un documento HTML.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"""
+        epilog="""
 Ejemplos:
-  python generar_qr.py
-  python generar_qr.py --html plantilla/plantilla.html --salida salida/orgullo
-  python generar_qr.py --nivel L --url-base https://ejemplo.com/mi-pagina
+  python generar_qr.py --html plantilla/croquis.html --salida salida/croquis --nivel H
+  python generar_qr.py --modo servidor --nivel L
+  python generar_qr.py --modo sin-servidor      (solo para depurar)
 """,
     )
-    analizador.add_argument("--html", default="plantilla/plantilla.html", help="HTML fuente legible")
-    analizador.add_argument("--salida", default="salida/orgullo", help="prefijo de salida (sin extension)")
-    analizador.add_argument("--url-base", default=URL_BASE, help="URL a la que apunta el QR")
+    analizador.add_argument("--html", default="plantilla/croquis.html", help="HTML fuente legible")
+    analizador.add_argument("--salida", default="salida/croquis", help="prefijo de salida (sin extension)")
     analizador.add_argument(
         "--modo",
-        choices=["servidor", "sin-servidor"],
-        default="servidor",
-        help="servidor (por defecto): el QR apunta a una URL real y funciona en el movil. "
-        "sin-servidor: no necesita publicar nada, pero usa una URL 'javascript:' que "
-        "Chrome en Android y Safari en iOS bloquean, asi que NO sirve para imprimir",
+        choices=["enlace", "servidor", "sin-servidor"],
+        default="enlace",
+        help="enlace (por defecto): el QR lleva solo la URL del HTML publicado, y da el "
+        "QR más pequeño. servidor: además lleva el HTML dentro, por si el QR debe "
+        "funcionar aunque el hosting caiga. sin-servidor: URL 'javascript:', que "
+        "los móviles bloquean; solo para depurar",
     )
     analizador.add_argument(
         "--nivel",
         choices=list(CAPACIDAD),
-        default="M",
-        help="correccion de errores: H=1273 bytes (menos cuadritos), M=2331, L=2953",
+        default="H",
+        help="corrección de errores: H=1273 bytes (el más robusto, Recommended), "
+        "M=2331, L=2953 (el que más cabe, pero el más frágil al imprimir)",
     )
     analizador.add_argument("--no-minificar", action="store_true", help="conservar el HTML tal cual")
-    analizador.add_argument("--sin-comprimir", action="store_true", help="no aplicar gzip (QR mas denso)")
+    analizador.add_argument("--sin-comprimir", action="store_true", help="no aplicar gzip (QR más denso)")
     analizador.add_argument(
         "--publicar-en",
         metavar="CARPETA",
         default=".",
-        help="donde dejar la pagina base, con el nombre que tiene en la URL. Por "
-        "defecto la raiz del repo, que es de donde GitHub Pages la sirve",
+        help="modo servidor: dónde dejar la página base. Por defecto la raíz del repo",
     )
     args = analizador.parse_args()
 
     origen = Path(args.html)
     if not origen.is_file():
-        raise SystemExit(f"No encontre el HTML fuente: {origen}")
+        raise SystemExit(f"No encontré el HTML fuente: {origen}")
 
     crudo = origen.read_text(encoding="utf-8")
     if "<html" not in crudo.lower() and "<!doctype" not in crudo.lower():
         crudo = f"<!doctype html>{crudo}"
 
-    html = crudo if args.no_minificar else minificar(crudo)
-    fragmento = limpiar_html(html, comprimir=not args.sin_comprimir)
-
     problemas = revisar_autonomo(crudo)
     if problemas:
-        print("Aviso: el HTML referencia recursos externos que NO viajan en el QR:")
+        print("Aviso: el HTML referencia recursos externos, así que NO funcionará solo:")
         for problema in problemas:
             print(f"  - {problema}")
+        if args.modo != "enlace":
+            print("  (en los otros modos el archivo no viaja en el QR: no lo verían)")
 
     salida = Path(args.salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
 
-    ancla = construir_ancla(fragmento, args.url_base, args.modo)
+    # En modo 'enlace' el documento se sirve tal cual desde el repo, así que no
+    # hace falta minificarlo ni comprimirlo: el QR solo lleva la URL.
+    if args.modo == "enlace":
+        ancla = construir_ancla("", "enlace")
+    else:
+        html = crudo if args.no_minificar else minificar(crudo)
+        fragmento = limpiar_html(html, comprimir=not args.sin_comprimir)
+        ancla = construir_ancla(fragmento, args.modo)
+
     total = len(ancla.encode("utf-8"))
     capacidad = CAPACIDAD[args.nivel]
     porcentaje = total / capacidad * 100
     version = _version_para(total, args.nivel)
     modulos = 17 + 4 * version
 
-    print(f"HTML fuente      : {origen}")
-    print(f"HTML minificado  : {len(html.encode('utf-8'))} bytes")
-    if not args.sin_comprimir:
-        print(f"Comprimido (gzip): {bytes_reales(fragmento)} bytes")
-    print(f"Fragmento        : {len(fragmento)} chars en base64url")
+    print(f"Modo            : {args.modo}")
+    print(f"HTML fuente     : {origen}  ({len(crudo.encode('utf-8'))} bytes)")
+    if args.modo != "enlace":
+        print(f"HTML minificado : {len(html.encode('utf-8'))} bytes")
+        if not args.sin_comprimir:
+            print(f"Comprimido (gzip): {bytes_reales(fragmento)} bytes")
+        print(f"Fragmento       : {len(fragmento)} chars en base64url")
     print(f"Contenido del QR : {total} bytes ({porcentaje:.0f}% de {capacidad}, nivel {args.nivel})")
-    print(f"Cuadritos        : version {version} -> {modulos}x{modulos} modulos")
+    print(f"Cuadritos        : version {version} -> {modulos}x{modulos} módulos")
     if porcentaje > 100:
         siguiente = {"M": "L", "H": "M"}.get(args.nivel)
         print("ERROR: no cabe." + (f" Prueba con --nivel {siguiente}." if siguiente else " Reduce el documento."))
         return 1
-    if porcentaje > 95:
-        print(f"Aviso: vas justo de espacio ({porcentaje:.0f}%). Recorta texto antes de publicar.")
+    if args.modo == "enlace":
+        print("Margen          : sobra sitio de sobra, no hace falta recortar nada")
+    elif porcentaje > 95:
+        print("Aviso: vas justo de espacio. Recorta texto antes de publicar.")
     elif porcentaje > 85:
-        print(f"Aviso: queda poco margen ({porcentaje:.0f}%).")
+        print("Aviso: queda poco margen.")
 
-    # A partir de aqui si se escriben archivos.
-    html_path = salida.with_suffix(".html")
-    html_path.write_text(html, encoding="utf-8")
-    print(f"HTML autonomo    -> {html_path}")
+    # A partir de aquí sí se escriben archivos.
+    if args.modo != "enlace":
+        html_path = salida.with_suffix(".html")
+        html_path.write_text(html, encoding="utf-8")
+        print(f"HTML minificado -> {html_path}  (copia de referencia)")
 
     construir_qr(ancla, salida.with_suffix(".png"), salida.with_suffix(".svg"), args.nivel)
     print(f"QR (PNG)        -> {salida.with_suffix('.png')}")
-    print(f"QR (SVG)        -> {salida.with_suffix('.svg')}")
-    print(f"Modo            : {args.modo}")
+    print(f"QR (SVG)        -> {salida.with_suffix('.svg')}  (para imprenta)")
 
-    # La pagina base NO depende del documento: solo lee location.hash, asi que
-    # es la misma para todos los QR y basta con una copia. Se escribe donde
-    # dice --publicar-en (por defecto la raiz del repo, que es de donde la
-    # sirve GitHub Pages), y no tambien en salida/, para no tener dos.
-    nombre_base = Path(args.url_base).name or "index.html"
-    if args.modo == "servidor":
-        base = Path(args.publicar_en) / nombre_base
+    if args.modo == "enlace":
+        print()
+        print("LISTO PARA ESCANEAR. El QR contiene solo esta dirección:")
+        print(f"  {ancla}")
+        print()
+        print("Comprueba que abre en el móvil. Si editas el HTML y subes el cambio,")
+        print("el QR ya abre la versión nueva: no hay que regenerarlo.")
+    elif args.modo == "servidor":
+        base = Path(args.publicar_en) / (Path(URL_BASE).name or "index.html")
         base.parent.mkdir(parents=True, exist_ok=True)
         base.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
-        print(f"Pagina base     -> {base}  (súbela y el QR funciona)")
+        print(f"Página base     -> {base}  (súbela a la raíz del repo)")
+        print()
+        print("LISTO PARA ESCANEAR. El QR apunta a:")
+        print(f"  {URL_BASE}#{fragmento[:40]}…")
+        print()
+        print("1. Sube el archivo de página base a la raíz del repo.")
+        print("2. Comprueba que esa página abre en el móvil.")
+        print("3. Escanea el QR.")
+        print()
+        print("Aviso: la URL ronda los", total, "caracteres porque el fragmento")
+        print("viaja dentro. Si algún lector la trunca, recorta el documento.")
     else:
         base = salida.with_name(salida.name + "_base.html")
         base.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
         print(f"Vista previa    -> {base}  (abre esto para ver el resultado)")
-
-    print()
-    if args.modo == "servidor":
-        print("LISTO PARA ESCANEAR. El QR apunta a:")
-        print(f"  {args.url_base}#{fragmento[:40]}…")
-        print()
-        print(f"1. Sube este archivo a la raiz del repo:")
-        print(f"     {base}  ->  {Path(args.url_base).name} en la raiz")
-        print("   En GitHub Pages: sube el repo y activa Pages desde la rama.")
-        print("   Netlify Drop: arrastra la carpeta y usa la URL que te den.")
-        print("2. Comprueba que la pagina base abre en el movil.")
-        print("3. Escanea el QR con cualquier dispositivo.")
-        print()
-        print("Aviso: la URL completa ronda los", total, "caracteres porque el")
-        print("fragmento viaja dentro. Si en algun lector se trunca, baja el")
-        print("documento (menos texto o menos zonas) y vuelve a generar.")
-    else:
-        print(f"Vista previa    -> {base}  (abre esto para ver el resultado)")
         print()
         print("OJO: este modo usa una URL 'javascript:'. Chrome en Android y")
-        print("Safari en iOS la bloquean, asi que el QR NO funcionara en un")
-        print("telefono. Usa --modo servidor para imprimirlo.")
+        print("Safari en iOS la bloquean, así que el QR NO funcionará en un")
+        print("teléfono. Usa '--modo enlace' o '--modo servidor' para imprimirlo.")
     return 0
 
 

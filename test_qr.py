@@ -24,6 +24,7 @@ from PIL import Image
 from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_L, ERROR_CORRECT_M
 
 import generar_qr as g
+from generar_qr import URL_HTML
 
 NIVELES = {"L": ERROR_CORRECT_L, "M": ERROR_CORRECT_M, "H": ERROR_CORRECT_H}
 
@@ -72,22 +73,23 @@ def test_ronda_completa() -> bool:
 
     Se recorren los dos modos, porque el QR no siempre lleva la misma forma.
     """
-    origen = Path("plantilla/plantilla.html")
+    origen = Path("plantilla/croquis.html")
     crudo = origen.read_text(encoding="utf-8")
     salida = Path("_tmp_salida")
     salida.mkdir(exist_ok=True)
     try:
-        for modo in ("sin-servidor", "servidor"):
+        for modo in ("servidor", "sin-servidor"):
             prefijo = salida / modo
             if ejecutar_main("--html", str(origen), "--salida", str(prefijo),
-                             "--nivel", "L", "--modo", modo) != 0:
+                             "--nivel", "L", "--modo", modo,
+                             "--publicar-en", str(salida)) != 0:
                 return False
             texto = leer_qr(prefijo.with_suffix(".png"))
             if not texto:
                 print(f"    (el lector no pudo leer el QR en modo {modo})")
                 return False
             if modo == "servidor" and not texto.startswith(g.URL_BASE + "#"):
-                print(f"    (el QR no apunta a la URL base: {texto[:40]!r})")
+                print(f"    (el QR no apunta a la pagina base: {texto[:40]!r})")
                 return False
             if modo == "sin-servidor" and not texto.startswith("javascript:"):
                 print(f"    (el QR no es un javascript: {texto[:40]!r})")
@@ -113,17 +115,19 @@ def test_escaneo_de_un_movil() -> bool:
     origen = Path("plantilla/plantilla.html")
     salida = Path("_tmp_scan")
     salida.mkdir(exist_ok=True)
+    nombre_base = Path(g.URL_BASE).name or "index.html"
     try:
         if ejecutar_main("--html", str(origen), "--salida", str(salida / "q"),
                          "--nivel", "L", "--modo", "servidor",
-                         "--publicar-en", str(salida),
-                         "--url-base", "https://ejemplo.org/pagina.html") != 0:
+                         "--publicar-en", str(salida)) != 0:
             return False
 
         url = leer_qr(salida / "q.png")
         base, _, fragmento = url.partition("#")
-        if not base.startswith("https://ejemplo.org/pagina.html"):
-            print(f"    (el QR no apunta a la pagina base: {base!r})")
+        # 'base' es la parte anterior al '#', así que se compara con URL_BASE
+        # a secas: compararlo con URL_BASE + '#' no puede coincidir nunca.
+        if base != g.URL_BASE:
+            print(f"    (el QR no apunta a la pagina base: {base[:60]!r}…)")
             return False
         if not fragmento:
             print("    (el QR no lleva fragmento)")
@@ -135,9 +139,8 @@ def test_escaneo_de_un_movil() -> bool:
 
         # La pagina base es la que se publica: tiene que leer el hash y
         # reconstruir. Sin esto, escanear el QR no muestra nada. El generador
-        # la nombra con el mismo nombre que tiene en la URL, asi que aqui se
-        # busca 'pagina.html' y no un nombre fijo.
-        pagina = (salida / "pagina.html").read_text(encoding="utf-8")
+        # la nombra con el mismo nombre que tiene en la URL.
+        pagina = (salida / nombre_base).read_text(encoding="utf-8")
         for pieza in ("location.hash.slice(1)", "DecompressionStream('gzip')", "atob"):
             if pieza not in pagina:
                 print(f"    (la pagina base no usa {pieza})")
@@ -157,32 +160,35 @@ def test_escaneo_de_un_movil() -> bool:
 
 
 def test_url_publicada_responde() -> bool:
-    """La pagina base de URL_BASE esta viva y trae el decodificador.
+    """La URL que lleva el QR está viva y trae el documento.
 
-    Sin esto el QR se puede imprimir y no abrir nada. Requiere red; si no hay
+    Sin esto se puede imprimir un QR que no abre nada. Requiere red; si no hay
     conexion se salta en vez de fallar, porque no es un fallo del codigo.
     """
-    if g.URL_BASE.startswith("https://x.to") or g.URL_BASE.rstrip("/").count("/") < 3:
-        print("    (URL_BASE sigue siendo un ejemplo, nada que comprobar)")
-        return True
+    destino = Path(URL_HTML.rsplit("github.io/OrgulloCimarron/", 1)[-1])
+    if not destino.is_file():
+        print(f"    (URL_HTML apunta a {destino}, que no está en el repo)")
+        return False
+    marcador = destino.read_text(encoding="utf-8")
     try:
-        peticion = urllib.request.Request(g.URL_BASE, headers={"User-Agent": "OrgulloCimarron-test"})
+        peticion = urllib.request.Request(URL_HTML, headers={"User-Agent": "OrgulloCimarron-test"})
         with urllib.request.urlopen(peticion, timeout=20) as respuesta:
             cuerpo = respuesta.read().decode("utf-8", "replace")
             estado = respuesta.status
     except urllib.error.HTTPError as error:
-        print(f"    (la pagina base devuelve {error.code}; el QR no abrira nada)")
+        print(f"    (la URL devuelve {error.code}; GitHub Pages puede que esté")
+        print("     reconstruyendo, o que el HTML no esté subido todavía)")
         return False
     except (urllib.error.URLError, OSError) as error:
-        print(f"    (sin conexion a {g.URL_BASE}: {error.reason}; se omite)")
+        print(f"    (sin conexión a {URL_HTML}: {error.reason}; se omite)")
         return True
     if estado != 200:
-        print(f"    (la pagina base devuelve {estado})")
+        print(f"    (la URL devuelve {estado})")
         return False
-    if "location.hash.slice(1)" not in cuerpo:
-        print("    (la pagina publicada no lee el fragmento: no va a funcionar)")
+    if "UABC Campus Mexicali" not in cuerpo:
+        print("    (la URL responde, pero no es el documento del croquis)")
         return False
-    print(f"    {g.URL_BASE} -> {estado}, {len(cuerpo)} bytes")
+    print(f"    {URL_HTML} -> {estado}, {len(cuerpo)} bytes")
     return True
 
 
@@ -262,6 +268,45 @@ def test_atributos_sin_comillas_no_se_tragan() -> bool:
     return not fallos
 
 
+def test_modo_enlace_es_una_url() -> bool:
+    """El modo por defecto pone solo la URL en el QR, sin fragmento.
+
+    Es el modo que da el QR más pequeño: si el documento ya está publicado,
+    meterlo dentro del QR es tirar bytes. También tiene que ser una URL
+    http de verdad, porque es lo que abrirá el lector del móvil.
+    """
+    salida = Path("_tmp_enlace")
+    salida.mkdir(exist_ok=True)
+    try:
+        if ejecutar_main("--html", "plantilla/croquis.html",
+                         "--salida", str(salida / "q"), "--nivel", "H") != 0:
+            return False
+        url = leer_qr(salida / "q.png")
+        if url != g.URL_HTML:
+            print(f"    (el QR no contiene la URL del HTML: {url!r})")
+            return False
+        if not url.startswith("https://"):
+            print("    (el QR no es una URL https)")
+            return False
+        if "#" in url or "javascript:" in url:
+            print("    (el QR lleva fragmento o javascript:, no es un enlace simple)")
+            return False
+        # El documento tiene que existir en el repo, y ser autónomo: si el QR
+        # solo lleva la URL, el archivo publicado tiene que abrir solo.
+        destino = Path(url.split("github.io/OrgulloCimarron/", 1)[-1])
+        if not destino.is_file():
+            print(f"    (la URL apunta a {destino}, que no está en el repo)")
+            return False
+        crudo = destino.read_text(encoding="utf-8")
+        if g.revisar_autonomo(crudo):
+            print("    (el HTML publicado tiene recursos externos: no abrirá solo)")
+            return False
+        print(f"    {len(url)} chars -> {destino} ({len(crudo)} bytes, autónomo)")
+        return True
+    finally:
+        shutil.rmtree(salida, ignore_errors=True)
+
+
 def test_minificado_conserva_estructura() -> bool:
     """El minificador no rompe las piezas que sostienen el render."""
     crudo = Path("plantilla/plantilla.html").read_text(encoding="utf-8")
@@ -304,6 +349,9 @@ def test_exceso_se_reporta() -> bool:
 
     El relleno tiene que ser incompresible: una tira de 'a' repetidas la
     reduce gzip a unas decenas de bytes y entraria de sobra en el QR.
+
+    Va en modo 'servidor' a proposito: en modo 'enlace' el documento no viaja
+    en el QR, asi que da igual que sea enorme y la prueba no probaria nada.
     """
     relleno = base64.b64encode(os.urandom(6000)).decode("ascii")
     grande = Path("_tmp_grande.html")
@@ -311,7 +359,9 @@ def test_exceso_se_reporta() -> bool:
     ruta_salida = Path("_tmp_salida")
     ruta_salida.mkdir(exist_ok=True)
     try:
-        codigo = ejecutar_main("--html", str(grande), "--salida", str(ruta_salida / "x"), "--nivel", "H")
+        codigo = ejecutar_main("--html", str(grande), "--salida", str(ruta_salida / "x"),
+                               "--nivel", "H", "--modo", "servidor",
+                               "--publicar-en", str(ruta_salida))
         if codigo == 0:
             print("    (un documento de 8000 bytes deberia exceder el nivel H)")
             return False
@@ -328,6 +378,7 @@ def main() -> int:
         ("atributos sin comillas no se tragan", test_atributos_sin_comillas_no_se_tragan),
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),
+        ("modo enlace: QR = URL", test_modo_enlace_es_una_url),
         ("QR actual decodificable", test_ronda_completa),
         ("escaneo desde un movil", test_escaneo_de_un_movil),
         ("URL publicada responde", test_url_publicada_responde),

@@ -1,29 +1,77 @@
-# Orgullo Cimarron — QR que ejecuta HTML embebido
+# Orgullo Cimarrón — QR que abre el croquis del campus
 
-Un código QR que, al escanearlo en cualquier dispositivo, abre una página HTML
-completa con transiciones y animaciones. Sin backend, sin que el móvil
-descargue nada del servidor: el HTML viaja dentro del propio QR.
+Un código QR que, al escanearlo con cualquier dispositivo, abre un croquis
+interactivo del campus Mexicali de la UABC. Tocar un edificio lo amplía y
+muestra su ficha.
 
-## La idea
-
-Una URL puede llevar un **fragmento** (lo que va después del `#`). Los fragmentos
-**nunca se envían al servidor**: el navegador hace el `GET` normal de la URL base
-y luego usa el fragmento para construir el documento. Eso permite codificar un
-HTML entero dentro del propio QR.
+El QR **no lleva el HTML dentro**: lleva la dirección del HTML, que ya está
+publicado en GitHub Pages.
 
 ```
-https://mi-sitio/pagina.html#H4sIAAAAA…
-                            └─ el HTML viaja aquí ─┘
+https://tonycabreram.github.io/OrgulloCimarron/plantilla/croquis.html
+└────────────── 69 caracteres ──────────────┘
 ```
 
-Al escanear, el lector abre esa dirección. La URL base es una página diminuta que
-solo descomprime el fragmento, y el fragmento se convierte en el documento que
-se muestra, con su CSS, sus animaciones y su JavaScript.
+Eso son 49×49 módulos. La versión anterior, con el HTML comprimido dentro del
+propio QR, ocupaba 149×149: **90% más cuadros**, y además había que regenerar
+el QR cada vez que se editaba el HTML.
 
-## Cómo se lee en un teléfono
+## Los tres modos
 
-El QR apunta a `URL_BASE` seguido de `#` y el fragmento. La página base es la
-que se publica, y hace tres cosas:
+| Modo | Qué lleva el QR | Módulos | Cuándo usarlo |
+| --- | --- | --- | --- |
+| `enlace` *(por defecto)* | Solo la URL del HTML | **49×49** | El normal. Editas el HTML, subes el cambio, y el QR ya abre la versión nueva |
+| `servidor` | URL de una página base + el HTML comprimido en el `#` | 149×149 | Si quieres que el QR no dependa del hosting, o una versión congelada |
+| `sin-servidor` | URL `javascript:` con el HTML dentro | 149×149 | **No sirve para imprimir**: Chrome en Android y Safari en iOS la bloquean |
+
+> **En los tres modos hace falta hosting.** En `enlace` y `servidor` el móvil
+> descarga el HTML de la red; en `servidor` además descarga la página base.
+> Lo único que cambia es de dónde sale el contenido.
+
+## Publicar
+
+El modo `enlace` necesita una sola cosa: que el HTML esté en la URL que lleva
+el QR. En este repo ya lo está, así que basta con subir el cambio cuando
+edites el croquis.
+
+| Servicio | Cómo |
+| --- | --- |
+| **GitHub Pages** *(el de este repo)* | Sube el repo y activa Pages desde la rama |
+| **Netlify Drop** | Arrastra la carpeta, usa la URL que te den |
+| **Cloudflare Pages** | Conecta el repo o sube la carpeta |
+
+Para el modo `servidor` hay que subir además `d.html` en la raíz del repo. Es
+un archivo único que sirve para todos los QR: solo lee `location.hash` y nunca
+cambia.
+
+## Hacer el QR más pequeño todavía
+
+Cada módulo es un cuadrado, así que lo que manda es el **número de bytes de la
+URL**, no el del documento. En modo `enlace` eso son 69 bytes y no hay nada que
+recortar. Lo único que queda es acortar la URL:
+
+| URL | Caracteres | Módulos (nivel H) |
+| --- | --- | --- |
+| `https://tonycabreram.github.io/OrgulloCimarron/plantilla/croquis.html` | 69 | 49×49 |
+| `https://tonycabreram.github.io/OrgulloCimarron/c.html` *(copia en la raíz)* | 55 | 45×45 |
+| Dominio propio, p. ej. `https://c.im/` | 12 | 25×25 |
+
+### Elegir el nivel de corrección
+
+Con tan pocos bytes hay sitio de sobra, así que se puede elegir el nivel más
+robusto. **No es una decisión gratuita**: subir la corrección de errores obliga
+a **más** módulos.
+
+| Nivel | Corrección | Módulos | Cuándo |
+| --- | --- | --- | --- |
+| `H` *(por defecto)* | 30% | 49×49 | Cartel en la calle, sol, lluvia, que se raye |
+| `M` | 15% | 37×37 | Folleto protegido, interior |
+| `L` | 7% | 33×33 | Los menos cuadros posibles, en papel limpio |
+
+## Cómo se lee en un teléfono (modo `servidor`)
+
+Para el modo `servidor`, el QR apunta a la página base seguida del `#` y el
+fragmento. La página base hace tres cosas:
 
 1. Copia el fragmento de `location.hash` y traduce `-` y `_` a `+` y `/`, porque
    `atob` solo entiende el alfabeto base64 estándar.
@@ -35,81 +83,34 @@ come la propia página base, así que el aviso de error desaparecería y un
 segundo escaneo con la página ya abierta se quedaría en blanco. Con `iframe`
 la base sigue viva, los errores se pueden mostrar y `hashchange` recarga.
 
-## Publicar (obligatorio)
-
-El modo por defecto es `servidor` y **no funciona hasta que publiques la página
-base**. Genera el QR:
-
-```bash
-python generar_qr.py --html plantilla/croquis.html --salida salida/croquis --nivel L
-```
-
-Eso deja `d.html` en la raíz del repo. Súbelo y comprueba que abra en el móvil
-antes de imprimir. La página base es la misma para todos los QR (solo lee
-`location.hash`), así que se publica una vez y no cambia nunca.
-
-> **No uses `--modo sin-servidor` para imprimir.** Ese modo codifica una URL
-> `javascript:`, y Chrome en Android y Safari en iOS la bloquean por seguridad:
-> escanear el QR no haría nada. Está ahí solo para depurar en el escritorio.
-
-Dónde publicarlo, todo gratis:
-
-| Servicio | Cómo |
-| --- | --- |
-| **GitHub Pages** | Sube el repo (incluido `d.html` en la raíz), activa Pages desde la rama |
-| **Netlify Drop** | Arrastra la carpeta, usa la URL que te den |
-| **Cloudflare Pages** | Conecta el repo o sube la carpeta |
-
-La URL base son 53 caracteres y cada uno ocupa un módulo del QR. Cuanto más
-corta sea la URL, menos cuadros:
-
-| URL base | Caracteres |
-| --- | --- |
-| `https://tonycabreram.github.io/OrgulloCimarron/d.html` | 53 |
-| `https://tonycabreram.github.io/OrgulloCimarron/` (como `index.html`) | 46 |
-| `https://q.pages.dev` (Cloudflare Pages con proyecto de 1 letra) | 19 |
-
-## Hacer el QR más grande y fácil de escanear
-
-Cada módulo es un cuadrado. Cuantos menos, mejor para imprimir y escanear. La
-versión del QR depende solo de los bytes de la URL completa, y el presupuesto
-se reparte así:
-
-| Pieza | Bytes | Se puede recortar |
-| --- | --- | --- |
-| URL base | 53 | Con una URL más corta (ver tabla de arriba) |
-| HTML comprimido | ~2000 | Menos texto, menos zonas, menos decoración |
-| Corrección de errores L | 7% | Subirla da **más** módulos, no menos |
-
-Ahora mismo: **2065 bytes → versión 33 → 149×149 módulos**, antes 2655 bytes y
-169×169. Los recortes que lo hicieron, medidos:
-
-| Recorte | Ganancia |
-| --- | --- |
-| Animar con `transform` CSS en vez de `viewBox` en un bucle de JS | −270 bytes |
-| URL base de 72 a 53 caracteres | −19 bytes |
-| Las 4 aulas de Derecho en un solo bloque | −42 bytes |
-| Sin degradado en la ficha, sin `display:block` de sobra | −42 bytes |
-| Quitar comillas de atributos (con un espacio antes de `/>`) | −28 bytes |
-
-Para llegar a 137×137 harían falta unos 400 bytes menos: se podría quitar el
-fondo dibujado del mapa (−193) y las descripciones de las zonas (−104), pero se
-pierde contenido útil. Mide con `generar_qr.py` antes de recortar.
-
 ## Uso
 
 ```bash
-python generar_qr.py
+python generar_qr.py --html plantilla/croquis.html --salida salida/croquis --nivel H
 ```
 
-Produce estos archivos en `salida/`:
+Produce en `salida/`:
 
 | Archivo | Para qué sirve |
 | --- | --- |
-| `croquis.png` | El QR listo para imprimir o compartir |
+| `croquis.png` | El QR listo para compartir |
 | `croquis.svg` | El mismo QR como vector, para imprenta |
-| `croquis.html` | Copia del HTML minificado, para depurar |
-| `d.html` (en la raíz) | **La página que hay que publicar** en `URL_BASE` |
+
+Para otro documento, cambia `--html` y `URL_HTML` en `generar_qr.py`.
+
+Opciones útiles:
+
+| Opción | Efecto |
+| --- | --- |
+| `--modo enlace\|servidor\|sin-servidor` | `enlace` (por defecto) es el más pequeño. Ver la tabla de modos |
+| `--nivel H\|M\|L` | Corrección de errores. `H` es la más robusta; `L` da menos módulos |
+| `--publicar-en CARPETA` | Modo `servidor`: dónde dejar la página base |
+| `--sin-comprimir` | No aplicar gzip: QR más grande (solo en modos con HTML dentro) |
+| `--no-minificar` | Conservar el HTML tal cual |
+
+El valor de `--html` no determina la URL del QR: esa es `URL_HTML`, la constante
+de arriba del todo de `generar_qr.py`. Si cambias el archivo, cambia la
+constante para que apunte al nuevo sitio.
 
 Para usar otro documento:
 
@@ -117,31 +118,33 @@ Para usar otro documento:
 python generar_qr.py --html mi/pagina.html --salida salida/mi-qr
 ```
 
-Opciones útiles:
+## Presupuesto de bytes
 
-| Opción | Efecto |
-| --- | --- |
-| `--nivel L` / `M` / `H` | Corrección de errores. `L` cabe más (2953 bytes), `H` es el más compacto (1273) |
-| `--url-base URL` | Dirección a la que apunta el QR. Debe ser donde publiques `croquis_base.html` |
-| `--modo servidor\|sin-servidor` | `servidor` (por defecto) funciona en el móvil. `sin-servidor` solo para depurar |
-| `--publicar-en CARPETA` | Dónde dejar la página base. Por defecto la raíz del repo |
-| `--no-minificar` | Conserva el HTML tal cual, útil para leer la salida |
-| `--sin-comprimir` | No aplicar gzip: sale un QR más grande pero sin comprimir |
+Solo aplica a los modos que llevan el HTML **dentro** del QR (`servidor` y
+`sin-servidor`). En modo `enlace` no hay presupuesto: lo único que cuenta es
+la longitud de la URL, y son 69 bytes.
 
-El valor por defecto de `--url-base` está en `URL_BASE`, arriba de `generar_qr.py`.
-Cámbialo ahí para no recordar la opción en cada llamada, o pásalo por comando.
+El QR más grande (versión 40) admite, en modo byte:
 
-Da igual lo que devuelva esa página: el contenido que ve el usuario viene del
-fragmento del QR.
+| Nivel | Corrección | Bytes de URL |
+| --- | --- | --- |
+| L | 7% | 2951 |
+| M | 15% | 2327 |
+| H | 30% | 1271 |
 
-### Verificar que la URL está viva
+Y cada versión trae un salto grande de módulos, que es lo que más pesa:
 
-```bash
-python -c "import urllib.request as r; print(r.urlopen('https://tonycabreram.github.io/OrgulloCimarron/salida/croquis_base.html').status)"
-```
+| Versión | Módulos | Cabe en nivel L |
+| --- | --- | --- |
+| 4 | 33×33 | 78 |
+| 8 | 49×49 | 242 |
+| 30 | 137×137 | 1727 |
+| 33 | 149×149 | 2063 |
+| 38 | 169×169 | 2693 |
 
-Si sale `200`, la página existe y el QR puede escanearse. Si sale `404`,
-falta publicarla.
+**En modo `servidor` el presupuesto real es 2065 bytes** (149×149, nivel L), y
+se llega ahí sin margen: el HTML va comprimido con gzip y codificado en
+base64url. Si añades contenido, mide con `generar_qr.py` antes de imprimir.
 
 ## Presupuesto de bytes
 
@@ -159,7 +162,7 @@ Medido con esta QR, en modo byte (el que usa una URL en base64url):
 | --- | --- | --- |
 | 30 | 137×137 | 1727 |
 | 32 | 145×145 | 1949 |
-| **33** | **149×149** | **2063** ← aquí estamos, con 2065 bytes |
+| **33** | **149×149** | **2063** ← modo servidor, con 2065 bytes |
 | 34 | 153×153 | 2183 |
 | 38 | 169×169 | 2693 |
 
@@ -197,17 +200,20 @@ Verifica el ciclo completo: genera el QR, lo lee con **zxing-cpp** (la misma
 librería que usan los lectores de móvil), decodifica el fragmento y confirma que
 el HTML recuperado es idéntico al original.
 
-La prueba `escaneo desde un movil` es la que importa: comprueba el flujo real
-de un teléfono (QR → URL http → página base → documento) y que la página base
-lea el fragmento, escuche `hashchange` y avise de los errores. Si esa falla, el
-QR no sirve para imprimir.
+La prueba `modo enlace: QR = URL` comprueba que el QR por defecto sea
+exactamente la URL del HTML, sin fragmento ni `javascript:`, y que ese HTML
+esté en el repo y sea autónomo (sin recursos externos). Sin eso, el QR podría
+apuntar a un archivo que no abre nada.
 
-Y `URL publicada responde` hace un GET a la URL real: si da 404, se puede
-imprimir un QR que no abre nada.
+`URL publicada responde` hace un GET a la URL real: si da 404, se puede
+imprimir un QR que no abre nada. Se omite si no hay conexión.
 
-Las pruebas `atributos sin comillas no se tragan` y `croquis con zonas
-coherentes` vigilan dos fallos que **no dan error en la consola** pero dejan el
-croquis en negro o vacío. Son la razón de que existan.
+`escaneo desde un movil` recorre el flujo del modo `servidor` (QR → página
+base → documento) y que la base lea el fragmento y escuche `hashchange`.
+
+Y `atributos sin comillas no se tragan` y `croquis con zonas coherentes` vigilan
+dos fallos que **no dan error en la consola** pero dejan el croquis en negro o
+vacío. Son la razón de que existan.
 
 > OpenCV no sirve para esta comprobación: su detector falla a partir de la
 > versión ~20 del QR, muy por debajo de lo que decodifica un teléfono.
@@ -215,14 +221,14 @@ croquis en negro o vacío. Son la razón de que existan.
 ## Estructura
 
 ```
-generar_qr.py      Generador: minifica, empaqueta y dibuja el QR
+generar_qr.py      Generador: mide, empaqueta y dibuja el QR
 test_qr.py         Pruebas del ciclo completo
-d.html             Página base: la que se publica y lee el fragmento
+d.html             Página base, solo para el modo servidor
 plantilla/
-  plantilla.html   Documento de ejemplo, aquí se edita
-  croquis.html     Croquis interactivo del campus Mexicali
+  croquis.html     El croquis interactivo (este es el que se publica)
+  plantilla.html   Documento de ejemplo
   planos/          Croquis oficiales descargados (referencia)
-salida/            Resultados generados
+salida/            QR generado
 ```
 
 ## El croquis de Mexicali
