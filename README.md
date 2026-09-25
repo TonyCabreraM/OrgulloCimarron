@@ -94,10 +94,19 @@ Opciones útiles:
 | `--sin-comprimir` | No aplicar gzip: sale un QR más grande pero sin comprimir |
 
 El valor por defecto de `--url-base` está en `URL_BASE`, arriba de `generar_qr.py`.
-Cámbialo ahí para notecordártelo en cada llamada, o pásalo por comando.
+Cámbialo ahí para no recordar la opción en cada llamada, o pásalo por comando.
 
 Da igual lo que devuelva esa página: el contenido que ve el usuario viene del
 fragmento del QR.
+
+### Verificar que la URL está viva
+
+```bash
+python -c "import urllib.request as r; print(r.urlopen('https://tonycabreram.github.io/OrgulloCimarron/salida/croquis_base.html').status)"
+```
+
+Si sale `200`, la página existe y el QR puede escanearse. Si sale `404`,
+falta publicarla.
 
 ## Presupuesto de bytes
 

@@ -38,7 +38,10 @@ SUFIJO = "})()"
 # URL donde se publica la pagina base. En modo 'servidor' el QR apunta aqui
 # seguido del fragmento, asi que esta direccion tiene que existir de verdad.
 # Cámbiala por la tuya antes de imprimir el QR.
-URL_BASE = "https://tonycabreraM.github.io/OrgulloCimarron/salida/croquis_base.html"
+#
+# En minúsculas a propósito: GitHub Pages normaliza el usuario, pero no
+# todos los lectores de QR ni los navegadores tratan igual las mayúsculas.
+URL_BASE = "https://tonycabreram.github.io/OrgulloCimarron/salida/croquis_base.html"
 
 
 def cuerpo_js(fragmento: str) -> str:

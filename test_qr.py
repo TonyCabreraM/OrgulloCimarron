@@ -13,6 +13,8 @@ import io
 import os
 import shutil
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import qrcode
@@ -151,6 +153,36 @@ def test_escaneo_de_un_movil() -> bool:
     return True
 
 
+def test_url_publicada_responde() -> bool:
+    """La pagina base de URL_BASE esta viva y trae el decodificador.
+
+    Sin esto el QR se puede imprimir y no abrir nada. Requiere red; si no hay
+    conexion se salta en vez de fallar, porque no es un fallo del codigo.
+    """
+    if g.URL_BASE.startswith("https://x.to") or g.URL_BASE.rstrip("/").count("/") < 3:
+        print("    (URL_BASE sigue siendo un ejemplo, nada que comprobar)")
+        return True
+    try:
+        peticion = urllib.request.Request(g.URL_BASE, headers={"User-Agent": "OrgulloCimarron-test"})
+        with urllib.request.urlopen(peticion, timeout=20) as respuesta:
+            cuerpo = respuesta.read().decode("utf-8", "replace")
+            estado = respuesta.status
+    except urllib.error.HTTPError as error:
+        print(f"    (la pagina base devuelve {error.code}; el QR no abrira nada)")
+        return False
+    except (urllib.error.URLError, OSError) as error:
+        print(f"    (sin conexion a {g.URL_BASE}: {error.reason}; se omite)")
+        return True
+    if estado != 200:
+        print(f"    (la pagina base devuelve {estado})")
+        return False
+    if "location.hash.slice(1)" not in cuerpo:
+        print("    (la pagina publicada no lee el fragmento: no va a funcionar)")
+        return False
+    print(f"    {g.URL_BASE} -> {estado}, {len(cuerpo)} bytes")
+    return True
+
+
 def test_minificado_conserva_estructura() -> bool:
     """El minificador no rompe las piezas que sostienen el render."""
     crudo = Path("plantilla/plantilla.html").read_text(encoding="utf-8")
@@ -217,6 +249,7 @@ def main() -> int:
         ("alfabeto y round-trip", test_alfabeto_y_viaje),
         ("QR actual decodificable", test_ronda_completa),
         ("escaneo desde un movil", test_escaneo_de_un_movil),
+        ("URL publicada responde", test_url_publicada_responde),
         ("legibilidad por nivel", test_legibilidad_por_tamano),
         ("exceso se reporta limpio", test_exceso_se_reporta),
     ]
