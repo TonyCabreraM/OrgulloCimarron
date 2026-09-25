@@ -44,7 +44,47 @@ Para el modo `servidor` hay que subir además `d.html` en la raíz del repo. Es
 un archivo único que sirve para todos los QR: solo lee `location.hash` y nunca
 cambia.
 
-## Hacer el QR más pequeño todavía
+## El color del QR
+
+El QR usa la paleta institucional de la UABC, sacada del **Manual de Identidad
+Gráfica (2022)**. Se elige con `--color`:
+
+| Opción | Módulos | Contraste | Cuándo |
+| --- | --- | --- | --- |
+| `uabc` *(por defecto)* | `#EC008C` | 4.25:1 color, 7.2:1 gris | El magenta primario, tal cual |
+| `uabc-oscuro` | `#C90077` | 5.60:1 color, 8.9:1 gris | El mismo magenta un 15% más oscuro |
+| `azul` | `#204199` | 9.22:1 color, 10.2:1 gris | Azul oscuro institucional, el más seguro de color |
+| `verde` | `#00723F` | 6.04:1 color, 8.9:1 gris | Verde institucional |
+| `negro` | `#231F20` | 16.30:1 | Negro tinta, el más seguro de todos |
+
+### Por qué el contraste se mide dos veces
+
+Un lector de QR **termina binarizando la imagen**, así que lo que decide si
+encuentra el código no es el color, sino cuántos píxeles se ven claros u
+oscuros **en gris**. El magenta puro tiene 4.25:1 en color pero 7.2:1 en gris, y
+por eso funciona.
+
+El generador mide ambos y avisa:
+
+```
+Contraste        : 4.25:1 en color, 7.23:1 en gris
+Aviso            : color muy saturado (236,0,140): al quedarse en gris pierde
+                   contraste, y así es como leen la mayoría de los lectores
+```
+
+La prueba `colores institucionales legibles` genera el QR con **las cinco
+paletas** y lo lee con zxing-cpp en cinco situaciones: normal, al 55% de tamaño,
+con la mitad de contraste, con poca luz y en blanco y negro. Las cinco paletas
+superan las cinco.
+
+> **Sobre la suciedad:** si le pones un manchón grande encima, falla con
+> cualquier color, incluido el negro. Eso no es culpa del color, es que el
+> manchón tapa los patrones de referencia. El QR no se rompe, solo hay que
+> limpiarlo.
+
+Si vas a imprimir en color y no quieres riesgo, `--color uabc-oscuro` es el
+mismo magenta con más margen. Para un cartel en blanco y negro, cualquier
+paleta sirve: el lector hace la conversión por ti.
 
 Cada módulo es un cuadrado, así que lo que manda es el **número de bytes de la
 URL**, no el del documento. En modo `enlace` eso son 69 bytes y no hay nada que
@@ -104,6 +144,7 @@ Opciones útiles:
 | --- | --- |
 | `--modo enlace\|servidor\|sin-servidor` | `enlace` (por defecto) es el más pequeño. Ver la tabla de modos |
 | `--nivel H\|M\|L` | Corrección de errores. `H` es la más robusta; `L` da menos módulos |
+| `--color uabc\|uabc-oscuro\|azul\|verde\|negro` | Color del QR, de la paleta institucional |
 | `--publicar-en CARPETA` | Modo `servidor`: dónde dejar la página base |
 | `--sin-comprimir` | No aplicar gzip: QR más grande (solo en modos con HTML dentro) |
 | `--no-minificar` | Conservar el HTML tal cual |

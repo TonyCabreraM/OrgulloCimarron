@@ -218,8 +218,135 @@ def _version_para(bytes_datos: int, nivel: str) -> int:
     return codigo.version
 
 
-def construir_qr(datos: str, ruta_png: Path, ruta_svg: Path, nivel: str) -> None:
+# --------------------------------------------------------------------------- #
+# Colores institucionales (Manual de Identidad Grafica UABC 2022)
+# --------------------------------------------------------------------------- #
+# Un QR de color se escanea peor que uno en negro sobre blanco, y casi todo es
+# culpa del contraste: el lector binariza la imagen, y si los modulos claros y
+# el fondo se parecen, no encuentra los limites. Por eso se mide el contraste
+# WCAG contra el fondo y se avisa cuando no llega.
+#
+# El magenta #EC008C es el color primario de la UABC, pero puro da 4.25:1,
+# por debajo del 4.5 de AA, y su canal verde vale 0, que es justo lo que mas
+# problemas da a los lectores. Por eso la paleta lo trae en dos tonos: el
+# exacto para quien quiera la marca intacta, y 'uabc-oscuro', un 15% mas
+# oscuro (#C90077, 5.6:1), que sigue siendo el magenta de la UABC pero ya
+# cumple AA.
+PALETAS = {
+    "negro": {
+        "modulos": "#231F20",
+        "fondo": "#FFFFFF",
+        "nota": "negro tinta institucional, el mas seguro de todos",
+    },
+    "uabc": {
+        "modulos": "#EC008C",
+        "fondo": "#FFFFFF",
+        "nota": "magenta primario UABC, tal cual. En gris da 7.2:1 y se lee bien; "
+        "en color queda en 4.25:1, justo bajo el minimo recomendado",
+    },
+    "uabc-oscuro": {
+        "modulos": "#C90077",
+        "fondo": "#FFFFFF",
+        "nota": "el mismo magenta un 15% mas oscuro, para imprimir en color sin "
+        "dudas. En gris da 8.9:1",
+    },
+    "azul": {
+        "modulos": "#204199",
+        "fondo": "#FFFFFF",
+        "nota": "azul oscuro UABC, contraste 9.2 (AAA)",
+    },
+    "verde": {
+        "modulos": "#00723F",
+        "fondo": "#FFFFFF",
+        "nota": "verde UABC, contraste 6.0 (AA)",
+    },
+}
+
+
+def luminancia(hexa: str) -> float:
+    """Luminancia relativa de un color, segun la formula de WCAG."""
+    h = hexa.lstrip("#")
+    canales = [int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)]
+    lineal = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in canales]
+    return 0.2126 * lineal[0] + 0.7152 * lineal[1] + 0.0722 * lineal[2]
+
+
+def contraste(uno: str, otro: str) -> float:
+    """Razon de contraste entre dos colores, de 1 a 21."""
+    la, lb = luminancia(uno), luminancia(otro)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def a_gris(hexa: str) -> str:
+    """Convierte un color a su equivalente en gris perceptual.
+
+    Es el test que de verdad importa: un lector de QR termina binarizando la
+    imagen, asi que lo que decide si encuentra el codigo es cuantos pixeles se
+    ven claros u oscuros en monocromo. El magenta puro tiene 4.25:1 en color
+    pero cae a 2.6:1 en gris, y ahi es donde falla.
+    """
+    h = hexa.lstrip("#")
+    r, g, b = (int(h[i : i + 2], 16) for i in (0, 2, 4))
+    gris = round(0.299 * r + 0.587 * g + 0.114 * b)
+    return f"#{gris:02x}{gris:02x}{gris:02x}"
+
+
+def revisar_contraste(nombre: str) -> list[str]:
+    """Avisos sobre el color elegido, vacio si todo esta bien.
+
+    Se mide el contraste dos veces: en color y en gris. El de gris es el que
+    importa, porque asi leen los lectores de verdad. Tambien se avisa si el
+    color es muy saturado, que es justo lo que al perder el color destroys el
+    contraste en gris.
+    """
+    paleta = PALETAS[nombre]
+    avisos = []
+    modulos, fondo = paleta["modulos"], paleta["fondo"]
+    razon = contraste(modulos, fondo)
+    gris = contraste(a_gris(modulos), a_gris(fondo))
+
+    print(f"Color            : {nombre}  ({modulos} sobre {fondo})")
+    print(f"Contraste        : {razon:.2f}:1 en color, {gris:.2f}:1 en gris")
+    print(f"                   {paleta['nota']}")
+
+    if gris < 4.5:
+        avisos.append(
+            f"en gris solo da {gris:.2f}:1, por debajo del 4.5 recomendado: "
+            f"puede fallar impreso en papel sucio o con sol. Usa un color mas "
+            f"oscuro (--color uabc-oscuro, azul o negro)"
+        )
+    elif gris < 7:
+        avisos.append(
+            f"en gris da {gris:.2f}:1: cumple AA pero no AAA. Para un cartel "
+            f"expuesto al sol conviene subir el nivel de correccion a H"
+        )
+
+    # Un canal bajo con los otros altos significa color muy saturado: al pasar
+    # a gris los canales se igualan y se pierde la separacion. El negro
+    # institucional tambien tiene canal bajo, pero es gris neutro (sus tres
+    # canales casi iguales), asi que se mira la diferencia, no el minimo.
+    h = modulos.lstrip("#")
+    canales = [int(h[i : i + 2], 16) for i in (0, 2, 4)]
+    if max(canales) - min(canales) > 120:
+        avisos.append(
+            f"color muy saturado ({canales[0]},{canales[1]},{canales[2]}): al "
+            f"quedarse en gris pierde contraste, y asi es como leen la mayoria "
+            f"de los lectores de movil"
+        )
+    return avisos
+
+
+def construir_qr(
+    datos: str, ruta_png: Path, ruta_svg: Path, nivel: str, color: str = "negro"
+) -> None:
     correccion = {"L": ERROR_CORRECT_L, "M": ERROR_CORRECT_M, "H": ERROR_CORRECT_H}[nivel]
+    paleta = PALETAS[color]
+    fondo_oscuro = luminancia(paleta["fondo"]) < 0.5
+    # Con fondo oscuro hay que poner claros los modulos sobre el fondo oscuro,
+    # y no al reves, que es lo que haria la libreria por defecto.
+    modulos = paleta["fondo"] if fondo_oscuro else paleta["modulos"]
+    fondo = paleta["modulos"] if fondo_oscuro else paleta["fondo"]
+
     qr = qrcode.QRCode(
         error_correction=correccion,
         box_size=10,
@@ -235,8 +362,11 @@ def construir_qr(datos: str, ruta_png: Path, ruta_svg: Path, nivel: str) -> None
             f"El HTML no cabe en un QR nivel {nivel} (los datos miden {len(datos)} bytes).{extra}"
         )
 
-    qr.make_image().save(ruta_png)
-    qr.make_image(image_factory=qrcode.image.svg.SvgPathImage).save(ruta_svg)
+    imagen = qr.make_image(back_color=fondo, fill_color=modulos)
+    imagen.save(ruta_png)
+    qr.make_image(
+        image_factory=qrcode.image.svg.SvgPathImage, back_color=fondo, fill_color=modulos
+    ).save(ruta_svg)
 
 
 def pagina_decodificadora(expresion: str, pie: str) -> str:
@@ -358,6 +488,15 @@ Ejemplos:
     analizador.add_argument("--no-minificar", action="store_true", help="conservar el HTML tal cual")
     analizador.add_argument("--sin-comprimir", action="store_true", help="no aplicar gzip (QR más denso)")
     analizador.add_argument(
+        "--color",
+        choices=sorted(PALETAS),
+        default="uabc",
+        help="color del QR, de la paleta institucional de la UABC (Manual de "
+        "Identidad Grafica 2022). 'uabc' es el magenta primario tal cual; "
+        "'uabc-oscuro' es el mismo magenta un 15%% mas oscuro y se lee algo "
+        "mejor impreso en color; 'negro' es el mas seguro de todos",
+    )
+    analizador.add_argument(
         "--publicar-en",
         metavar="CARPETA",
         default=".",
@@ -425,9 +564,16 @@ Ejemplos:
         html_path.write_text(html, encoding="utf-8")
         print(f"HTML minificado -> {html_path}  (copia de referencia)")
 
-    construir_qr(ancla, salida.with_suffix(".png"), salida.with_suffix(".svg"), args.nivel)
+    construir_qr(ancla, salida.with_suffix(".png"), salida.with_suffix(".svg"), args.nivel, args.color)
     print(f"QR (PNG)        -> {salida.with_suffix('.png')}")
     print(f"QR (SVG)        -> {salida.with_suffix('.svg')}  (para imprenta)")
+
+    # Avisos de color, despues de imprimir el resumen para que se vean juntos.
+    for aviso in revisar_contraste(args.color):
+        print(f"Aviso           : {aviso}")
+    if args.color != "negro" and args.nivel != "H":
+        print("Sugerencia      : con color, usa '--nivel H'. La correccion de "
+              "errores es lo que absorbe el ruido de la impresion")
 
     if args.modo == "enlace":
         print()

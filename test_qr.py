@@ -20,7 +20,7 @@ from pathlib import Path
 
 import qrcode
 import zxingcpp
-from PIL import Image
+from PIL import Image, ImageEnhance
 from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_L, ERROR_CORRECT_M
 
 import generar_qr as g
@@ -307,6 +307,53 @@ def test_modo_enlace_es_una_url() -> bool:
         shutil.rmtree(salida, ignore_errors=True)
 
 
+def test_colores_legibles() -> bool:
+    """Todos los colores institucionales se leen, y aguantan el desgaste.
+
+    Un QR de color se escanea peor que uno en negro, asi que esto no es
+    opcional: se genera con cada paleta y se lee con zxing-cpp, primero tal
+    cual y luego con las degradaciones tipicas de un cartel impreso (mas
+    pequeno, menos contraste, con poca luz y en blanco y negro).
+    """
+    salida = Path("_tmp_color")
+    salida.mkdir(exist_ok=True)
+    # El negro es la referencia: si una degradacion le falla a el tambien, es
+    # que la degradacion es demasiado agresiva y no mide nada del color.
+    degradaciones = {
+        "normal": lambda im: im,
+        "55% tamano": lambda im: im.resize((int(im.width * .55), int(im.height * .55)),
+                                           Image.LANCZOS),
+        "contraste 50%": lambda im: ImageEnhance.Contrast(im).enhance(0.5),
+        "luz baja": lambda im: ImageEnhance.Brightness(im).enhance(0.6),
+        "blanco y negro": lambda im: im.convert("L"),
+    }
+    problemas = []
+    try:
+        for nombre in sorted(g.PALETAS):
+            prefijo = salida / nombre
+            if ejecutar_main("--html", "plantilla/croquis.html", "--salida", str(prefijo),
+                             "--nivel", "H", "--color", nombre) != 0:
+                problemas.append(f"{nombre}: no se pudo generar")
+                continue
+            with Image.open(prefijo.with_suffix(".png")) as original:
+                imagen = original.convert("RGB")
+                for etiqueta, transformar in degradaciones.items():
+                    temporal = salida / f"{nombre}_{etiqueta.replace(' ', '_')}.png"
+                    transformar(imagen).save(temporal)
+                    if not leer_qr(temporal):
+                        problemas.append(f"{nombre}: no se lee con '{etiqueta}'")
+                    temporal.unlink(missing_ok=True)
+    finally:
+        shutil.rmtree(salida, ignore_errors=True)
+
+    for problema in problemas:
+        print(f"    {problema}")
+    if problemas:
+        return False
+    print(f"    {len(g.PALETAS)} colores x {len(degradaciones)} pruebas: todos legibles")
+    return True
+
+
 def test_minificado_conserva_estructura() -> bool:
     """El minificador no rompe las piezas que sostienen el render."""
     crudo = Path("plantilla/plantilla.html").read_text(encoding="utf-8")
@@ -379,6 +426,7 @@ def main() -> int:
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),
         ("modo enlace: QR = URL", test_modo_enlace_es_una_url),
+        ("colores institucionales legibles", test_colores_legibles),
         ("QR actual decodificable", test_ronda_completa),
         ("escaneo desde un movil", test_escaneo_de_un_movil),
         ("URL publicada responde", test_url_publicada_responde),
