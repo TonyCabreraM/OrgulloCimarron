@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang=es>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1,user-scalable=no">
+<style>
+*{margin:0;box-sizing:border-box}
+body{height:100dvh;overflow:hidden;background:#0e151b;color:#e8f1f8;
+font:15px/1.35 system-ui,sans-serif;touch-action:none}
+#s{position:fixed;inset:0;width:100%;height:100%;display:block}
+.z{fill:#20394f;stroke:#0b1218;stroke-width:4;transition:.25s}
+.g.act .z{fill:#f2a541;stroke:#8a4f05}
+.n{fill:#c9dced;font-size:23px;font-weight:700;text-anchor:middle;pointer-events:none;transition:.25s}
+.g.act .n{fill:#241704}
+#h{position:fixed;left:0;right:0;bottom:0;z-index:1;padding:18px 20px 22px;pointer-events:none;
+background:linear-gradient(#0e151b00,#0e151bdd 60%)}
+#t{display:block;font-size:22px;font-weight:800;color:#f2a541}
+#d{display:block;font-size:14px;margin-top:3px}
+#b{position:fixed;top:12px;right:12px;z-index:2;padding:11px 17px;border:0;border-radius:99px;
+background:#f2a541;color:#20160a;font:700 15px system-ui,sans-serif;cursor:pointer}
+</style>
+</head>
+<body>
+<svg id=s viewBox="0 0 1000 600"></svg>
+<button id=b>Vista general</button>
+<div id=h><b id=t>Rectoría UABC · Mexicali</b><s id=d>Toca una zona</s></div>
+<script>
+// Zonas del croquis: "x y ancho alto" en un lienzo de 1000x600.
+// Provisional: sustituye estas cajas por el SVG de Illustrator cuando lo tengas.
+var BZ="20 20 216 230;262 20 216 230;504 20 216 230;746 20 216 230;20 280 216 230;262 280 216 230;504 280 216 230;746 280 216 230".split(";"),
+NM="Rectoría|Biblioteca|Ingeniería|Contaduría|Auditorio|Cafetería|Laboratorios|Deportivos".split("|"),
+DS=["Administración","Hemeroteca","FIA","FCA","Auditorio","Comedor","Investigación","Deportes"],
+s=document.getElementById("s"),T=document.getElementById("t"),D=document.getElementById("d"),
+V=[0,0,1000,600],W=V.slice(),F=0,i;
+
+var m='<rect width=1000 height=600 fill="#16222c"/><path d="M249 0V530M491 0V530M733 0V530M0 265H1000" stroke="#0f1922" stroke-width="30" fill="none"/>';
+for(i=0;i<BZ.length;i++){
+  var b=BZ[i].split(" "),x=+b[0],y=+b[1],w=+b[2],h=+b[3];
+  m+='<g class="g" data-i="'+i+'"><rect class="z" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="10"/>'
+   +'<text class="n" x="'+(x+w/2)+'" y="'+(y+h/2)+'" dy=".36em">'+NM[i]+'</text></g>';
+}
+s.innerHTML=m;
+
+// Dibuja el viewBox actual.
+function ve(){s.setAttribute("viewBox",V.join(" "))}
+
+// Encuadra una zona: la deja holgada, centrada en el area libre (la ficha de
+// abajo tapa la parte inferior) y sin salirse del mapa.
+function fit(x,y,w,h){
+  var r=s.getBoundingClientRect(),W=r.width,H=r.height,
+  hh=document.getElementById("h").offsetHeight||0,
+  a=W/(H-hh),p=.14,cx=x+w/2,cy=y+h/2;
+  w*=1+2*p;h*=1+2*p;
+  var vw=Math.max(w,h*a),vh=vw/a,
+  vx=cx-vw/2,vy=cy-vh*(H-hh)/(2*H);
+  if(vw<1000)vx=Math.min(1000-vw,Math.max(0,vx));
+  if(vh<600)vy=Math.min(600-vh,Math.max(0,vy));
+  return [vx,vy,vw,vh];
+}
+
+// Anima el viewBox actual hacia el destino.
+function go(t){
+  W=t;var a=V.slice(),t0=performance.now();
+  if(F)cancelAnimationFrame(F);
+  (function f(tm){
+    var k=Math.min(1,(tm-t0)/520),e=1-Math.pow(1-k,3),j;
+    for(j=0;j<4;j++)V[j]=a[j]+(W[j]-a[j])*e;
+    ve();if(k<1)F=requestAnimationFrame(f);
+  })(t0);
+}
+
+// OJO: en SVG 'className' es un SVGAnimatedString de solo lectura, hay que
+// asignar el atributo 'class' o el resaltado nunca se aplica.
+function pinta(i){
+  var g=s.querySelectorAll(".g");
+  for(var j=0;j<g.length;j++)g[j].setAttribute("class","g"+(j==i?" act":""));
+}
+function sel(i){
+  var b=BZ[i].split(" ");
+  pinta(i);T.textContent=NM[i];D.textContent=DS[i];
+  go(fit(+b[0],+b[1],+b[2],+b[3]));
+}
+function todo(){
+  pinta(-1);T.textContent="Rectoría UABC · Mexicali";
+  D.textContent="Toca una zona";
+  go([0,0,1000,600]);
+}
+document.getElementById("b").onclick=todo;
+
+// Un toque anywhere: acerca la zona o, si fue el fondo, vuelve a la vista general.
+// No hace falta arrastrar: al acercar, la zona completa queda encuadrada.
+s.addEventListener("pointerdown",function(e){
+  var t=document.elementFromPoint(e.clientX,e.clientY),
+  g=t&&t.closest?t.closest(".g"):0;
+  if(g)sel(+g.dataset.i);else todo();
+});
+</script>
+</body>
+</html>

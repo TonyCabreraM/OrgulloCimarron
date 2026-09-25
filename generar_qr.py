@@ -1,31 +1,88 @@
 """
-Orgullo Cimarron - generador de QR con HTML embebido.
+Orgullo Cimarron - generador de QR que ejecuta HTML sin servidor.
 
-Un QR puede apuntar a una URL con fragmento (#). Esa parte NUNCA viaja al
-servidor, asi que podemos codificar un documento HTML completo dentro del
-propio codigo. Al escanearlo, el movil hace un GET normal a la URL base y el
-navegador abre el documento del fragmento: sin servidor, sin archivos extra,
-con CSS, JS, animaciones y transiciones.
+La idea: el fragmento de una URL (lo que va despues del '#') NUNCA viaja al
+servidor. El movil hace un GET normal a la URL y el navegador construye el
+documento a partir del fragmento. Por eso el HTML completo puede codificarse
+dentro del propio QR: no hay servidor, no hay que alojar nada, y al escanear
+se abre la pagina con su CSS, sus animaciones y su JavaScript.
 
-Pipeline:  plantilla legible -> minificado -> fragmento -> QR (PNG + SVG)
+Para que quepa, el HTML se comprime con gzip (que reduce el HTML tipico a la
+sexta parte) y se codifica en base64url. El navegador lo descomprime con
+DecompressionStream, sin instalar nada.
+
+Pipeline:  plantilla legible -> minificado -> gzip -> base64url -> QR
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
+import gzip
 import re
 import sys
+import zlib
 from pathlib import Path
 
 import qrcode
 import qrcode.image.svg
 from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_L, ERROR_CORRECT_M
 
-# URL a la que apunta el QR. Despues del '#' viaja el HTML.
-# Debe ser una URL real y accesible (GitHub Pages, Netlify Drop, etc).
-# Cada caracter cuenta: una URL larga se come el espacio del documento.
+# El QR es una URL 'javascript:' que reconstruye el documento en memoria:
+# atob para el base64url y DecompressionStream para el gzip. Ni una peticion
+# a la red, ni un servidor. El base64url se pega con su relleno '=', que el
+# navegador acepta tal cual y ocupa uno o dos modulos.
+PREFIJO = "(async()=>{"
+SUFIJO = "})()"
+
+# URL de ejemplo para el modo 'servidor': cámbiala por la tuya.
 URL_BASE = "https://x.to/a"
+
+
+def cuerpo_js(fragmento: str) -> str:
+    """Cuerpo JavaScript que descomprime el fragmento y muestra el documento.
+
+    `fragmento` es una expresion JavaScript que produce el base64url: una
+    cadena literal dentro del QR, o `location.hash` dentro de la pagina base.
+
+    atob solo entiende el alfabeto estandar, asi que antes se convierten los
+    dos caracteres propios del base64url ('-' y '_'). El relleno '=' no hace
+    falta: atob repone la cuenta mientras no sea multiplo de 4 mas uno.
+
+    Se usa igual en los tres sitios (QR, pagina base, vista previa): lo unico
+    que cambia es quien lo ejecuta.
+    """
+    return (
+        f"let s={fragmento}.replace(/-/g,'+').replace(/_/g,'/')"
+        ";let a=Uint8Array.from(atob(s),c=>c.charCodeAt(0))"
+        ";let f=new Blob([a]).stream().pipeThrough(new DecompressionStream('gzip'))"
+        ";let t=await new Response(f).text()"
+        ";document.open();document.write(t);document.close()"
+    )
+
+
+def construir_ancla(fragmento: str, url_base: str = URL_BASE, modo: str = "sin-servidor") -> str:
+    """Arma la cadena completa que viajara dentro del QR.
+
+    'sin-servidor' no lleva URL que resolver: el lector abre el 'javascript:' y
+    la pagina se construye en memoria. 'servidor' se apoya en la URL base y
+    deja el fragmento despues del '#', que el navegador nunca envia al servidor.
+    """
+    if modo == "servidor":
+        return f"{url_base}#{fragmento}"
+    return f"javascript:{PREFIJO}{cuerpo_js(f'{fragmento!r}')}{SUFIJO}"
+
+
+def extraer_fragmento(ancla: str) -> str:
+    """Recupera el base64url de un ancla, sea 'javascript:' o 'URL#fragmento'.
+
+    Es la operacion inversa de construir_ancla, y sirve para verificar que lo
+    que se leyo del QR devuelve exactamente el documento original.
+    """
+    if "#" in ancla:
+        return ancla.split("#", 1)[1]
+    encontrado = re.search(r"let s='([^']*)'", ancla)
+    return encontrado.group(1) if encontrado else ""
 
 # Capacidad maxima aproximada de datos (version 40) segun nivel de correccion.
 CAPACIDAD = {
@@ -89,16 +146,23 @@ def minificar(html: str) -> str:
     return html.strip()
 
 
-def limpiar_html(html: str) -> str:
-    """Codifica el HTML en base64url sin padding, usando la tabla URL-safe del QR."""
+def limpiar_html(html: str, comprimir: bool = True) -> str:
+    """Comprime (opcionalmente) y codifica el HTML en base64url.
+
+    El HTML minificado es muy repetitivo, asi que gzip lo reduce bastante.
+    El base64url usa la tabla que ya necesita el QR, sin '+' ni '/', y sin
+    relleno '=' porque atob lo repondrá en el decodificador.
+    """
     crudo = html.encode("utf-8")
+    if comprimir:
+        crudo = gzip.compress(crudo, compresslevel=9, mtime=0)
     base = base64.urlsafe_b64encode(crudo).decode("ascii").rstrip("=")
     return "".join(c for c in base if c in PESO)
 
 
-def peso_decodificado(fragmento: str) -> int:
+def bytes_reales(fragmento: str) -> int:
     """Bytes que ocupa realmente el fragmento dentro de la capacidad del QR."""
-    return len(fragmento.encode("ascii")) * 3 // 4
+    return (len(fragmento) * 3) // 4
 
 
 # --------------------------------------------------------------------------- #
@@ -121,6 +185,18 @@ def revisar_autonomo(html: str) -> list[str]:
 # --------------------------------------------------------------------------- #
 # Generacion
 # --------------------------------------------------------------------------- #
+def _version_para(bytes_datos: int, nivel: str) -> int:
+    """Version del QR que le corresponde a una carga, para saber cuantos modulos tendra."""
+    correccion = {"L": ERROR_CORRECT_L, "M": ERROR_CORRECT_M, "H": ERROR_CORRECT_H}[nivel]
+    codigo = qrcode.QRCode(error_correction=correccion, box_size=10, border=4)
+    try:
+        codigo.add_data("x" * bytes_datos)
+        codigo.make(fit=True)
+    except (ValueError, qrcode.exceptions.DataOverflowError):
+        return 41
+    return codigo.version
+
+
 def construir_qr(datos: str, ruta_png: Path, ruta_svg: Path, nivel: str) -> None:
     correccion = {"L": ERROR_CORRECT_L, "M": ERROR_CORRECT_M, "H": ERROR_CORRECT_H}[nivel]
     qr = qrcode.QRCode(
@@ -142,6 +218,26 @@ def construir_qr(datos: str, ruta_png: Path, ruta_svg: Path, nivel: str) -> None
     qr.make_image(image_factory=qrcode.image.svg.SvgPathImage).save(ruta_svg)
 
 
+def vista_previa(ancla: str, modo: str) -> str:
+    """Pagina que ejecuta el mismo cuerpo JavaScript que viaja en el QR.
+
+    Sirve para comprobar el resultado en un navegador sin escanear nada: el
+    script es identico byte a byte, lo unico que cambia es que aqui corre
+    desde un <script> en vez de desde la URL que codifica el QR.
+    """
+    if modo == "servidor":
+        cuerpo = PREFIJO + cuerpo_js("location.hash.slice(1)") + SUFIJO
+        pie = "Abre esta pagina con <em>#</em> y el fragmento del QR para ver el resultado."
+    else:
+        cuerpo = ancla[len("javascript:") :] if ancla.startswith("javascript:") else ancla
+        pie = "Replica el decodificador del QR, sin escanear nada."
+    return (
+        "<!doctype html><meta charset=utf-8><title>Vista previa</title>"
+        f"<script>{cuerpo}</script>"
+        f"<p style='font:14px system-ui;padding:12px;background:#eee'>{pie}</p>"
+    )
+
+
 def main() -> int:
     analizador = argparse.ArgumentParser(
         description="Genera un QR que abre un HTML animado sin servidor.",
@@ -156,8 +252,20 @@ Ejemplos:
     analizador.add_argument("--html", default="plantilla/plantilla.html", help="HTML fuente legible")
     analizador.add_argument("--salida", default="salida/orgullo", help="prefijo de salida (sin extension)")
     analizador.add_argument("--url-base", default=URL_BASE, help="URL a la que apunta el QR")
-    analizador.add_argument("--nivel", choices=list(CAPACIDAD), default="M", help="correccion de errores: M=2331 bytes, L=2953, H=1273")
+    analizador.add_argument(
+        "--modo",
+        choices=["sin-servidor", "servidor"],
+        default="sin-servidor",
+        help="sin-servidor: la URL no necesita existir. servidor: usa --url-base real",
+    )
+    analizador.add_argument(
+        "--nivel",
+        choices=list(CAPACIDAD),
+        default="M",
+        help="correccion de errores: H=1273 bytes (menos cuadritos), M=2331, L=2953",
+    )
     analizador.add_argument("--no-minificar", action="store_true", help="conservar el HTML tal cual")
+    analizador.add_argument("--sin-comprimir", action="store_true", help="no aplicar gzip (QR mas denso)")
     args = analizador.parse_args()
 
     origen = Path(args.html)
@@ -168,12 +276,8 @@ Ejemplos:
     if "<html" not in crudo.lower() and "<!doctype" not in crudo.lower():
         crudo = f"<!doctype html>{crudo}"
 
-    if args.no_minificar:
-        html = crudo
-        fragmento = html
-    else:
-        html = minificar(crudo)
-        fragmento = limpiar_html(html)
+    html = crudo if args.no_minificar else minificar(crudo)
+    fragmento = limpiar_html(html, comprimir=not args.sin_comprimir)
 
     problemas = revisar_autonomo(crudo)
     if problemas:
@@ -184,27 +288,26 @@ Ejemplos:
     salida = Path(args.salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
 
-    # --url-base es la URL completa del documento; el fragmento se le anade.
-    base = args.url_base
-    separador = "" if "#" in base else "#"
-    url = f"{base}{separador}{fragmento}"
-
-    # El peso real incluye la URL base: tambien ocupa celdas del QR.
-    total = len(url.encode("utf-8"))
+    ancla = construir_ancla(fragmento, args.url_base, args.modo)
+    total = len(ancla.encode("utf-8"))
     capacidad = CAPACIDAD[args.nivel]
     porcentaje = total / capacidad * 100
+    version = _version_para(total, args.nivel)
+    modulos = 17 + 4 * version
 
     print(f"HTML fuente      : {origen}")
     print(f"HTML minificado  : {len(html.encode('utf-8'))} bytes")
+    if not args.sin_comprimir:
+        print(f"Comprimido (gzip): {bytes_reales(fragmento)} bytes")
     print(f"Fragmento        : {len(fragmento)} chars en base64url")
-    print(f"URL completa     : {total} bytes ({porcentaje:.1f}% de {capacidad} con nivel {args.nivel})")
+    print(f"Contenido del QR : {total} bytes ({porcentaje:.0f}% de {capacidad}, nivel {args.nivel})")
+    print(f"Cuadritos        : version {version} -> {modulos}x{modulos} modulos")
     if porcentaje > 100:
-        siguiente = "L" if args.nivel != "L" else None
-        print(f"ERROR: no cabe. Reduce el documento o acorta --url-base"
-              + (f", o usa --nivel {siguiente}." if siguiente else "."))
+        siguiente = {"M": "L", "H": "M"}.get(args.nivel)
+        print("ERROR: no cabe." + (f" Prueba con --nivel {siguiente}." if siguiente else " Reduce el documento."))
         return 1
     if porcentaje > 95:
-        print(f"Aviso: vas justo de espacio ({porcentaje:.0f}%). Recorta texto o acorta la URL antes de publicar.")
+        print(f"Aviso: vas justo de espacio ({porcentaje:.0f}%). Recorta texto antes de publicar.")
     elif porcentaje > 85:
         print(f"Aviso: queda poco margen ({porcentaje:.0f}%).")
 
@@ -213,12 +316,31 @@ Ejemplos:
     html_path.write_text(html, encoding="utf-8")
     print(f"HTML autonomo    -> {html_path}")
 
-    construir_qr(url, salida.with_suffix(".png"), salida.with_suffix(".svg"), args.nivel)
+    construir_qr(ancla, salida.with_suffix(".png"), salida.with_suffix(".svg"), args.nivel)
     print(f"QR (PNG)        -> {salida.with_suffix('.png')}")
     print(f"QR (SVG)        -> {salida.with_suffix('.svg')}")
-    print(f"Destino del QR  : {base}")
+    print(f"Modo            : {args.modo}")
+
+    # Vista previa: replica el decodificador del QR en un archivo local,
+    # para comprobar el resultado sin tener que escanear nada.
+    vista = salida.with_name(salida.name + "_qr.html")
+    vista.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
+    print(f"Vista previa    -> {vista}  (abre esto para ver el resultado)")
+
+    # Modo servidor: la pagina base es lo que se publica en la URL, y es la
+    # que lee el fragmento para reconstruir el documento.
+    if args.modo == "servidor":
+        base = salida.with_name(salida.name + "_base.html")
+        base.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
+        print(f"Pagina base     -> {base}  (publica esto en {args.url_base})")
+
     print()
-    print("Abre el QR con un lector: el HTML viaja en el fragmento (#), no se descarga.")
+    if args.modo == "sin-servidor":
+        print("Sin servidor: la URL del QR no existe y da igual. Al escanear,")
+        print("el lector ejecuta el decodificador y muestra el HTML.")
+    else:
+        print(f"Con servidor: publica una pagina vacia en {args.url_base}")
+        print("El QR se apoya en ella para descomprimir y mostrar el HTML.")
     return 0
 
 

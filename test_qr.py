@@ -7,6 +7,10 @@ movil. (OpenCV falla a partir de la version ~20 y no sirve para verificar esto.)
 from __future__ import annotations
 
 import base64
+import contextlib
+import gzip
+import io
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -41,27 +45,58 @@ def escanear_texto(texto: str, nivel: str, box: int) -> bool:
         ruta.unlink(missing_ok=True)
 
 
+def decodificar(fragmento: str, comprimir: bool) -> str:
+    """Vuelve del base64url (y del gzip) al HTML original."""
+    crudo = base64.urlsafe_b64decode(fragmento + "=" * (-len(fragmento) % 4))
+    if comprimir:
+        crudo = gzip.decompress(crudo)
+    return crudo.decode("utf-8")
+
+
+def ejecutar_main(*argumentos: str) -> int:
+    """Llama a g.main() en silencio y devuelve su codigo de salida."""
+    original = sys.argv
+    try:
+        sys.argv = ["generar_qr.py", *argumentos]
+        with contextlib.redirect_stdout(io.StringIO()):
+            return g.main()
+    finally:
+        sys.argv = original
+
+
 def test_ronda_completa() -> bool:
-    """HTML survives: generar -> PNG -> leer -> decodificar el fragmento."""
-    ruta_png = Path("salida/orgullo.png")
-    ruta_html = Path("salida/orgullo.html")
-    if not ruta_png.is_file() or not ruta_html.is_file():
-        print("    (falta salida/, ejecuta generar_qr.py)")
-        return False
+    """HTML survives: generar -> PNG -> leer -> decodificar el fragmento.
 
-    texto = leer_qr(ruta_png)
-    if not texto:
-        print("    (el lector no pudo leer el QR)")
-        return False
-    if "#" not in texto:
-        return False
-    if not texto.startswith(g.URL_BASE):
-        print(f"    (el QR apunta a {texto[:40]!r}, no a {g.URL_BASE!r})")
-        return False
-
-    fragmento = texto.split("#", 1)[1]
-    recuperado = base64.urlsafe_b64decode(fragmento + "=" * (-len(fragmento) % 4)).decode("utf-8")
-    return recuperado == ruta_html.read_text(encoding="utf-8")
+    Se recorren los dos modos, porque el QR no siempre lleva la misma forma.
+    """
+    origen = Path("plantilla/plantilla.html")
+    crudo = origen.read_text(encoding="utf-8")
+    salida = Path("_tmp_salida")
+    salida.mkdir(exist_ok=True)
+    try:
+        for modo in ("sin-servidor", "servidor"):
+            prefijo = salida / modo
+            if ejecutar_main("--html", str(origen), "--salida", str(prefijo),
+                             "--nivel", "L", "--modo", modo) != 0:
+                return False
+            texto = leer_qr(prefijo.with_suffix(".png"))
+            if not texto:
+                print(f"    (el lector no pudo leer el QR en modo {modo})")
+                return False
+            if modo == "servidor" and not texto.startswith(g.URL_BASE + "#"):
+                print(f"    (el QR no apunta a la URL base: {texto[:40]!r})")
+                return False
+            if modo == "sin-servidor" and not texto.startswith("javascript:"):
+                print(f"    (el QR no es un javascript: {texto[:40]!r})")
+                return False
+            fragmento = g.extraer_fragmento(texto)
+            esperado = prefijo.with_suffix(".html").read_text(encoding="utf-8")
+            if decodificar(fragmento, comprimir=True) != esperado:
+                print(f"    (el HTML recuperado no coincide en modo {modo})")
+                return False
+    finally:
+        shutil.rmtree(salida, ignore_errors=True)
+    return True
 
 
 def test_minificado_conserva_estructura() -> bool:
@@ -81,11 +116,15 @@ def test_minificado_conserva_estructura() -> bool:
 def test_alfabeto_y_viaje() -> bool:
     """El fragmento solo usa caracteres seguros y hace round-trip."""
     html = g.minificar("<p>áéíóú ñ 🔥</p>")
-    fragmento = g.limpiar_html(html)
-    if set(fragmento) - set(g.PESO):
-        return False
-    recuperado = base64.urlsafe_b64decode(fragmento + "=" * (-len(fragmento) % 4)).decode("utf-8")
-    return recuperado == html
+    for comprimir in (False, True):
+        fragmento = g.limpiar_html(html, comprimir=comprimir)
+        if set(fragmento) - set(g.PESO):
+            print(f"    (caracteres fuera del alfabeto con comprimir={comprimir})")
+            return False
+        if decodificar(fragmento, comprimir) != html:
+            print(f"    (round-trip fallo con comprimir={comprimir})")
+            return False
+    return True
 
 
 def test_legibilidad_por_tamano() -> bool:
@@ -98,21 +137,24 @@ def test_legibilidad_por_tamano() -> bool:
 
 
 def test_exceso_se_reporta() -> bool:
-    """Un documento imposible debe salir con codigo de error, no con traceback."""
+    """Un documento imposible debe salir con codigo de error, no con traceback.
+
+    El relleno tiene que ser incompresible: una tira de 'a' repetidas la
+    reduce gzip a unas decenas de bytes y entraria de sobra en el QR.
+    """
+    relleno = base64.b64encode(os.urandom(6000)).decode("ascii")
     grande = Path("_tmp_grande.html")
-    grande.write_text("<p>" + "a" * 5000 + "</p>", encoding="utf-8")
+    grande.write_text("<p>" + relleno + "</p>", encoding="utf-8")
     ruta_salida = Path("_tmp_salida")
     ruta_salida.mkdir(exist_ok=True)
-    argv_original = sys.argv
     try:
-        sys.argv = ["generar_qr.py", "--html", str(grande), "--salida", str(ruta_salida / "x"), "--nivel", "H"]
-        codigo = g.main()
+        codigo = ejecutar_main("--html", str(grande), "--salida", str(ruta_salida / "x"), "--nivel", "H")
         if codigo == 0:
+            print("    (un documento de 8000 bytes deberia exceder el nivel H)")
             return False
         # Y no debe haber dejado archivos a medias.
         return not any(ruta_salida.iterdir())
     finally:
-        sys.argv = argv_original
         grande.unlink(missing_ok=True)
         shutil.rmtree(ruta_salida, ignore_errors=True)
 
