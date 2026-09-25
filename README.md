@@ -111,8 +111,70 @@ generar_qr.py      Generador: minifica, empaqueta y dibuja el QR
 test_qr.py         Pruebas del ciclo completo
 plantilla/
   plantilla.html   Documento de ejemplo, aquí se edita
+  croquis.html     Croquis interactivo del campus Mexicali
+  planos/          Croquis oficiales descargados (referencia)
 salida/            Resultados generados
 ```
+
+## El croquis de Mexicali
+
+`plantilla/croquis.html` es un croquis interactivo del campus Mexicali. Tocar
+un edificio hace zoom hacia él, lo resalta en naranja y muestra su ficha;
+tocar el fondo vuelve a la vista general.
+
+La geometría está trazada sobre el croquis oficial **"Mapa: Ubicación de
+Edificios"** de la UABC (3 páginas, el mismo que reparten en automotores). Las
+referencias originales quedaron en `plantilla/planos/`.
+
+Nomenclatura del plano oficial, para cuando llegue el diseño de Illustrator:
+
+| Zona | Edificio | | Zona | Edificio |
+| --- | --- | --- | --- | --- |
+| A | Fac. de Ingeniería | | E, E1 | Fac. de Arq. y Diseño |
+| B | Anexo Centro de Evaluación | | F | Centro de Evaluación |
+| 1, 2, 3, 4 | Fac. de Derecho | | I | Fac. de Idiomas |
+| H | Fac. de Deportes | | J | Fac. de Pedagogía |
+| L | Fac. de Ciencias Sociales y Políticas | | K | Fac. de Ciencias Administrativas |
+
+Calles del perímetro: Av. López Rayón (norte), Blvd. Benito Juárez (poniente),
+Río Churubusco (oriente), Calle de la Normal (sur), Av. José A. Torres,
+Av. Monclova, Río Mocrorito, Blvd. Río Nuevo.
+
+Dirección del campus: Blvd. Benito Juárez 2500, Parcela 44, 21280 Mexicali, B.C.
+
+### Por qué no están todos los edificios
+
+El documento va comprimido en gzip dentro del QR, así que el presupuesto es
+duro: **2953 bytes de URL en nivel L**. El croquis con las 10 zonas actuales
+ocupa el 97%. Sacar del croquis lo que sí está en el plano oficial es una
+decisión de bytes, no un olvido:
+
+| Fuera | Motivo |
+| --- | --- |
+| Zonas B, F, E1 | Centro de Evaluación y su anexo: 3 edificios pequeños, poco uso en el croquis |
+| Rótulos de las calles | 4 textos únicos que comprimían mal; las calles sí están dibujadas en el SVG |
+| Estacionamientos G, H | Decorativos, no interactivos |
+| Páginas 2 y 3 del plano | Son otro sector del campus (Pedagogía, Deportes, FCA) |
+
+Para reincorporarlos, basta con añadir la entrada a `BZ` y el nombre a `NM` y
+`DS`, y medir con `generar_qr.py`. Si no cabe, `plantilla/planos/` tiene las
+tres páginas para consultar las coordenadas.
+
+### Al sustituir el SVG de Illustrator
+
+El mapa se dibuja con JavaScript a partir de un solo array:
+
+```javascript
+var BZ = "A 654 599 115 106;1 311 628 131 39;…";  // sigla x y ancho alto
+```
+
+`BZ[i].split(" ")` da `[sigla, x, y, ancho, alto]`. Con el SVG definitivo se
+reemplazan esas cajas y nada más: el zoom, el encuadre y la ficha se calculan
+solos.
+
+> Ojo: `BZ` es un **texto**, hay que partirlo con `BZ.split(";")` antes de
+> recorrerlo. Iterar `BZ` directamente recorre caracteres sueltos y todas las
+> coordenadas salen `NaN`.
 
 ## Nota sobre el minificador
 
@@ -122,3 +184,17 @@ externas. Conserva a propósito lo que suele romperse al comprimir:
 - El contenido de `<style>`, `<script>`, `<pre>` y `<textarea>`
 - Las comillas de los atributos con texto o manejadores (`onclick="f('a')"`)
 - El doctype y el `charset`, sin los cuales el texto sale con acentos rotos
+
+## Trampas del navegador que ya están resueltas
+
+Están documentadas porque son fáciles de volver a tropezar al reescribir el
+croquis:
+
+- **`atob` solo acepta base64 estándar**, no base64url. Como el fragmento se
+  genera con `-` y `_`, el decodificador los traduce a `+` y `/` antes de
+  llamar a `atob`. Sin eso: `InvalidCharacterError`.
+- **En SVG, `el.className = "x"` no hace nada**: es un `SVGAnimatedString` de
+  solo lectura. Hay que usar `setAttribute("class", …)`, o el resaltado de la
+  zona activa nunca se aplica.
+- **Un `<svg>` sin `viewBox` no escala**: dibuja 1 unidad por píxel y se
+  recorta. El `viewBox` va en el marcado, no sólo en el zoom por JavaScript.

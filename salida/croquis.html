@@ -1,29 +1,40 @@
-<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,user-scalable=no"> <style>*{margin:0;box-sizing:border-box}body{height:100dvh;overflow:hidden;background:#0e151b;color:#e8f1f8;font:15px/1.35 system-ui,sans-serif;touch-action:none}#s{position:fixed;inset:0;width:100%;height:100%;display:block}.z{fill:#20394f;stroke:#0b1218;stroke-width:4;transition:.25s}.g.act .z{fill:#f2a541;stroke:#8a4f05}.n{fill:#c9dced;font-size:23px;font-weight:700;text-anchor:middle;pointer-events:none;transition:.25s}.g.act .n{fill:#241704}#h{position:fixed;left:0;right:0;bottom:0;z-index:1;padding:18px 20px 22px;pointer-events:none;background:linear-gradient(#0e151b00,#0e151bdd 60%)}#t{display:block;font-size:22px;font-weight:800;color:#f2a541}#d{display:block;font-size:14px;margin-top:3px}#b{position:fixed;top:12px;right:12px;z-index:2;padding:11px 17px;border:0;border-radius:99px;background:#f2a541;color:#20160a;font:700 15px system-ui,sans-serif;cursor:pointer}</style> </head><body><svg id=s viewBox="0 0 1000 600"></svg><button id=b>Vista general</button><div id=h><b id=t>Rectoría UABC · Mexicali</b><s id=d>Toca una zona</s></div> <script>var BZ="20 20 216 230;262 20 216 230;504 20 216 230;746 20 216 230;20 280 216 230;262 280 216 230;504 280 216 230;746 280 216 230".split(";"),
-NM="Rectoría|Biblioteca|Ingeniería|Contaduría|Auditorio|Cafetería|Laboratorios|Deportivos".split("|"),
-DS=["Administración","Hemeroteca","FIA","FCA","Auditorio","Comedor","Investigación","Deportes"],
+<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"> <style>*{margin:0;box-sizing:border-box}body{height:100dvh;overflow:hidden;background:#0e151b;color:#e8f1f8;font:15px/1.35 system-ui,sans-serif;touch-action:none}#s{position:fixed;inset:0;width:100%;height:100%;display:block}.z{fill:#24425c;stroke:#0b1218;stroke-width:3;transition:.25s}.g.act .z{fill:#f2a541;stroke:#8a4f05}.n{fill:#d5e6f5;font-size:30px;font-weight:800;text-anchor:middle;pointer-events:none}.g.act .n{fill:#241704}#h{position:fixed;left:0;right:0;bottom:0;z-index:1;padding:14px 18px 18px;pointer-events:none;background:linear-gradient(#0e151b00,#0e151be6 55%)}#t{display:block;font-size:20px;font-weight:800;color:#f2a541}#d{display:block;font-size:13px;margin-top:2px}</style> </head><body><svg id=s viewBox="0 0 1000 850"></svg><div id=h><b id=t>UABC Campus Mexicali</b><s id=d>Toca un edificio</s></div> <script>var BZ="A 654 599 115 106;1 311 628 131 39;2 311 696 131 28;3 311 387 131 38;4 311 332 131 39;"
+ +"E 808 464 77 48;V 202 483 202 78;"
+ +"T 461 87 135 184;BIB 690 440 100 150;R 690 700 100 70",
+NM="A|1|2|3|4|E|V|T|BIB|R".split("|"),
+DS=["Facultad de Ingenieria","Facultad de Derecho","Facultad de Derecho","Facultad de Derecho",
+"Facultad de Derecho","Fac. de Arq. y Diseno","Posgrado Vicerrectoria",
+"Teatro","Biblioteca","Rectoria"],
 s=document.getElementById("s"),T=document.getElementById("t"),D=document.getElementById("d"),
-V=[0,0,1000,600],W=V.slice(),F=0,i;
+V=[0,0,1000,850],W=V.slice(),F=0,i;
 
-var m='<rect width=1000 height=600 fill="#16222c"/><path d="M249 0V530M491 0V530M733 0V530M0 265H1000" stroke="#0f1922" stroke-width="30" fill="none"/>';
-for(i=0;i<BZ.length;i++){
-  var b=BZ[i].split(" "),x=+b[0],y=+b[1],w=+b[2],h=+b[3];
-  m+='<g class="g" data-i="'+i+'"><rect class="z" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="10"/>'
-   +'<text class="n" x="'+(x+w/2)+'" y="'+(y+h/2)+'" dy=".36em">'+NM[i]+'</text></g>';
+var m='<rect width=1000 height=850 fill="#16241c"/>'
+ +'<path d="M60 60H960V820H60Z" fill="#1b3a2c" stroke="#0f1922" stroke-width="4"/>'
+ +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300" stroke="#38485a" stroke-width="20" fill="none"/>'
+ +'<rect x=150 y=90 width=180 height=190 rx=8 fill="#3a4a5c"/>'
+ +'<rect x=700 y=90 width=130 height=190 rx=8 fill="#3a4a5c"/>'
+ +'<text x=240 y=190 font-size=26 fill=#cfe0f0 text-anchor=middle>Estacionamiento</text>';
+
+var Z=BZ.split(";"),i;
+
+for(i=0;i<Z.length;i++){
+  var b=Z[i].split(" "),x=+b[1],y=+b[2],w=+b[3],h=+b[4];
+  m+='<g class="g" data-i="'+i+'"><rect class="z" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="6"/>'
+   +'<text class="n" x="'+(x+w/2)+'" y="'+(y+h/2)+'" dy=.36em>'+NM[i]+'</text></g>';
 }
 s.innerHTML=m;
 
 function ve(){s.setAttribute("viewBox",V.join(" "))}
 
-
 function fit(x,y,w,h){
   var r=s.getBoundingClientRect(),W=r.width,H=r.height,
   hh=document.getElementById("h").offsetHeight||0,
-  a=W/(H-hh),p=.14,cx=x+w/2,cy=y+h/2;
+  a=W/(H-hh),p=.16,cx=x+w/2,cy=y+h/2;
   w*=1+2*p;h*=1+2*p;
   var vw=Math.max(w,h*a),vh=vw/a,
   vx=cx-vw/2,vy=cy-vh*(H-hh)/(2*H);
   if(vw<1000)vx=Math.min(1000-vw,Math.max(0,vx));
-  if(vh<600)vy=Math.min(600-vh,Math.max(0,vy));
+  if(vh<850)vy=Math.min(850-vh,Math.max(0,vy));
   return [vx,vy,vw,vh];
 }
 
@@ -37,23 +48,21 @@ function go(t){
   })(t0);
 }
 
-
 function pinta(i){
   var g=s.querySelectorAll(".g");
   for(var j=0;j<g.length;j++)g[j].setAttribute("class","g"+(j==i?" act":""));
 }
 function sel(i){
-  var b=BZ[i].split(" ");
-  pinta(i);T.textContent=NM[i];D.textContent=DS[i];
-  go(fit(+b[0],+b[1],+b[2],+b[3]));
+  var b=Z[i].split(" ");
+  pinta(i);T.textContent=NM[i]+" · "+DS[i];
+  D.textContent="Toca el fondo para volver";
+  go(fit(+b[1],+b[2],+b[3],+b[4]));
 }
 function todo(){
-  pinta(-1);T.textContent="Rectoría UABC · Mexicali";
-  D.textContent="Toca una zona";
-  go([0,0,1000,600]);
+  pinta(-1);T.textContent="UABC Campus Mexicali";
+  D.textContent="Toca un edificio";
+  go([0,0,1000,850]);
 }
-document.getElementById("b").onclick=todo;
-
 
 s.addEventListener("pointerdown",function(e){
   var t=document.elementFromPoint(e.clientX,e.clientY),
