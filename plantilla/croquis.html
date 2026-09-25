@@ -1,26 +1,113 @@
 <!doctype html>
-<html lang=es>
+<html lang="es">
 <head>
-<meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Croquis · UABC Campus Mexicali</title>
 <style>
-body{height:100dvh;overflow:hidden;background:#160d15;color:#f4e9f0;
-font:15px/1.35 system-ui,sans-serif;touch-action:none}
-#s{position:fixed;inset:0;width:100%;height:100%}
-#m{transform-box:view-box;transform-origin:0 0;transition:transform .55s}
-.z{fill:#2b2430;stroke:#0b1218;stroke-width:3;transition:.25s}
-.n{fill:#d5c9d2;font-size:30px;font-weight:800;text-anchor:middle}
-.act .z{fill:#EC008C;stroke:#7a0046}
-.act .n{fill:#FFFFFF}
-#h{position:fixed;left:0;right:0;bottom:0;padding:14px 18px 18px;pointer-events:none;
-background:#160d15e6}
-b,s{display:block}
-b{color:#EC008C;font-size:20px}s{font-size:13px}
+/* Paleta institucional de la UABC (Manual de Identidad Grafica 2022):
+   negro tinta #231F20, magenta #EC008C, gris #BCBEC0, azul #204199.
+
+   La reticula de puntos vive en el fondo del body y no en el SVG: asi cubre
+   tambien los margenes que deja el mapa, que en vertical son grandes porque
+   el predio es mas ancho que alto. */
+:root{
+  --fondo:#14100F; --tinta:#231F20; --magenta:#EC008C; --magenta-claro:#FF7AC8;
+  --gris:#BCBEC0; --azul:#204199; --texto:#F5F2F0; --tenue:#9C9492; --borde:#3A3230;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden}
+body{
+  background-color:var(--fondo);
+  background-image:
+    radial-gradient(56% 46% at 10% 0%,#EC008C1f,transparent 66%),
+    radial-gradient(50% 44% at 92% 100%,#2041993d,transparent 66%),
+    radial-gradient(#241E1C 1.3px,transparent 1.4px);
+  background-size:auto,auto,26px 26px;
+  background-attachment:fixed;
+  color:var(--texto);
+  font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
+  touch-action:none;-webkit-tap-highlight-color:transparent;
+}
+#s{position:fixed;inset:0;width:100%;height:100%;display:block}
+#m{transform-box:view-box;transform-origin:0 0;
+   transition:transform .6s cubic-bezier(.22,1,.36,1)}
+
+/* Edificios: el techo se ilumina de arriba abajo y el borde los despega del
+   suelo. La zona activa toma el magenta institucional con un halo. */
+.z{fill:url(#techo);stroke:#5C4E47;stroke-width:2;
+   transition:fill .32s ease,stroke .32s ease,filter .32s ease}
+.n{fill:var(--gris);font-weight:800;text-anchor:middle;letter-spacing:.04em;
+   transition:fill .32s ease}
+.act .z{fill:var(--magenta);stroke:var(--magenta-claro);
+        filter:drop-shadow(0 0 18px #EC008Cb0)}
+.act .n{fill:#fff}
+
+#cab{position:fixed;top:0;left:0;right:0;z-index:2;padding:16px 20px 30px;
+     display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+     pointer-events:none;background:linear-gradient(#14100Fee,#14100F00)}
+#marca{font-size:17px;font-weight:800;letter-spacing:.2em;color:var(--magenta)}
+#lugar{font-size:11px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;
+       color:#8C8482}
+
+/* El panel lleva los accesos rapidos: en el movil el mapa queda pequeno y
+   tocar un edificio concreto es dificil, asi que ademas de informar sirve
+   para navegar. */
+#ficha{position:fixed;z-index:2;display:flex;flex-direction:column;gap:12px;
+       padding:14px 16px;border:1px solid var(--borde);border-radius:18px;
+       background:#231F20f2;
+       -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+       box-shadow:0 18px 44px #000000a6;pointer-events:none;
+       left:14px;right:14px;bottom:14px;
+       transition:border-color .35s ease,box-shadow .35s ease}
+#ficha.on{border-color:#EC008C88;
+          box-shadow:0 18px 44px #000000a6,0 0 0 1px #EC008C26,0 0 36px #EC008C1f}
+#rotulo{display:flex;align-items:center;gap:14px}
+#sigla{flex:none;min-width:56px;height:48px;padding:0 10px;border-radius:13px;
+       display:grid;place-content:center;background:#2E2826;color:var(--gris);
+       font-size:16px;font-weight:800;letter-spacing:.05em;
+       transition:background .35s ease,color .35s ease,box-shadow .35s ease}
+#ficha.on #sigla{background:var(--magenta);color:#fff;box-shadow:0 0 24px #EC008C70}
+#titulo{display:block;font-size:17px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
+#pista{display:block;font-size:12.5px;color:var(--tenue);margin-top:3px}
+
+#chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;
+       -webkit-overflow-scrolling:touch}
+#chips::-webkit-scrollbar{display:none}
+.chip{flex:none;display:flex;align-items:center;gap:7px;padding:8px 13px;
+      border:1px solid #3E3532;border-radius:99px;background:#1C1817;
+      color:var(--gris);font:600 12.5px/1 system-ui,sans-serif;cursor:pointer;
+      white-space:nowrap;pointer-events:auto;
+      transition:border-color .25s ease,background .25s ease,color .25s ease}
+.chip b{font-weight:800;color:var(--magenta);letter-spacing:.03em;
+        transition:color .25s ease}
+.chip:hover{border-color:#5C4E47;background:#241F1E}
+.chip.act{border-color:var(--magenta);background:#EC008C1f;color:#fff}
+.chip.act b{color:#fff}
+
+/* En pantalla ancha el panel pasa a lateral: una barra inferior desperdicia
+   todo el ancho sobrante y deja el mapa pequeno y centrado. */
+@media (min-width:740px) and (orientation:landscape){
+  #ficha{left:22px;right:auto;top:50%;bottom:auto;width:326px;
+         transform:translateY(-50%);padding:20px;border-radius:20px}
+  #chips{flex-wrap:wrap;overflow:visible}
+}
 </style>
 </head>
 <body>
-<svg id=s viewBox="0 0 1000 850"><g id=m></g></svg>
-<div id=h><b id=t>UABC Campus Mexicali</b><s id=d>Toca un edificio</s></div>
+<svg id="s" viewBox="0 0 1000 850"><g id="m"></g></svg>
+
+<header id="cab"><span id="marca">UABC</span>
+<span id="lugar">Blvd. Benito Juárez 2500 · Mexicali, B.C.</span></header>
+<footer id="ficha">
+  <div id="rotulo">
+    <span id="sigla">UABC</span>
+    <div><strong id="titulo">Campus Mexicali</strong>
+    <span id="pista">Toca un edificio para acercarlo</span></div>
+  </div>
+  <div id="chips"></div>
+</footer>
+
 <script>
 // Trazado sobre el croquis oficial "Mapa: Ubicacion de Edificios" (UABC
 // Mexicali). Cada zona es [sigla, x, y, ancho, alto] en el lienzo 1000x850.
@@ -35,77 +122,142 @@ b{color:#EC008C;font-size:20px}s{font-size:13px}
 // campus de Blvd. Benito Juarez 2500.
 var Z=[["A",654,599,115,106],["1-4",311,332,131,131],["E",808,464,77,48],
 ["V",202,483,202,78],["T",461,87,135,184],["BIB",690,440,100,150]],
-D=["Fac. Ingenieria","Fac. Derecho","Fac. Arq. y Diseno","Investigacion y Posgrado","Teatro","Biblioteca"],
+D=["Facultad de Ingenieria","Facultad de Derecho","Facultad de Arquitectura y Diseno",
+"Investigacion y Posgrado","Teatro","Biblioteca"],
+// Nombre corto de cada zona, para los accesos rapidos del panel. Las tres
+// listas (Z, D y C) tienen que tener la misma longitud; hay una prueba que
+// lo comprueba, porque un desajuste deja el nombre en blanco.
+C=["Ingenieria","Derecho","Arquitectura","Posgrado","Teatro","Biblioteca"],
+// Predio del campus: el rectangulo que se encuadra en la vista general.
+P=[56,56,888,738],
 s=document.getElementById("s"),M=document.getElementById("m"),
-h=document.getElementById("h"),t=document.getElementById("t"),
-d=document.getElementById("d"),G=[],A=0,i,m;
+cab=document.getElementById("cab"),F=document.getElementById("ficha"),
+S=document.getElementById("sigla"),N=document.getElementById("titulo"),
+PISTA=document.getElementById("pista"),CH=document.getElementById("chips"),
+G=[],K=[],A=0,i,m;
 
-// Fondo: perimetro, areas verdes, vias internas y estacionamientos.
+// El fondo se dibuja como un mapa: predio, jardines, vias con doble trazo y
+// estacionamientos rayados. Las vias van recortadas al predio para que no
+// asomen por los bordes.
 //
-// OJO con el espacio antes de '/>' en todos los atributos sin comillas: en
-// HTML, un valor sin comillas se traga la '/', asi que 'fill=#16241c/>' se
-// parsea como fill="#16241c/" y la etiqueta nunca se cierra, tragandose
-// todo el dibujo. El espacio es lo que termina el valor. Hay una prueba que
-// detecta este patron.
-m='<rect width=1000 height=850 fill=#160d15 />'
- +'<path d="M60 60H960V820H60Z" fill=#231a20 stroke=#0b1218 stroke-width=4 />'
- +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300" stroke=#3a2b35 stroke-width=20 />'
- +'<path d="M150 90h180v190H150ZM700 90h130v190H700Z" fill=#4a3a45 />';
+// Todos los atributos van entrecomillados a proposito. Sin comillas, un valor
+// se traga la barra que cierra la etiqueta: 'fill=#333/>' se lee como
+// fill="#333/", la etiqueta nunca se cierra y el dibujo entero desaparece sin
+// dar ningun error en la consola. Hay una prueba que vigila este patron.
+m='<defs>'
+ +'<linearGradient id="techo" x1="0" y1="0" x2="0" y2="1">'
+ +'<stop offset="0" stop-color="#463B36"/><stop offset="1" stop-color="#332B28"/>'
+ +'</linearGradient>'
+ +'<pattern id="rayado" width="18" height="18" patternUnits="userSpaceOnUse"'
+ +' patternTransform="rotate(45)">'
+ +'<rect width="18" height="18" fill="#262120"/>'
+ +'<path d="M0 0V18" stroke="#332C2A" stroke-width="5"/>'
+ +'</pattern>'
+ +'<clipPath id="predio"><path d="M56 56h888v738H56Z"/></clipPath>'
+ +'</defs>'
+ // Suelo del campus
+ +'<path d="M56 56h888v738H56Z" fill="#221C1A" stroke="#3A312E" stroke-width="2"/>'
+ // Jardines
+ +'<path d="M92 92h248v120H92ZM660 92h248v120H660ZM92 664h248v98H92Z"'
+ +' fill="#1B3A26"/>'
+ // Estacionamientos
+ +'<path d="M156 96h168v178H156ZM706 96h118v178H706Z" fill="url(#rayado)"/>'
+ // Vias: caja oscura, relleno y eje discontinuo, recortadas al predio
+ +'<g clip-path="url(#predio)">'
+ +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300"'
+ +' stroke="#332B28" stroke-width="34" stroke-linecap="round" fill="none"/>'
+ +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300"'
+ +' stroke="#3E3532" stroke-width="26" stroke-linecap="round" fill="none"/>'
+ +'<path d="M170 470H960M480 90V810M700 420V810"'
+ +' stroke="#52463F" stroke-width="2" stroke-dasharray="14 18" fill="none"/>'
+ +'</g>';
 
 for(i=0;i<Z.length;i++){
-  var b=Z[i],x=b[1],y=b[2],w=b[3],q=b[4];
-  m+='<g class="g" data-i="'+i+'"><rect class="z" x='+x+' y='+y+' width='+w+' height='+q+' rx=6 />'
-   +'<text class="n" x='+(x+w/2)+' y='+(y+q/2)+' dy=.36em>'+b[0]+'</text></g>';
+  var b=Z[i],x=b[1],y=b[2],w=b[3],q=b[4],txt=b[0],
+  // La sigla se ajusta sola: 'BIB' o '1-4' no pueden ir al mismo cuerpo que 'A'.
+  fs=txt.length>3?20:txt.length>2?25:txt.length>1?30:34;
+  m+='<g class="g" data-i="'+i+'">'
+   +'<rect class="z" x="'+x+'" y="'+y+'" width="'+w+'" height="'+q+'" rx="8"/>'
+   +'<text class="n" x="'+(x+w/2)+'" y="'+(y+q/2)+'" dy=".36em"'
+   +' style="font-size:'+fs+'px">'+txt+'</text></g>';
 }
 M.innerHTML=m;
-// OJO: .children incluiria tambien los rect y path del fondo, y G[i] se
-// desplazaria. Se seleccionan solo los grupos de las zonas.
+CH.innerHTML=Z.map(function(z,k){
+  return '<button class="chip" data-i="'+k+'"><b>'+z[0]+'</b>'+C[k]+'</button>';
+}).join("");
+// OJO: .children incluiria tambien el fondo, y G[i] se desplazaria.
 G=M.querySelectorAll(".g");
+K=CH.querySelectorAll(".chip");
 
-// El zoom es un transform CSS sobre el <g>, no un viewBox animado: asi el
-// navegador lo interpola solo y no hace falta ningun bucle en JS.
-// Se usa getScreenCTM del <svg> (nunca se transforma) para saber a que
-// pixel corresponde cada unidad del dibujo.
+// Coloca el dibujo para que el rectangulo [x,y,ancho,alto] quepa centrado en
+// el hueco libre que dejan el encabezado y el panel, ampliandolo lo posible.
 //
-// El centro util NO es el del svg, sino el del area que deja la ficha de
-// abajo: si se centra en el svg entero, la zona queda tapada por la ficha.
-// Por eso el eje Y se desplaza media ficha hacia arriba. Ojo: la unidad
-// vertical es c.d (no c.a), y el centro en pixeles es (H-vh)/2, no H/2.
-function ver(i){
-  var b=Z[i],x=b[1],y=b[2],w=b[3],q=b[4],
-  c=s.getScreenCTM(),ux=c.a,uy=c.d,
-  W=s.clientWidth,H=s.clientHeight,vh=h.offsetHeight||0,
-  k=Math.min(W/(ux*w*1.25),(H-vh)/(uy*q*1.25)),
-  cx=(W/2-c.e)/ux-k*(x+w/2),
-  cy=((H-vh)/2-c.f)/uy-k*(y+q/2);
-  M.style.transform="translate("+cx+"px,"+cy+"px) scale("+k+")";
+// Es un transform CSS sobre el <g> y no un viewBox animado: asi el navegador
+// lo interpola solo y no hace falta ningun bucle en JS.
+//
+// Tres detalles que importan:
+//  - getScreenCTM() del <svg> (que nunca se transforma) trae dos escalas
+//    distintas, c.a para el eje X y c.d para el Y. Usar c.a en los dos ejes
+//    descentra la vista.
+//  - El centro util es el del hueco, no el del svg: si se centra en el svg,
+//    la zona ampliada queda tapada por el panel o por el encabezado.
+//  - El panel es barra inferior en vertical y lateral en apaisado, asi que el
+//    hueco se mide de sus rectangulos en vez de suponer donde esta.
+function encuadra(x,y,w,q,holgura){
+  var c=s.getScreenCTM(),ux=c.a,uy=c.d,
+  W=s.clientWidth,H=s.clientHeight,
+  rc=cab.getBoundingClientRect(),rf=F.getBoundingClientRect(),
+  lateral=rf.width<W*.62,
+  arriba=rc.bottom,
+  izq=lateral?rf.right+10:0,
+  abajo=lateral?0:H-rf.top,
+  ancho=W-izq,alto=H-arriba-abajo,
+  k=Math.min(ancho/(ux*w*holgura),alto/(uy*q*holgura)),
+  cx=izq+ancho/2,cy=arriba+alto/2;
+  M.style.transform="translate("+((cx-c.e)/ux-k*(x+w/2))+"px,"
+   +((cy-c.f)/uy-k*(y+q/2))+"px) scale("+k+")";
 }
 
 function pinta(i){
   if(A)A.classList.remove("act");
   A=G[i];if(A)A.classList.add("act");
+  for(var j=0;j<K.length;j++)K[j].classList.toggle("act",j==i);
 }
 function sel(i){
+  var b=Z[i];
   pinta(i);
-  t.textContent=Z[i][0]+" · "+D[i];
-  d.textContent="Toca en cualquier parte para volver";
-  ver(i);
+  S.textContent=b[0];
+  N.textContent=D[i];
+  PISTA.textContent="Toca en cualquier parte para volver";
+  F.classList.add("on");
+  encuadra(b[1],b[2],b[3],b[4],1.32);
 }
 function todo(){
   pinta(-1);
-  t.textContent="UABC Campus Mexicali";
-  d.textContent="Toca un edificio";
-  M.style.transform="none";
+  S.textContent="UABC";
+  N.textContent="Campus Mexicali";
+  PISTA.textContent="Toca un edificio para acercarlo";
+  F.classList.remove("on");
+  encuadra(P[0],P[1],P[2],P[3],1.04);
 }
 
 // Si ya hay una zona ampliada, cualquier toque deshace el zoom, toque donde
-// toque. Antes solo servia tocar el fondo, pero al hacer zoom la zona ocupa
-// casi toda la pantalla y no quedaba fondo donde pulsar.
+// toque: al ampliar, la zona ocupa casi toda la pantalla y no queda fondo
+// donde pulsar.
 s.addEventListener("pointerdown",function(e){
   if(A)return todo();
   var g=e.target.closest(".g");
   if(g)sel(+g.dataset.i);
 });
+CH.addEventListener("click",function(e){
+  var c=e.target.closest(".chip");
+  if(c)sel(+c.dataset.i);
+});
+
+// El encuadre depende del alto del encabezado y del panel, que cambian al
+// girar el movil o al cruzar el punto donde el panel pasa a lateral.
+addEventListener("resize",function(){ A?sel(+A.dataset.i):todo() });
+todo();
 </script>
 </body>
 </html>

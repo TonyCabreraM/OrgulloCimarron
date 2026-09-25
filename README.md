@@ -274,13 +274,44 @@ salida/            QR generado
 
 ## El croquis de Mexicali
 
-`plantilla/croquis.html` es un croquis interactivo del campus Mexicali. Tocar
-un edificio hace zoom hacia él, lo resalta en magenta institucional y muestra
-su ficha. **Un toque en cualquier parte deshace el zoom**: antes sólo servía
-tocar el fondo, pero al ampliar la zona ocupa casi toda la pantalla y no
-quedaba fondo donde pulsar.
+`plantilla/croquis.html` es un croquis interactivo del campus Mexicali.
 
-Los colores son los de la paleta institucional (ver la sección del color).
+| Acción | Resultado |
+| --- | --- |
+| Tocar un edificio | Zoom hacia él, se resalta en magenta y la ficha muestra su nombre |
+| Tocar un acceso rápido del panel | Lo mismo, sin tener que acertarle al edificio en el mapa |
+| Tocar en cualquier parte | Vuelve a la vista general |
+
+**El zoom se deshace tocando en cualquier parte.** Antes sólo servía tocar el
+fondo, y eso casi nunca ocurría: al ampliar, la zona ocupa casi toda la
+pantalla y no queda fondo donde pulsar.
+
+### Cómo está armado
+
+- **Colores**: paleta institucional de la UABC, del Manual de Identidad Gráfica
+  2022. El negro tinta hace de superficie, el magenta del acento y el azul
+  oscuro del segundo brillo del fondo.
+- **El encuadre se calcula en JavaScript**, no se deja al `viewBox`. El mapa se
+  centra y se amplía dentro del hueco libre que dejan el encabezado y el panel,
+  midiéndolos con `getBoundingClientRect()`. Dejar el encuadre al `viewBox`
+  hacía que el mapa quedara pequeño y que la ficha tapara los edificios del
+  borde inferior.
+- **El zoom es un `transform` CSS** sobre el `<g>` interior con una
+  `transition`, no un bucle que anima el `viewBox`: el navegador lo interpola
+  solo y no hay JavaScript por fotograma.
+- **El panel es barra inferior en vertical y lateral en apaisado**
+  (`@media (min-width:740px) and (orientation:landscape)`). En pantalla ancha
+  una barra inferior desperdicia el ancho y deja el mapa chico y centrado.
+- **Accesos rápidos**: la fila de botones del panel. En un móvil el mapa queda
+  pequeño y tocar un edificio concreto es difícil, así que además de informar
+  el panel sirve para navegar.
+
+> **El croquis ya no cabe dentro del QR.** Con este diseño pesa unos 12 KB, y
+> en los modos que embeben el documento (`servidor` y `sin-servidor`) el QR más
+> grande solo admite ~2950 bytes de URL. Por eso el modo por defecto es
+> `enlace`, que lleva únicamente la dirección del HTML. La prueba
+> `QR actual decodificable` usa `plantilla/plantilla.html` para verificar el
+> mecanismo, no este documento.
 
 La geometría está trazada sobre el croquis oficial **"Mapa: Ubicación de
 Edificios"** de la UABC (3 páginas, el mismo que reparten en automotores). Las
@@ -321,33 +352,36 @@ Dirección del campus: Blvd. Benito Juárez 2500, Parcela 44, 21280 Mexicali, B.
 
 ### Por qué no están todos los edificios
 
-El documento va comprimido en gzip dentro del QR, así que el presupuesto es
-duro: **2953 bytes de URL en nivel L**. El croquis con las 9 zonas actuales
-ocupa el 90% (versión 38, 169×169 módulos). Sacar del croquis lo que sí está
-en el plano oficial es una decisión de bytes, no un olvido:
+Sacar del croquis lo que sí está en el plano oficial es una decisión de
+legibilidad, no un olvido:
 
 | Fuera | Motivo |
 | --- | --- |
 | Zonas B, F, E1 | Centro de Evaluación y su anexo: 3 edificios pequeños, poco uso en el croquis |
-| Rótulos de las calles | 4 textos únicos que comprimían mal; las calles sí están dibujadas en el SVG |
-| Estacionamientos G, H | Decorativos, no interactivos |
+| Rótulos de las calles | Con 6 edificios, llenar el mapa de texto lo ensucia más de lo que ayuda |
 | Páginas 2 y 3 del plano | Son otro sector del campus (Pedagogía, Deportes, FCA) |
 
-Para reincorporarlos, basta con añadir la entrada a `Z` y el nombre a `D`, y
-medir con `generar_qr.py`. Si no cabe, `plantilla/planos/` tiene las tres
-páginas para consultar las coordenadas.
+Hasta el rediseño esto era además una restricción de bytes: el documento viajaba
+dentro del QR y no cabía nada más. Con el modo `enlace` esa restricción
+desapareció, así que ahora el límite es sólo lo que se entienda bien mirando.
+
+Para reincorporarlos, basta con añadir la entrada a `Z`, el nombre largo a `D`
+y el corto a `C`. `plantilla/planos/` tiene las tres páginas del plano oficial
+para consultar las coordenadas.
 
 ### Al sustituir el SVG de Illustrator
 
-El mapa se dibuja con JavaScript a partir de un solo array:
+El mapa se dibuja con JavaScript a partir de un array:
 
 ```javascript
 var Z=[["A",654,599,115,106],["1-4",311,332,131,131],…];  // sigla x y ancho alto
 ```
 
 `Z[i]` da `[sigla, x, y, ancho, alto]`. Con el SVG definitivo se reemplazan
-esas cajas y nada más: el zoom, el encuadre y la ficha se calculan solos. Las
-descripciones van aparte, en `D`, y ambas tienen que tener la misma longitud.
+esas cajas y nada más: el zoom, el encuadre y la ficha se calculan solos. De
+las otras dos listas, `D` lleva el nombre que sale en la ficha y `C` el corto
+de los accesos rápidos; **las tres tienen que medir lo mismo**, y hay una
+prueba que lo comprueba porque un desajuste deja un botón sin texto.
 
 El zoom es un `transform` CSS sobre el `<g>` interior, no un `viewBox` animado:
 así el navegador interpola solo y no hace falta ningún bucle de JavaScript.

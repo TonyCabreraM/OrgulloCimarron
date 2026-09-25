@@ -71,9 +71,13 @@ def ejecutar_main(*argumentos: str) -> int:
 def test_ronda_completa() -> bool:
     """HTML survives: generar -> PNG -> leer -> decodificar el fragmento.
 
-    Se recorren los dos modos, porque el QR no siempre lleva la misma forma.
+    Se recorren los dos modos que llevan el HTML dentro, porque ahi el QR no
+    siempre tiene la misma forma. Se usa el documento de ejemplo y no el
+    croquis: el croquis es bonito pero grande, y en estos modos tiene que
+    caber entero en el QR. Lo que se comprueba aqui es el mecanismo
+    (empaquetar, leer, descomprimir), no que quepa un documento concreto.
     """
-    origen = Path("plantilla/croquis.html")
+    origen = Path("plantilla/plantilla.html")
     crudo = origen.read_text(encoding="utf-8")
     salida = Path("_tmp_salida")
     salida.mkdir(exist_ok=True)
@@ -83,6 +87,7 @@ def test_ronda_completa() -> bool:
             if ejecutar_main("--html", str(origen), "--salida", str(prefijo),
                              "--nivel", "L", "--modo", modo,
                              "--publicar-en", str(salida)) != 0:
+                print(f"    (el HTML no cupo en modo {modo})")
                 return False
             texto = leer_qr(prefijo.with_suffix(".png"))
             if not texto:
@@ -232,6 +237,17 @@ def test_croquis_zonas_coherentes() -> bool:
 
     if len(zonas) != len(descripciones):
         print(f"    (hay {len(zonas)} zonas pero {len(descripciones)} descripciones)")
+        return False
+
+    # Los accesos rapidos del panel salen de C. Si no mide lo mismo que Z, el
+    # boton de esa zona sale sin nombre.
+    bloque_corto = re.search(r"C=\[(.*?)\]", texto, flags=re.S)
+    if not bloque_corto:
+        print("    (no se encuentra el array de nombres cortos C)")
+        return False
+    cortos = re.findall(r"\"([^\"]*)\"", bloque_corto.group(1))
+    if len(cortos) != len(zonas):
+        print(f"    (hay {len(zonas)} zonas pero {len(cortos)} nombres cortos)")
         return False
 
     # Ninguna coordenada puede ser cero o negativa: siempre es un fallo.
