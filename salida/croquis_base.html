@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang=es>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Cargando…</title>
+<style>
+/* overflow:hidden en html/body: el iframe va fijo y el padding del body
+  <haria desbordar y aparecer un scrollbar que no toca el documento. */
+html,body{height:100%;margin:0;overflow:hidden}
+body{display:grid;place-content:center;background:#0e151b;color:#e8f1f8;
+font:15px/1.5 system-ui,sans-serif}
+#f{display:none;padding:24px;text-align:center;max-width:38em}
+p{margin:.4em 0}
+small{opacity:.6;display:block;margin-top:14px;font-size:12px}
+</style>
+<div id=f><p><b>No se pudo mostrar el contenido.</b></p>
+<p id=e></p><small>Copia la direccion del QR y pegala aqui, seguida de su <em>#</em> y el fragmento.</small></div>
+<iframe id=v title="Contenido" style="position:fixed;inset:0;width:100%;height:100%;border:0;display:none"></iframe>
+<script>
+(async()=>{
+ // `expresion` da el base64url: location.hash.slice(1) en la pagina base, o
+ // una cadena literal en la vista previa del modo sin-servidor.
+ const fuente=()=>location.hash.slice(1);
+ const mostrar=async()=>{
+  try{
+   if(typeof DecompressionStream!=="function")
+    throw new Error("Este navegador es muy antiguo. Actualiza a Chrome, Safari 16.4+ o Firefox 113+.");
+   // atob solo entiende base64 estandar; el fragmento va en base64url.
+   const s=(fuente()||"").replace(/-/g,'+').replace(/_/g,'/');
+   if(!s)throw new Error("La direccion no trae el codigo. Escanea el codigo QR completo.");
+   const a=Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+   const b=new Blob([a]).stream().pipeThrough(new DecompressionStream('gzip'));
+   // Se mete en un iframe y no con document.write: asi esta pagina no se
+   // destruye, el aviso de error sigue vivo y un segundo escaneo con la
+   // pagina ya abierta vuelve a cargar bien.
+   const v=document.getElementById("v");
+   v.style.display="block";
+   document.getElementById("f").style.display="none";
+   v.srcdoc=await new Response(b).text();
+  }catch(e){
+   const f=document.getElementById("f"),m=document.getElementById("e");
+   f.style.display="block";m.textContent=String(e&&e.message||e);
+   document.getElementById("v").style.display="none";
+  }
+ };
+ mostrar();
+ // Cambiar solo el '#' NO recarga el documento. Sin esto, si la pagina ya
+ // esta abierta y se escanea otro QR, se queda en blanco.
+ addEventListener("hashchange",mostrar);
+})();
+</script>

@@ -25,13 +25,15 @@ background:linear-gradient(#0e151b00,#0e151be6 55%)}
 // Trazado sobre el croquis oficial "Mapa Ubicacion de Edificios" (UABC Mexicali,
 // 3 paginas). Zona = "sigla x y ancho alto" en el lienzo 1000x850. Al llegar el
 // SVG de Illustrator solo cambian estas cajas; la logica de zoom no se toca.
+// OJO: la Rectoria UABC NO esta en este campus. Vive en la Col. Nueva, entre
+// las avdas. Leyes de la Reforma y Sebastian Lerdo de Tejada (ex Palacio de
+// Gobierno). Este croquis es solo del campus de Blvd. Benito Juarez 2500.
 var BZ="A 654 599 115 106;1 311 628 131 39;2 311 696 131 28;3 311 387 131 38;4 311 332 131 39;"
- +"E 808 464 77 48;V 202 483 202 78;"
- +"T 461 87 135 184;BIB 690 440 100 150;R 690 700 100 70",
-NM="A|1|2|3|4|E|V|T|BIB|R".split("|"),
+ +"E 808 464 77 48;V 202 483 202 78;T 461 87 135 184;BIB 690 440 100 150",
+NM="A|1|2|3|4|E|V|T|BIB".split("|"),
 DS=["Facultad de Ingenieria","Facultad de Derecho","Facultad de Derecho","Facultad de Derecho",
-"Facultad de Derecho","Fac. de Arq. y Diseno","Posgrado Vicerrectoria",
-"Teatro","Biblioteca","Rectoria"],
+"Facultad de Derecho","Fac. de Arq. y Diseno","Investigacion y Posgrado",
+"Teatro","Biblioteca"],
 s=document.getElementById("s"),T=document.getElementById("t"),D=document.getElementById("d"),
 V=[0,0,1000,850],W=V.slice(),F=0,i;
 

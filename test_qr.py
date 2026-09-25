@@ -99,6 +99,58 @@ def test_ronda_completa() -> bool:
     return True
 
 
+def test_escaneo_de_un_movil() -> bool:
+    """El flujo real de un movil: QR -> URL real -> pagina base -> documento.
+
+    Es la prueba que importa. El modo 'servidor' es el unico que funciona en
+    un telefono (Chrome en Android y Safari en iOS bloquean 'javascript:'), asi
+    que se comprueba que la URL del QR sea una direccion http normal, que la
+    pagina base publicada lea el fragmento, y que el documento salga entero.
+    """
+    origen = Path("plantilla/plantilla.html")
+    salida = Path("_tmp_scan")
+    salida.mkdir(exist_ok=True)
+    try:
+        if ejecutar_main("--html", str(origen), "--salida", str(salida / "q"),
+                         "--nivel", "L", "--modo", "servidor",
+                         "--url-base", "https://ejemplo.org/pagina.html") != 0:
+            return False
+
+        url = leer_qr(salida / "q.png")
+        base, _, fragmento = url.partition("#")
+        if not base.startswith("https://ejemplo.org/pagina.html"):
+            print(f"    (el QR no apunta a la pagina base: {base!r})")
+            return False
+        if not fragmento:
+            print("    (el QR no lleva fragmento)")
+            return False
+        # El fragmento jamas viaja al servidor: debe ser solo alfabeto seguro.
+        if set(fragmento) - set(g.PESO):
+            print("    (el fragmento tiene caracteres que rompen la URL)")
+            return False
+
+        # La pagina base es la que se publica: tiene que leer el hash y
+        # reconstruir. Sin esto, escanear el QR no muestra nada.
+        pagina = (salida / "q_base.html").read_text(encoding="utf-8")
+        forPiece = ("location.hash.slice(1)", "DecompressionStream('gzip')", "atob")
+        for pieza in forPiece:
+            if pieza not in pagina:
+                print(f"    (la pagina base no usa {pieza})")
+                return False
+        # Sin esto, un segundo escaneo con la pagina ya abierta se queda en blanco.
+        if "hashchange" not in pagina:
+            print("    (la pagina base no escucha hashchange)")
+            return False
+
+        # Y el documento tiene que salir identico al original.
+        if decodificar(fragmento, comprimir=True) != (salida / "q.html").read_text(encoding="utf-8"):
+            print("    (el documento no se reconstruye igual)")
+            return False
+    finally:
+        shutil.rmtree(salida, ignore_errors=True)
+    return True
+
+
 def test_minificado_conserva_estructura() -> bool:
     """El minificador no rompe las piezas que sostienen el render."""
     crudo = Path("plantilla/plantilla.html").read_text(encoding="utf-8")
@@ -164,6 +216,7 @@ def main() -> int:
         ("minificado conserva estructura", test_minificado_conserva_estructura),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),
         ("QR actual decodificable", test_ronda_completa),
+        ("escaneo desde un movil", test_escaneo_de_un_movil),
         ("legibilidad por nivel", test_legibilidad_por_tamano),
         ("exceso se reporta limpio", test_exceso_se_reporta),
     ]

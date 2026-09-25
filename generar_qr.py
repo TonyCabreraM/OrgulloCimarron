@@ -35,8 +35,10 @@ from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_L, ERROR_CORRECT_M
 PREFIJO = "(async()=>{"
 SUFIJO = "})()"
 
-# URL de ejemplo para el modo 'servidor': cámbiala por la tuya.
-URL_BASE = "https://x.to/a"
+# URL donde se publica la pagina base. En modo 'servidor' el QR apunta aqui
+# seguido del fragmento, asi que esta direccion tiene que existir de verdad.
+# Cámbiala por la tuya antes de imprimir el QR.
+URL_BASE = "https://tonycabreraM.github.io/OrgulloCimarron/salida/croquis_base.html"
 
 
 def cuerpo_js(fragmento: str) -> str:
@@ -218,23 +220,90 @@ def construir_qr(datos: str, ruta_png: Path, ruta_svg: Path, nivel: str) -> None
     qr.make_image(image_factory=qrcode.image.svg.SvgPathImage).save(ruta_svg)
 
 
-def vista_previa(ancla: str, modo: str) -> str:
-    """Pagina que ejecuta el mismo cuerpo JavaScript que viaja en el QR.
+def pagina_decodificadora(expresion: str, pie: str) -> str:
+    """Pagina que reconstruye el documento a partir del fragmento de la URL.
 
-    Sirve para comprobar el resultado en un navegador sin escanear nada: el
-    script es identico byte a byte, lo unico que cambia es que aqui corre
-    desde un <script> en vez de desde la URL que codifica el QR.
+    Esta pagina NO viaja dentro del QR: es la que se publica en la URL base.
+    Por eso puede ser legible y lavish: lo unico que tiene que caber en los
+    2953 bytes del QR es el fragmento, no esto.
+
+    `expresion` es de donde sale el base64url: la cadena literal (vista previa
+    del modo sin-servidor) o `location.hash.slice(1)` (la pagina base, que lee
+    lo que el lector de QR metio tras el '#').
+
+    Los errores se muestran en pantalla: si alguien abre la pagina base sin
+    fragmento, o con uno corrupto, veria un error de JavaScript incomprensible.
+    """
+    return f"""<!doctype html>
+<html lang=es>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Cargando…</title>
+<style>
+/* overflow:hidden en html/body: el iframe va fijo y el padding del body
+  <haria desbordar y aparecer un scrollbar que no toca el documento. */
+html,body{{height:100%;margin:0;overflow:hidden}}
+body{{display:grid;place-content:center;background:#0e151b;color:#e8f1f8;
+font:15px/1.5 system-ui,sans-serif}}
+#f{{display:none;padding:24px;text-align:center;max-width:38em}}
+p{{margin:.4em 0}}
+small{{opacity:.6;display:block;margin-top:14px;font-size:12px}}
+</style>
+<div id=f><p><b>No se pudo mostrar el contenido.</b></p>
+<p id=e></p><small>{pie}</small></div>
+<iframe id=v title="Contenido" style="position:fixed;inset:0;width:100%;height:100%;border:0;display:none"></iframe>
+<script>
+(async()=>{{
+ // `expresion` da el base64url: location.hash.slice(1) en la pagina base, o
+ // una cadena literal en la vista previa del modo sin-servidor.
+ const fuente=()=>{expresion};
+ const mostrar=async()=>{{
+  try{{
+   if(typeof DecompressionStream!=="function")
+    throw new Error("Este navegador es muy antiguo. Actualiza a Chrome, Safari 16.4+ o Firefox 113+.");
+   // atob solo entiende base64 estandar; el fragmento va en base64url.
+   const s=(fuente()||"").replace(/-/g,'+').replace(/_/g,'/');
+   if(!s)throw new Error("La direccion no trae el codigo. Escanea el codigo QR completo.");
+   const a=Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+   const b=new Blob([a]).stream().pipeThrough(new DecompressionStream('gzip'));
+   // Se mete en un iframe y no con document.write: asi esta pagina no se
+   // destruye, el aviso de error sigue vivo y un segundo escaneo con la
+   // pagina ya abierta vuelve a cargar bien.
+   const v=document.getElementById("v");
+   v.style.display="block";
+   document.getElementById("f").style.display="none";
+   v.srcdoc=await new Response(b).text();
+  }}catch(e){{
+   const f=document.getElementById("f"),m=document.getElementById("e");
+   f.style.display="block";m.textContent=String(e&&e.message||e);
+   document.getElementById("v").style.display="none";
+  }}
+ }};
+ mostrar();
+ // Cambiar solo el '#' NO recarga el documento. Sin esto, si la pagina ya
+ // esta abierta y se escanea otro QR, se queda en blanco.
+ addEventListener("hashchange",mostrar);
+}})();
+</script>
+"""
+
+
+def vista_previa(ancla: str, modo: str) -> str:
+    """Replica el decodificador para comprobar el resultado sin escanear.
+
+    En modo servidor el fragmento viene en `location.hash`, asi que esta copia
+    se abre anadiendo el fragmento del QR a mano.
     """
     if modo == "servidor":
-        cuerpo = PREFIJO + cuerpo_js("location.hash.slice(1)") + SUFIJO
-        pie = "Abre esta pagina con <em>#</em> y el fragmento del QR para ver el resultado."
-    else:
-        cuerpo = ancla[len("javascript:") :] if ancla.startswith("javascript:") else ancla
-        pie = "Replica el decodificador del QR, sin escanear nada."
-    return (
-        "<!doctype html><meta charset=utf-8><title>Vista previa</title>"
-        f"<script>{cuerpo}</script>"
-        f"<p style='font:14px system-ui;padding:12px;background:#eee'>{pie}</p>"
+        return pagina_decodificadora(
+            "location.hash.slice(1)",
+            "Copia la direccion del QR y pegala aqui, seguida de su <em>#</em> y el fragmento.",
+        )
+    encontrado = re.search(r"let s='([^']*)'", ancla)
+    literal = f"'{encontrado.group(1)}'" if encontrado else "''"
+    return pagina_decodificadora(
+        literal,
+        "Replica el decodificador del QR, sin escanear nada.",
     )
 
 
@@ -254,9 +323,11 @@ Ejemplos:
     analizador.add_argument("--url-base", default=URL_BASE, help="URL a la que apunta el QR")
     analizador.add_argument(
         "--modo",
-        choices=["sin-servidor", "servidor"],
-        default="sin-servidor",
-        help="sin-servidor: la URL no necesita existir. servidor: usa --url-base real",
+        choices=["servidor", "sin-servidor"],
+        default="servidor",
+        help="servidor (por defecto): el QR apunta a una URL real y funciona en el movil. "
+        "sin-servidor: no necesita publicar nada, pero usa una URL 'javascript:' que "
+        "Chrome en Android y Safari en iOS bloquean, asi que NO sirve para imprimir",
     )
     analizador.add_argument(
         "--nivel",
@@ -321,26 +392,33 @@ Ejemplos:
     print(f"QR (SVG)        -> {salida.with_suffix('.svg')}")
     print(f"Modo            : {args.modo}")
 
-    # Vista previa: replica el decodificador del QR en un archivo local,
-    # para comprobar el resultado sin tener que escanear nada.
-    vista = salida.with_name(salida.name + "_qr.html")
-    vista.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
-    print(f"Vista previa    -> {vista}  (abre esto para ver el resultado)")
-
-    # Modo servidor: la pagina base es lo que se publica en la URL, y es la
-    # que lee el fragmento para reconstruir el documento.
-    if args.modo == "servidor":
-        base = salida.with_name(salida.name + "_base.html")
-        base.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
-        print(f"Pagina base     -> {base}  (publica esto en {args.url_base})")
+    # La pagina base es lo que lee el fragmento para reconstruir el documento.
+    # En modo servidor es la que se publica en la URL; en modo sin-servidor solo
+    # sirve para inspeccionar el resultado sin escanear.
+    base = salida.with_name(salida.name + "_base.html")
+    base.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
 
     print()
-    if args.modo == "sin-servidor":
-        print("Sin servidor: la URL del QR no existe y da igual. Al escanear,")
-        print("el lector ejecuta el decodificador y muestra el HTML.")
+    if args.modo == "servidor":
+        print("LISTO PARA ESCANEAR. El QR apunta a:")
+        print(f"  {args.url_base}#{fragmento[:40]}…")
+        print()
+        print(f"1. Publica este archivo en esa direccion:")
+        print(f"     {base}")
+        print("   En GitHub Pages: sube el repo y activa Pages desde la rama.")
+        print("   Netlify Drop: arrastra la carpeta y usa la URL que te den.")
+        print("2. Comprueba que la pagina base abre en el movil.")
+        print("3. Escanea el QR con cualquier dispositivo.")
+        print()
+        print("Aviso: la URL completa ronda los", total, "caracteres porque el")
+        print("fragmento viaja dentro. Si en algun lector se trunca, baja el")
+        print("documento (menos texto o menos zonas) y vuelve a generar.")
     else:
-        print(f"Con servidor: publica una pagina vacia en {args.url_base}")
-        print("El QR se apoya en ella para descomprimir y mostrar el HTML.")
+        print(f"Vista previa    -> {base}  (abre esto para ver el resultado)")
+        print()
+        print("OJO: este modo usa una URL 'javascript:'. Chrome en Android y")
+        print("Safari en iOS la bloquean, asi que el QR NO funcionara en un")
+        print("telefono. Usa --modo servidor para imprimirlo.")
     return 0
 
 
