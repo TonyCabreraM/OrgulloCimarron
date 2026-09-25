@@ -11,6 +11,7 @@ import contextlib
 import gzip
 import io
 import os
+import re
 import shutil
 import sys
 import urllib.error
@@ -115,6 +116,7 @@ def test_escaneo_de_un_movil() -> bool:
     try:
         if ejecutar_main("--html", str(origen), "--salida", str(salida / "q"),
                          "--nivel", "L", "--modo", "servidor",
+                         "--publicar-en", str(salida),
                          "--url-base", "https://ejemplo.org/pagina.html") != 0:
             return False
 
@@ -132,10 +134,11 @@ def test_escaneo_de_un_movil() -> bool:
             return False
 
         # La pagina base es la que se publica: tiene que leer el hash y
-        # reconstruir. Sin esto, escanear el QR no muestra nada.
-        pagina = (salida / "q_base.html").read_text(encoding="utf-8")
-        forPiece = ("location.hash.slice(1)", "DecompressionStream('gzip')", "atob")
-        for pieza in forPiece:
+        # reconstruir. Sin esto, escanear el QR no muestra nada. El generador
+        # la nombra con el mismo nombre que tiene en la URL, asi que aqui se
+        # busca 'pagina.html' y no un nombre fijo.
+        pagina = (salida / "pagina.html").read_text(encoding="utf-8")
+        for pieza in ("location.hash.slice(1)", "DecompressionStream('gzip')", "atob"):
             if pieza not in pagina:
                 print(f"    (la pagina base no usa {pieza})")
                 return False
@@ -181,6 +184,82 @@ def test_url_publicada_responde() -> bool:
         return False
     print(f"    {g.URL_BASE} -> {estado}, {len(cuerpo)} bytes")
     return True
+
+
+def test_croquis_zonas_coherentes() -> bool:
+    """El array de zonas y el de descripciones tienen la misma longitud.
+
+    Si no coinciden, al tocar un edificio la ficha sale undefined. Y si el
+    array de zonas se define como texto con '+' y .split(), la precedencia
+    hace que Z sea una cadena: Z.length da el numero de caracteres, el
+    bucle dibuja un grupo por caracter y todas las coordenadas salen NaN
+    (el mapa sale vacio, sin error). Las dos cosas son silenciosas, asi que
+    se comprueban aqui.
+    """
+    texto = Path("plantilla/croquis.html").read_text(encoding="utf-8")
+
+    # Codicioso y con un solo ']': el array termina en ']]' (cierre de la ultima
+    # zona + cierre del array), y con ']]' en el patron se comeria el cierre de
+    # esa ultima zona y dejaria fuera la cuenta.
+    bloque_zonas = re.search(r"var Z=\[(.*)\],\s*\nD=", texto, flags=re.S)
+    if not bloque_zonas:
+        print("    (no se encuentra 'var Z=[[...]]' seguido de 'D=' en croquis.html)")
+        return False
+    interior = bloque_zonas.group(1)
+
+    # Z tiene que ser un array literal de arrays, no una cadena con split().
+    if ".split(" in interior:
+        print("    (Z se parte con split(): al concatenar textos con '+' solo se "
+              "aplicaria al ultimo trozo y Z volveria a ser una cadena)")
+        return False
+
+    zonas = re.findall(r"\[\s*[\"']?([\w-]+)[\"']?\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]", interior)
+    if not zonas:
+        print("    (no se parses las zonas; se esperaba [[sigla,x,y,ancho,alto],...]")
+        return False
+
+    bloque_desc = re.search(r"D=\[(.*?)\]", texto, flags=re.S)
+    if not bloque_desc:
+        print("    (no se encuentra el array de descripciones D)")
+        return False
+    descripciones = re.findall(r"\"([^\"]*)\"", bloque_desc.group(1))
+
+    if len(zonas) != len(descripciones):
+        print(f"    (hay {len(zonas)} zonas pero {len(descripciones)} descripciones)")
+        return False
+
+    # Ninguna coordenada puede ser cero o negativa: siempre es un fallo.
+    for sigla, x, y, w, alto in zonas:
+        if min(int(x), int(y), int(w), int(alto)) <= 0:
+            print(f"    (zona {sigla} con coordenada no positiva: {x},{y},{w},{alto})")
+            return False
+    print(f"    {len(zonas)} zonas coherentes: {' '.join(z[0] for z in zonas)}")
+    return True
+
+
+def test_atributos_sin_comillas_no_se_tragan() -> bool:
+    """Ningun valor de atributo sin comillas puede terminar en '/>'.
+
+    En HTML, un valor sin comillas sigue tragandose caracteres hasta el
+    espacio, y la '/' cuenta como parte del valor. Escribiendo
+    'fill=#16241c/>' el parser lee fill="#16241c/" y la etiqueta nunca se
+    cierra: se traga todo el dibujo y el mapa sale en negro, sin ningun
+    error en la consola. Es un fallo silencioso, asi que se vigila con una
+    expresion regular en vez de confiar en la vista.
+    """
+    fallos = []
+    # Se ignoran los comentarios de linea: un comentario que explica el fallo
+    # contiene el patron tragao y daria un falso positivo. El '//' de un
+    # 'https://' va precedido de ':', no de espacio, asi que sobrevive.
+    patron_comentario = re.compile(r"(?m)(?:^|\s)//[^\n]*")
+    patron = r"""=\s*([^\s"'=<>/]+)/>"""
+    for origen in sorted(Path("plantilla").glob("*.html")):
+        texto = patron_comentario.sub("", origen.read_text(encoding="utf-8"))
+        for encontrado in re.finditer(patron, texto):
+            fallos.append(f"{origen.name}: valor sin comillas terminado en '/>' -> ...{encontrado.group(0)}")
+    for fallo in fallos:
+        print(f"    {fallo}")
+    return not fallos
 
 
 def test_minificado_conserva_estructura() -> bool:
@@ -246,6 +325,8 @@ def test_exceso_se_reporta() -> bool:
 def main() -> int:
     pruebas = [
         ("minificado conserva estructura", test_minificado_conserva_estructura),
+        ("atributos sin comillas no se tragan", test_atributos_sin_comillas_no_se_tragan),
+        ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),
         ("QR actual decodificable", test_ronda_completa),
         ("escaneo desde un movil", test_escaneo_de_un_movil),

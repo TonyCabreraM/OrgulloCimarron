@@ -1,70 +1,61 @@
-<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"> <style>*{margin:0;box-sizing:border-box}body{height:100dvh;overflow:hidden;background:#0e151b;color:#e8f1f8;font:15px/1.35 system-ui,sans-serif;touch-action:none}#s{position:fixed;inset:0;width:100%;height:100%;display:block}.z{fill:#24425c;stroke:#0b1218;stroke-width:3;transition:.25s}.g.act .z{fill:#f2a541;stroke:#8a4f05}.n{fill:#d5e6f5;font-size:30px;font-weight:800;text-anchor:middle;pointer-events:none}.g.act .n{fill:#241704}#h{position:fixed;left:0;right:0;bottom:0;z-index:1;padding:14px 18px 18px;pointer-events:none;background:linear-gradient(#0e151b00,#0e151be6 55%)}#t{display:block;font-size:20px;font-weight:800;color:#f2a541}#d{display:block;font-size:13px;margin-top:2px}</style> </head><body><svg id=s viewBox="0 0 1000 850"></svg><div id=h><b id=t>UABC Campus Mexicali</b><s id=d>Toca un edificio</s></div> <script>var BZ="A 654 599 115 106;1 311 628 131 39;2 311 696 131 28;3 311 387 131 38;4 311 332 131 39;"
- +"E 808 464 77 48;V 202 483 202 78;T 461 87 135 184;BIB 690 440 100 150",
-NM="A|1|2|3|4|E|V|T|BIB".split("|"),
-DS=["Facultad de Ingenieria","Facultad de Derecho","Facultad de Derecho","Facultad de Derecho",
-"Facultad de Derecho","Fac. de Arq. y Diseno","Investigacion y Posgrado",
-"Teatro","Biblioteca"],
-s=document.getElementById("s"),T=document.getElementById("t"),D=document.getElementById("d"),
-V=[0,0,1000,850],W=V.slice(),F=0,i;
+<!doctype html><html lang=es><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"> <style>body{height:100dvh;overflow:hidden;background:#0e151b;color:#e8f1f8;font:15px/1.35 system-ui,sans-serif;touch-action:none}#s{position:fixed;inset:0;width:100%;height:100%}#m{transform-box:view-box;transform-origin:0 0;transition:transform .55s}.z{fill:#24425c;stroke:#0b1218;stroke-width:3;transition:.25s}.n{fill:#d5e6f5;font-size:30px;font-weight:800;text-anchor:middle}.act .z{fill:#f2a541;stroke:#8a4f05}.act .n{fill:#241704}#h{position:fixed;left:0;right:0;bottom:0;padding:14px 18px 18px;pointer-events:none;background:#0e151be6}b,s{display:block}b{color:#f2a541;font-size:20px}s{font-size:13px}</style> </head><body><svg id=s viewBox="0 0 1000 850"><g id=m></g></svg><div id=h><b id=t>UABC Campus Mexicali</b><s id=d>Toca un edificio</s></div> <script>var Z=[["A",654,599,115,106],["1-4",311,332,131,131],["E",808,464,77,48],
+["V",202,483,202,78],["T",461,87,135,184],["BIB",690,440,100,150]],
+D=["Fac. Ingenieria","Fac. Derecho","Fac. Arq. y Diseno","Investigacion y Posgrado","Teatro","Biblioteca"],
+s=document.getElementById("s"),M=document.getElementById("m"),
+h=document.getElementById("h"),t=document.getElementById("t"),
+d=document.getElementById("d"),G=[],A=0,i,m;
 
-var m='<rect width=1000 height=850 fill="#16241c"/>'
- +'<path d="M60 60H960V820H60Z" fill="#1b3a2c" stroke="#0f1922" stroke-width="4"/>'
- +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300" stroke="#38485a" stroke-width="20" fill="none"/>'
- +'<rect x=150 y=90 width=180 height=190 rx=8 fill="#3a4a5c"/>'
- +'<rect x=700 y=90 width=130 height=190 rx=8 fill="#3a4a5c"/>'
- +'<text x=240 y=190 font-size=26 fill=#cfe0f0 text-anchor=middle>Estacionamiento</text>';
 
-var Z=BZ.split(";"),i;
+
+
+
+
+
+m='<rect width=1000 height=850 fill=#16241c />'
+ +'<path d="M60 60H960V820H60Z" fill=#1b3a2c stroke=#0f1922 stroke-width=4 />'
+ +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300" stroke=#38485a stroke-width=20 />'
+ +'<path d="M150 90h180v190H150ZM700 90h130v190H700Z" fill=#3a4a5c />';
 
 for(i=0;i<Z.length;i++){
-  var b=Z[i].split(" "),x=+b[1],y=+b[2],w=+b[3],h=+b[4];
-  m+='<g class="g" data-i="'+i+'"><rect class="z" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="6"/>'
-   +'<text class="n" x="'+(x+w/2)+'" y="'+(y+h/2)+'" dy=.36em>'+NM[i]+'</text></g>';
+  var b=Z[i],x=b[1],y=b[2],w=b[3],q=b[4];
+  m+='<g class="g" data-i="'+i+'"><rect class="z" x='+x+' y='+y+' width='+w+' height='+q+' rx=6 />'
+   +'<text class="n" x='+(x+w/2)+' y='+(y+q/2)+' dy=.36em>'+b[0]+'</text></g>';
 }
-s.innerHTML=m;
+M.innerHTML=m;
 
-function ve(){s.setAttribute("viewBox",V.join(" "))}
 
-function fit(x,y,w,h){
-  var r=s.getBoundingClientRect(),W=r.width,H=r.height,
-  hh=document.getElementById("h").offsetHeight||0,
-  a=W/(H-hh),p=.16,cx=x+w/2,cy=y+h/2;
-  w*=1+2*p;h*=1+2*p;
-  var vw=Math.max(w,h*a),vh=vw/a,
-  vx=cx-vw/2,vy=cy-vh*(H-hh)/(2*H);
-  if(vw<1000)vx=Math.min(1000-vw,Math.max(0,vx));
-  if(vh<850)vy=Math.min(850-vh,Math.max(0,vy));
-  return [vx,vy,vw,vh];
-}
+G=M.querySelectorAll(".g");
 
-function go(t){
-  W=t;var a=V.slice(),t0=performance.now();
-  if(F)cancelAnimationFrame(F);
-  (function f(tm){
-    var k=Math.min(1,(tm-t0)/520),e=1-Math.pow(1-k,3),j;
-    for(j=0;j<4;j++)V[j]=a[j]+(W[j]-a[j])*e;
-    ve();if(k<1)F=requestAnimationFrame(f);
-  })(t0);
+
+
+
+
+function ver(i){
+  var b=Z[i],x=b[1],y=b[2],w=b[3],q=b[4],
+  W=s.clientWidth,H=s.clientHeight,c=s.getScreenCTM(),u=c.a,
+  vh=h.offsetHeight,vy=((H-vh)/2-c.f)/u,
+  k=Math.min(W/(u*w*1.3),(H-vh)/(u*q*1.3));
+  M.style.transform="translate("+((W/2-c.e)/u-k*(x+w/2))+"px,"+(vy-k*(y+q/2))+"px) scale("+k+")";
 }
 
 function pinta(i){
-  var g=s.querySelectorAll(".g");
-  for(var j=0;j<g.length;j++)g[j].setAttribute("class","g"+(j==i?" act":""));
+  if(A)A.classList.remove("act");
+  A=G[i];if(A)A.classList.add("act");
 }
 function sel(i){
-  var b=Z[i].split(" ");
-  pinta(i);T.textContent=NM[i]+" · "+DS[i];
-  D.textContent="Toca el fondo para volver";
-  go(fit(+b[1],+b[2],+b[3],+b[4]));
+  pinta(i);
+  t.textContent=Z[i][0]+" · "+D[i];
+  d.textContent="Toca el fondo para volver";
+  ver(i);
 }
 function todo(){
-  pinta(-1);T.textContent="UABC Campus Mexicali";
-  D.textContent="Toca un edificio";
-  go([0,0,1000,850]);
+  pinta(-1);
+  t.textContent="UABC Campus Mexicali";
+  d.textContent="Toca un edificio";
+  M.style.transform="none";
 }
 
 s.addEventListener("pointerdown",function(e){
-  var t=document.elementFromPoint(e.clientX,e.clientY),
-  g=t&&t.closest?t.closest(".g"):0;
-  if(g)sel(+g.dataset.i);else todo();
+  var g=e.target.closest(".g");
+  g?sel(+g.dataset.i):todo();
 });</script> </body></html>

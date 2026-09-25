@@ -39,9 +39,10 @@ SUFIJO = "})()"
 # seguido del fragmento, asi que esta direccion tiene que existir de verdad.
 # Cámbiala por la tuya antes de imprimir el QR.
 #
-# En minúsculas a propósito: GitHub Pages normaliza el usuario, pero no
-# todos los lectores de QR ni los navegadores tratan igual las mayúsculas.
-URL_BASE = "https://tonycabreram.github.io/OrgulloCimarron/salida/croquis_base.html"
+# Cada caracter de esta URL ocupa un modulo del QR, asi que se ha hecho
+# corta: un solo archivo 'd.html' en la raiz del repo sirve para todos los
+# documentos, en vez de uno por documento dentro de salida/.
+URL_BASE = "https://tonycabreram.github.io/OrgulloCimarron/d.html"
 
 
 def cuerpo_js(fragmento: str) -> str:
@@ -340,6 +341,13 @@ Ejemplos:
     )
     analizador.add_argument("--no-minificar", action="store_true", help="conservar el HTML tal cual")
     analizador.add_argument("--sin-comprimir", action="store_true", help="no aplicar gzip (QR mas denso)")
+    analizador.add_argument(
+        "--publicar-en",
+        metavar="CARPETA",
+        default=".",
+        help="donde dejar la pagina base, con el nombre que tiene en la URL. Por "
+        "defecto la raiz del repo, que es de donde GitHub Pages la sirve",
+    )
     args = analizador.parse_args()
 
     origen = Path(args.html)
@@ -395,19 +403,28 @@ Ejemplos:
     print(f"QR (SVG)        -> {salida.with_suffix('.svg')}")
     print(f"Modo            : {args.modo}")
 
-    # La pagina base es lo que lee el fragmento para reconstruir el documento.
-    # En modo servidor es la que se publica en la URL; en modo sin-servidor solo
-    # sirve para inspeccionar el resultado sin escanear.
-    base = salida.with_name(salida.name + "_base.html")
-    base.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
+    # La pagina base NO depende del documento: solo lee location.hash, asi que
+    # es la misma para todos los QR y basta con una copia. Se escribe donde
+    # dice --publicar-en (por defecto la raiz del repo, que es de donde la
+    # sirve GitHub Pages), y no tambien en salida/, para no tener dos.
+    nombre_base = Path(args.url_base).name or "index.html"
+    if args.modo == "servidor":
+        base = Path(args.publicar_en) / nombre_base
+        base.parent.mkdir(parents=True, exist_ok=True)
+        base.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
+        print(f"Pagina base     -> {base}  (súbela y el QR funciona)")
+    else:
+        base = salida.with_name(salida.name + "_base.html")
+        base.write_text(vista_previa(ancla, args.modo), encoding="utf-8")
+        print(f"Vista previa    -> {base}  (abre esto para ver el resultado)")
 
     print()
     if args.modo == "servidor":
         print("LISTO PARA ESCANEAR. El QR apunta a:")
         print(f"  {args.url_base}#{fragmento[:40]}…")
         print()
-        print(f"1. Publica este archivo en esa direccion:")
-        print(f"     {base}")
+        print(f"1. Sube este archivo a la raiz del repo:")
+        print(f"     {base}  ->  {Path(args.url_base).name} en la raiz")
         print("   En GitHub Pages: sube el repo y activa Pages desde la rama.")
         print("   Netlify Drop: arrastra la carpeta y usa la URL que te den.")
         print("2. Comprueba que la pagina base abre en el movil.")
