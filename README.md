@@ -275,8 +275,12 @@ salida/            QR generado
 ## El croquis de Mexicali
 
 `plantilla/croquis.html` es un croquis interactivo del campus Mexicali. Tocar
-un edificio hace zoom hacia él, lo resalta en naranja y muestra su ficha;
-tocar el fondo vuelve a la vista general.
+un edificio hace zoom hacia él, lo resalta en magenta institucional y muestra
+su ficha. **Un toque en cualquier parte deshace el zoom**: antes sólo servía
+tocar el fondo, pero al ampliar la zona ocupa casi toda la pantalla y no
+quedaba fondo donde pulsar.
+
+Los colores son los de la paleta institucional (ver la sección del color).
 
 La geometría está trazada sobre el croquis oficial **"Mapa: Ubicación de
 Edificios"** de la UABC (3 páginas, el mismo que reparten en automotores). Las
@@ -399,3 +403,11 @@ croquis o la página base:
   aplica al elemento equivocado. Hay que seleccionar solo las zonas.
 - **Quitar comillas para ahorrar bytes es un arma de doble filo.** Ahorró 28
   bytes, pero provocó dos bugs silenciosos. Mide cada recorte.
+- **`getScreenCTM()` tiene dos escalas distintas:** `a` para el eje X y `d` para
+  el Y. Usar `a` en el eje Y hace que la zona salga descentrada al ampliar.
+- **Centrar en el `svg` entero no basta si hay una ficha encima.** El centro
+  útil es el del área que deja la ficha: `(alto - altoFicha) / 2`. Si no, la
+  zona queda medio tapada.
+- **En un zoom, "tocar el fondo para volver" casi nunca funciona**, porque la
+  zona ampliada ocupa la pantalla entera. La condición correcta es mirar si ya
+  hay una zona activa, no si el toque cayó en el fondo.

@@ -4,18 +4,18 @@
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <style>
-body{height:100dvh;overflow:hidden;background:#0e151b;color:#e8f1f8;
+body{height:100dvh;overflow:hidden;background:#160d15;color:#f4e9f0;
 font:15px/1.35 system-ui,sans-serif;touch-action:none}
 #s{position:fixed;inset:0;width:100%;height:100%}
 #m{transform-box:view-box;transform-origin:0 0;transition:transform .55s}
-.z{fill:#24425c;stroke:#0b1218;stroke-width:3;transition:.25s}
-.n{fill:#d5e6f5;font-size:30px;font-weight:800;text-anchor:middle}
-.act .z{fill:#f2a541;stroke:#8a4f05}
-.act .n{fill:#241704}
+.z{fill:#2b2430;stroke:#0b1218;stroke-width:3;transition:.25s}
+.n{fill:#d5c9d2;font-size:30px;font-weight:800;text-anchor:middle}
+.act .z{fill:#EC008C;stroke:#7a0046}
+.act .n{fill:#FFFFFF}
 #h{position:fixed;left:0;right:0;bottom:0;padding:14px 18px 18px;pointer-events:none;
-background:#0e151be6}
+background:#160d15e6}
 b,s{display:block}
-b{color:#f2a541;font-size:20px}s{font-size:13px}
+b{color:#EC008C;font-size:20px}s{font-size:13px}
 </style>
 </head>
 <body>
@@ -47,10 +47,10 @@ d=document.getElementById("d"),G=[],A=0,i,m;
 // parsea como fill="#16241c/" y la etiqueta nunca se cierra, tragandose
 // todo el dibujo. El espacio es lo que termina el valor. Hay una prueba que
 // detecta este patron.
-m='<rect width=1000 height=850 fill=#16241c />'
- +'<path d="M60 60H960V820H60Z" fill=#1b3a2c stroke=#0f1922 stroke-width=4 />'
- +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300" stroke=#38485a stroke-width=20 />'
- +'<path d="M150 90h180v190H150ZM700 90h130v190H700Z" fill=#3a4a5c />';
+m='<rect width=1000 height=850 fill=#160d15 />'
+ +'<path d="M60 60H960V820H60Z" fill=#231a20 stroke=#0b1218 stroke-width=4 />'
+ +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300" stroke=#3a2b35 stroke-width=20 />'
+ +'<path d="M150 90h180v190H150ZM700 90h130v190H700Z" fill=#4a3a45 />';
 
 for(i=0;i<Z.length;i++){
   var b=Z[i],x=b[1],y=b[2],w=b[3],q=b[4];
@@ -65,14 +65,20 @@ G=M.querySelectorAll(".g");
 // El zoom es un transform CSS sobre el <g>, no un viewBox animado: asi el
 // navegador lo interpola solo y no hace falta ningun bucle en JS.
 // Se usa getScreenCTM del <svg> (nunca se transforma) para saber a que
-// pixel corresponde cada unidad del dibujo, y el centro util es el de la
-// zona de arriba, porque la ficha de abajo tapa la parte baja.
+// pixel corresponde cada unidad del dibujo.
+//
+// El centro util NO es el del svg, sino el del area que deja la ficha de
+// abajo: si se centra en el svg entero, la zona queda tapada por la ficha.
+// Por eso el eje Y se desplaza media ficha hacia arriba. Ojo: la unidad
+// vertical es c.d (no c.a), y el centro en pixeles es (H-vh)/2, no H/2.
 function ver(i){
   var b=Z[i],x=b[1],y=b[2],w=b[3],q=b[4],
-  W=s.clientWidth,H=s.clientHeight,c=s.getScreenCTM(),u=c.a,
-  vh=h.offsetHeight,vy=((H-vh)/2-c.f)/u,
-  k=Math.min(W/(u*w*1.3),(H-vh)/(u*q*1.3));
-  M.style.transform="translate("+((W/2-c.e)/u-k*(x+w/2))+"px,"+(vy-k*(y+q/2))+"px) scale("+k+")";
+  c=s.getScreenCTM(),ux=c.a,uy=c.d,
+  W=s.clientWidth,H=s.clientHeight,vh=h.offsetHeight||0,
+  k=Math.min(W/(ux*w*1.25),(H-vh)/(uy*q*1.25)),
+  cx=(W/2-c.e)/ux-k*(x+w/2),
+  cy=((H-vh)/2-c.f)/uy-k*(y+q/2);
+  M.style.transform="translate("+cx+"px,"+cy+"px) scale("+k+")";
 }
 
 function pinta(i){
@@ -82,7 +88,7 @@ function pinta(i){
 function sel(i){
   pinta(i);
   t.textContent=Z[i][0]+" · "+D[i];
-  d.textContent="Toca el fondo para volver";
+  d.textContent="Toca en cualquier parte para volver";
   ver(i);
 }
 function todo(){
@@ -92,9 +98,13 @@ function todo(){
   M.style.transform="none";
 }
 
+// Si ya hay una zona ampliada, cualquier toque deshace el zoom, toque donde
+// toque. Antes solo servia tocar el fondo, pero al hacer zoom la zona ocupa
+// casi toda la pantalla y no quedaba fondo donde pulsar.
 s.addEventListener("pointerdown",function(e){
+  if(A)return todo();
   var g=e.target.closest(".g");
-  g?sel(+g.dataset.i):todo();
+  if(g)sel(+g.dataset.i);
 });
 </script>
 </body>
