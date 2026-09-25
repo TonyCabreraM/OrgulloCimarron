@@ -222,16 +222,14 @@ def _version_para(bytes_datos: int, nivel: str) -> int:
 # Colores institucionales (Manual de Identidad Grafica UABC 2022)
 # --------------------------------------------------------------------------- #
 # Un QR de color se escanea peor que uno en negro sobre blanco, y casi todo es
-# culpa del contraste: el lector binariza la imagen, y si los modulos claros y
-# el fondo se parecen, no encuentra los limites. Por eso se mide el contraste
-# WCAG contra el fondo y se avisa cuando no llega.
+# culpa del contraste: el lector binariza la imagen, y si los modulos y el
+# fondo se parecen, no encuentra los limites. Por eso se mide el contraste
+# WCAG dos veces, en color y en gris, y se avisa cuando no llega.
 #
-# El magenta #EC008C es el color primario de la UABC, pero puro da 4.25:1,
-# por debajo del 4.5 de AA, y su canal verde vale 0, que es justo lo que mas
-# problemas da a los lectores. Por eso la paleta lo trae en dos tonos: el
-# exacto para quien quiera la marca intacta, y 'uabc-oscuro', un 15% mas
-# oscuro (#C90077, 5.6:1), que sigue siendo el magenta de la UABC pero ya
-# cumple AA.
+# La identidad de la UABC es VERDE y ORO, los del escudo. El verde #00723F es
+# el institucional: sale en el escudo, en el manual y en el sitio uabc.mx.
+# El oro es precioso como acento pero clarisimo (2.0:1 sobre blanco), asi que
+# no sirve para el QR.
 PALETAS = {
     "negro": {
         "modulos": "#231F20",
@@ -239,26 +237,24 @@ PALETAS = {
         "nota": "negro tinta institucional, el mas seguro de todos",
     },
     "uabc": {
-        "modulos": "#EC008C",
+        "modulos": "#00723F",
         "fondo": "#FFFFFF",
-        "nota": "magenta primario UABC, tal cual. En gris da 7.2:1 y se lee bien; "
-        "en color queda en 4.25:1, justo bajo el minimo recomendado",
+        "nota": "verde institucional UABC, el del escudo. En gris da 8.9:1",
     },
-    "uabc-oscuro": {
-        "modulos": "#C90077",
+    "verde-oscuro": {
+        "modulos": "#024731",
         "fondo": "#FFFFFF",
-        "nota": "el mismo magenta un 15% mas oscuro, para imprimir en color sin "
-        "dudas. En gris da 8.9:1",
+        "nota": "verde profundo del sitio, para quien quiera mas margen aun",
+    },
+    "verde-claro": {
+        "modulos": "#007738",
+        "fondo": "#FFFFFF",
+        "nota": "el verde mas usado en uabc.mx. Un poco mas claro que el del escudo",
     },
     "azul": {
         "modulos": "#204199",
         "fondo": "#FFFFFF",
-        "nota": "azul oscuro UABC, contraste 9.2 (AAA)",
-    },
-    "verde": {
-        "modulos": "#00723F",
-        "fondo": "#FFFFFF",
-        "nota": "verde UABC, contraste 6.0 (AA)",
+        "nota": "azul institucional para documentos administrativos",
     },
 }
 
@@ -491,10 +487,10 @@ Ejemplos:
         "--color",
         choices=sorted(PALETAS),
         default="uabc",
-        help="color del QR, de la paleta institucional de la UABC (Manual de "
-        "Identidad Grafica 2022). 'uabc' es el magenta primario tal cual; "
-        "'uabc-oscuro' es el mismo magenta un 15%% mas oscuro y se lee algo "
-        "mejor impreso en color; 'negro' es el mas seguro de todos",
+        help="color del QR, de la paleta institucional de la UABC. 'uabc' es el "
+        "verde del escudo, que es el institucional; 'negro' es el mas seguro de "
+        "todos. El oro institucional no aparece porque es demasiado claro para "
+        "un QR",
     )
     analizador.add_argument(
         "--publicar-en",

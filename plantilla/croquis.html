@@ -5,24 +5,26 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Croquis · UABC Campus Mexicali</title>
 <style>
-/* Paleta institucional de la UABC (Manual de Identidad Grafica 2022):
-   negro tinta #231F20, magenta #EC008C, gris #BCBEC0, azul #204199.
+/* Paleta institucional de la UABC: VERDE y ORO, los del escudo.
+   Verde #00723F (escudo, manual y sitio), verde claro #007738 y verde
+   profundo #024731 (los dos mas usados en uabc.mx), oro #DAB200 y
+   #FEBE10, y el negro tinta #231F20.
 
-   La reticula de puntos vive en el fondo del body y no en el SVG: asi cubre
-   tambien los margenes que deja el mapa, que en vertical son grandes porque
-   el predio es mas ancho que alto. */
+   El oro es un acento clarisimo, asi que no puede llevar texto encima ni
+   usarse para el estado activo: ahi manda el verde y el blanco. */
 :root{
-  --fondo:#14100F; --tinta:#231F20; --magenta:#EC008C; --magenta-claro:#FF7AC8;
-  --gris:#BCBEC0; --azul:#204199; --texto:#F5F2F0; --tenue:#9C9492; --borde:#3A3230;
+  --fondo:#0C1410; --tinta:#231F20; --verde:#00723F; --verde-claro:#007738;
+  --verde-lima:#9FCE00; --verde-profundo:#024731; --oro:#DAB200; --oro-claro:#FEBE10;
+  --gris:#BCBEC0; --texto:#F1F4F1; --tenue:#8E9B92; --borde:#2A3A31;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;overflow:hidden}
 body{
   background-color:var(--fondo);
   background-image:
-    radial-gradient(56% 46% at 10% 0%,#EC008C1f,transparent 66%),
-    radial-gradient(50% 44% at 92% 100%,#2041993d,transparent 66%),
-    radial-gradient(#241E1C 1.3px,transparent 1.4px);
+    radial-gradient(56% 46% at 10% 0%,#00723F40,transparent 66%),
+    radial-gradient(50% 44% at 92% 100%,#02473159,transparent 66%),
+    radial-gradient(#16241C 1.3px,transparent 1.4px);
   background-size:auto,auto,26px 26px;
   background-attachment:fixed;
   color:var(--texto);
@@ -34,40 +36,42 @@ body{
    transition:transform .6s cubic-bezier(.22,1,.36,1)}
 
 /* Edificios: el techo se ilumina de arriba abajo y el borde los despega del
-   suelo. La zona activa toma el magenta institucional con un halo. */
-.z{fill:url(#techo);stroke:#5C4E47;stroke-width:2;
+   suelo. La zona activa se enciende en el verde institucional con un halo. */
+.z{fill:url(#techo);stroke:#41564A;stroke-width:2;
    transition:fill .32s ease,stroke .32s ease,filter .32s ease}
 .n{fill:var(--gris);font-weight:800;text-anchor:middle;letter-spacing:.04em;
    transition:fill .32s ease}
-.act .z{fill:var(--magenta);stroke:var(--magenta-claro);
-        filter:drop-shadow(0 0 18px #EC008Cb0)}
+.act .z{fill:var(--verde);stroke:var(--verde-lima);
+        filter:drop-shadow(0 0 18px #00723Fd0)}
 .act .n{fill:#fff}
 
+/* La marca va en oro sobre el verde del fondo, igual que el escudo: el oro
+   solo funciona como acento, nunca con texto blanco encima ni de relleno. */
 #cab{position:fixed;top:0;left:0;right:0;z-index:2;padding:16px 20px 30px;
      display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
-     pointer-events:none;background:linear-gradient(#14100Fee,#14100F00)}
-#marca{font-size:17px;font-weight:800;letter-spacing:.2em;color:var(--magenta)}
+     pointer-events:none;background:linear-gradient(#0C1410ee,#0C141000)}
+#marca{font-size:17px;font-weight:800;letter-spacing:.2em;color:var(--oro-claro)}
 #lugar{font-size:11px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;
-       color:#8C8482}
+       color:var(--tenue)}
 
 /* El panel lleva los accesos rapidos: en el movil el mapa queda pequeno y
    tocar un edificio concreto es dificil, asi que ademas de informar sirve
    para navegar. */
 #ficha{position:fixed;z-index:2;display:flex;flex-direction:column;gap:12px;
        padding:14px 16px;border:1px solid var(--borde);border-radius:18px;
-       background:#231F20f2;
+       background:#132019f2;
        -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
        box-shadow:0 18px 44px #000000a6;pointer-events:none;
        left:14px;right:14px;bottom:14px;
        transition:border-color .35s ease,box-shadow .35s ease}
-#ficha.on{border-color:#EC008C88;
-          box-shadow:0 18px 44px #000000a6,0 0 0 1px #EC008C26,0 0 36px #EC008C1f}
+#ficha.on{border-color:#00723Fcc;
+          box-shadow:0 18px 44px #000000a6,0 0 0 1px #00723F33,0 0 36px #00723F2e}
 #rotulo{display:flex;align-items:center;gap:14px}
 #sigla{flex:none;min-width:56px;height:48px;padding:0 10px;border-radius:13px;
-       display:grid;place-content:center;background:#2E2826;color:var(--gris);
+       display:grid;place-content:center;background:#1E2E26;color:var(--gris);
        font-size:16px;font-weight:800;letter-spacing:.05em;
        transition:background .35s ease,color .35s ease,box-shadow .35s ease}
-#ficha.on #sigla{background:var(--magenta);color:#fff;box-shadow:0 0 24px #EC008C70}
+#ficha.on #sigla{background:var(--verde);color:#fff;box-shadow:0 0 24px #00723F80}
 #titulo{display:block;font-size:17px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
 #pista{display:block;font-size:12.5px;color:var(--tenue);margin-top:3px}
 
@@ -75,15 +79,15 @@ body{
        -webkit-overflow-scrolling:touch}
 #chips::-webkit-scrollbar{display:none}
 .chip{flex:none;display:flex;align-items:center;gap:7px;padding:8px 13px;
-      border:1px solid #3E3532;border-radius:99px;background:#1C1817;
+      border:1px solid #2A3A31;border-radius:99px;background:#16231C;
       color:var(--gris);font:600 12.5px/1 system-ui,sans-serif;cursor:pointer;
       white-space:nowrap;pointer-events:auto;
       transition:border-color .25s ease,background .25s ease,color .25s ease}
-.chip b{font-weight:800;color:var(--magenta);letter-spacing:.03em;
+.chip b{font-weight:800;color:var(--verde-claro);letter-spacing:.03em;
         transition:color .25s ease}
-.chip:hover{border-color:#5C4E47;background:#241F1E}
-.chip.act{border-color:var(--magenta);background:#EC008C1f;color:#fff}
-.chip.act b{color:#fff}
+.chip:hover{border-color:#3E5548;background:#1B2A22}
+.chip.act{border-color:var(--verde);background:#00723F2e;color:#fff}
+.chip.act b{color:var(--verde-lima)}
 
 /* En pantalla ancha el panel pasa a lateral: una barra inferior desperdicia
    todo el ancho sobrante y deja el mapa pequeno y centrado. */
@@ -146,30 +150,30 @@ G=[],K=[],A=0,i,m;
 // dar ningun error en la consola. Hay una prueba que vigila este patron.
 m='<defs>'
  +'<linearGradient id="techo" x1="0" y1="0" x2="0" y2="1">'
- +'<stop offset="0" stop-color="#463B36"/><stop offset="1" stop-color="#332B28"/>'
+ +'<stop offset="0" stop-color="#2F4438"/><stop offset="1" stop-color="#22332A"/>'
  +'</linearGradient>'
  +'<pattern id="rayado" width="18" height="18" patternUnits="userSpaceOnUse"'
  +' patternTransform="rotate(45)">'
- +'<rect width="18" height="18" fill="#262120"/>'
- +'<path d="M0 0V18" stroke="#332C2A" stroke-width="5"/>'
+ +'<rect width="18" height="18" fill="#19271F"/>'
+ +'<path d="M0 0V18" stroke="#24352A" stroke-width="5"/>'
  +'</pattern>'
  +'<clipPath id="predio"><path d="M56 56h888v738H56Z"/></clipPath>'
  +'</defs>'
  // Suelo del campus
- +'<path d="M56 56h888v738H56Z" fill="#221C1A" stroke="#3A312E" stroke-width="2"/>'
+ +'<path d="M56 56h888v738H56Z" fill="#16241C" stroke="#2C4235" stroke-width="2"/>'
  // Jardines
  +'<path d="M92 92h248v120H92ZM660 92h248v120H660ZM92 664h248v98H92Z"'
- +' fill="#1B3A26"/>'
+ +' fill="#123D26"/>'
  // Estacionamientos
  +'<path d="M156 96h168v178H156ZM706 96h118v178H706Z" fill="url(#rayado)"/>'
  // Vias: caja oscura, relleno y eje discontinuo, recortadas al predio
  +'<g clip-path="url(#predio)">'
  +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300"'
- +' stroke="#332B28" stroke-width="34" stroke-linecap="round" fill="none"/>'
+ +' stroke="#24352A" stroke-width="34" stroke-linecap="round" fill="none"/>'
  +'<path d="M170 470H960M480 90V810M700 420V810M60 350H300"'
- +' stroke="#3E3532" stroke-width="26" stroke-linecap="round" fill="none"/>'
+ +' stroke="#2E4335" stroke-width="26" stroke-linecap="round" fill="none"/>'
  +'<path d="M170 470H960M480 90V810M700 420V810"'
- +' stroke="#52463F" stroke-width="2" stroke-dasharray="14 18" fill="none"/>'
+ +' stroke="#44604E" stroke-width="2" stroke-dasharray="14 18" fill="none"/>'
  +'</g>';
 
 for(i=0;i<Z.length;i++){

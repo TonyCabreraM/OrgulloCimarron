@@ -46,45 +46,45 @@ cambia.
 
 ## El color del QR
 
-El QR usa la paleta institucional de la UABC, sacada del **Manual de Identidad
-Gráfica (2022)**. Se elige con `--color`:
+La identidad de la UABC es **verde y oro**, los colores del escudo. Los valores
+de abajo salen de mirar el propio sitio `uabc.mx` y el escudo oficial, no de
+suponerlos: el verde `#00723F` está en el escudo, en el manual y en el sitio, y
+el oro `#DAB200` es uno de los colores de la paleta global del sitio.
+
+Se elige con `--color`:
 
 | Opción | Módulos | Contraste | Cuándo |
 | --- | --- | --- | --- |
-| `uabc` *(por defecto)* | `#EC008C` | 4.25:1 color, 7.2:1 gris | El magenta primario, tal cual |
-| `uabc-oscuro` | `#C90077` | 5.60:1 color, 8.9:1 gris | El mismo magenta un 15% más oscuro |
-| `azul` | `#204199` | 9.22:1 color, 10.2:1 gris | Azul oscuro institucional, el más seguro de color |
-| `verde` | `#00723F` | 6.04:1 color, 8.9:1 gris | Verde institucional |
+| `uabc` *(por defecto)* | `#00723F` | 6.04:1 color, 8.9:1 gris | El verde del escudo, el institucional |
+| `verde-oscuro` | `#024731` | 10.78:1 color, 13.2:1 gris | Verde profundo, con más margen aún |
+| `verde-claro` | `#007738` | 5.68:1 color, 8.6:1 gris | El verde más usado en el sitio |
+| `azul` | `#204199` | 9.22:1 color, 10.2:1 gris | Azul para documentos administrativos |
 | `negro` | `#231F20` | 16.30:1 | Negro tinta, el más seguro de todos |
+
+**El oro no está en la lista, y es a propósito.** `#DAB200` es precioso como
+acento pero clarísimo: sobre blanco da 2.03:1, muy por debajo del mínimo. En el
+croquis se usa para la marca «UABC» sobre fondo oscuro, que es donde sí funciona
+— igual que en el escudo, donde el oro es el campo y el verde el borde.
 
 ### Por qué el contraste se mide dos veces
 
 Un lector de QR **termina binarizando la imagen**, así que lo que decide si
 encuentra el código no es el color, sino cuántos píxeles se ven claros u
-oscuros **en gris**. El magenta puro tiene 4.25:1 en color pero 7.2:1 en gris, y
-por eso funciona.
-
-El generador mide ambos y avisa:
+oscuros **en gris**. Por eso el generador mide las dos cosas:
 
 ```
-Contraste        : 4.25:1 en color, 7.23:1 en gris
-Aviso            : color muy saturado (236,0,140): al quedarse en gris pierde
-                   contraste, y así es como leen la mayoría de los lectores
+Color            : uabc  (#00723F sobre #FFFFFF)
+Contraste        : 6.04:1 en color, 8.86:1 en gris
 ```
 
-La prueba `colores institucionales legibles` genera el QR con **las cinco
+La prueba `colores institucionales legibles` genera el QR con **todas las
 paletas** y lo lee con zxing-cpp en cinco situaciones: normal, al 55% de tamaño,
-con la mitad de contraste, con poca luz y en blanco y negro. Las cinco paletas
-superan las cinco.
+con la mitad de contraste, con poca luz y en blanco y negro.
 
 > **Sobre la suciedad:** si le pones un manchón grande encima, falla con
 > cualquier color, incluido el negro. Eso no es culpa del color, es que el
 > manchón tapa los patrones de referencia. El QR no se rompe, solo hay que
 > limpiarlo.
-
-Si vas a imprimir en color y no quieres riesgo, `--color uabc-oscuro` es el
-mismo magenta con más margen. Para un cartel en blanco y negro, cualquier
-paleta sirve: el lector hace la conversión por ti.
 
 Cada módulo es un cuadrado, así que lo que manda es el **número de bytes de la
 URL**, no el del documento. En modo `enlace` eso son 69 bytes y no hay nada que
@@ -144,7 +144,7 @@ Opciones útiles:
 | --- | --- |
 | `--modo enlace\|servidor\|sin-servidor` | `enlace` (por defecto) es el más pequeño. Ver la tabla de modos |
 | `--nivel H\|M\|L` | Corrección de errores. `H` es la más robusta; `L` da menos módulos |
-| `--color uabc\|uabc-oscuro\|azul\|verde\|negro` | Color del QR, de la paleta institucional |
+| `--color uabc\|verde-oscuro\|verde-claro\|azul\|negro` | Color del QR, de la paleta institucional |
 | `--publicar-en CARPETA` | Modo `servidor`: dónde dejar la página base |
 | `--sin-comprimir` | No aplicar gzip: QR más grande (solo en modos con HTML dentro) |
 | `--no-minificar` | Conservar el HTML tal cual |
@@ -278,7 +278,7 @@ salida/            QR generado
 
 | Acción | Resultado |
 | --- | --- |
-| Tocar un edificio | Zoom hacia él, se resalta en magenta y la ficha muestra su nombre |
+| Tocar un edificio | Zoom hacia él, se resalta en verde y la ficha muestra su nombre |
 | Tocar un acceso rápido del panel | Lo mismo, sin tener que acertarle al edificio en el mapa |
 | Tocar en cualquier parte | Vuelve a la vista general |
 
@@ -288,9 +288,10 @@ pantalla y no queda fondo donde pulsar.
 
 ### Cómo está armado
 
-- **Colores**: paleta institucional de la UABC, del Manual de Identidad Gráfica
-  2022. El negro tinta hace de superficie, el magenta del acento y el azul
-  oscuro del segundo brillo del fondo.
+- **Colores**: verde y oro institucionales. El verde `#00723F` es el del
+  escudo y hace de color principal; el oro `#FEBE10` aparece solo en la marca
+  «UABC» sobre fondo oscuro, igual que en el escudo. El verde lima `#9FCE00`
+  corona la zona activa. Ver la sección del color, con las fuentes.
 - **El encuadre se calcula en JavaScript**, no se deja al `viewBox`. El mapa se
   centra y se amplía dentro del hueco libre que dejan el encabezado y el panel,
   midiéndolos con `getBoundingClientRect()`. Dejar el encuadre al `viewBox`
