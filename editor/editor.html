@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- Herramienta interna. Aunque alguien llegue a esta direccion, no hace
+     nada sin el servidor local: no puede escribir en el croquis ni tocar git. -->
+<meta name="robots" content="noindex,nofollow">
+<title>Editor del croquis · uso interno</title>
+<style>
+/* ---------------------------------------------------------------------------
+   Paleta sobria a proposito: esto es una herramienta de trabajo y el color
+   tiene que estar en el mapa, no en los botones. El verde y el oro son los
+   institucionales, los mismos del croquis.
+--------------------------------------------------------------------------- */
+:root{
+  --papel:#f3f9ee; --fondo:#e8eef0; --panel:#fff; --linea:#ccd8d4;
+  --tinta:#0a4842; --verde:#00723f; --oro:#febe10; --alerta:#b3261e;
+  --texto:#173230; --tenue:#5d7370;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden}
+body{
+  background:var(--fondo); color:var(--texto);
+  font:13.5px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
+  display:grid; grid-template-rows:auto 1fr;
+}
+
+/* --- barra de arriba --- */
+#barra{
+  display:flex;align-items:center;gap:14px;padding:10px 14px;
+  background:var(--panel);border-bottom:1px solid var(--linea);
+  box-shadow:0 1px 3px #17322e0f;z-index:3;
+}
+#barra h1{font-size:14px;font-weight:750;margin:0;letter-spacing:-.01em;white-space:nowrap}
+#barra h1 small{display:block;font-size:10.5px;font-weight:600;color:var(--tenue);
+                letter-spacing:.08em;text-transform:uppercase}
+#marcaGit{
+  font-size:11.5px;color:var(--tenue);padding:3px 9px;border-radius:99px;
+  background:#eef3f1;white-space:nowrap;max-width:46ch;overflow:hidden;
+  text-overflow:ellipsis;
+}
+#marcaGit b{color:var(--texto);font-weight:650}
+#marcaGit.pend{background:#fff5d6;color:#7a5a00}
+.empuja{margin-left:auto}
+button{font:inherit;cursor:pointer}
+.boton{
+  padding:7px 13px;border:1px solid var(--linea);border-radius:9px;
+  background:#fff;color:var(--texto);font-weight:600;
+  transition:background .15s,border-color .15s,color .15s;
+}
+.boton:hover{border-color:#9db4ae;background:#f7faf9}
+.boton[disabled]{opacity:.5;cursor:not-allowed}
+.boton.principal{background:var(--verde);border-color:var(--verde);color:#fff}
+.boton.principal:hover{background:#005e34}
+.boton.oro{background:var(--oro);border-color:#e0a800;color:#3f2f00}
+.boton.oro:hover{background:#eab000}
+.boton.peligro:hover{border-color:var(--alerta);color:var(--alerta);background:#fdf2f1}
+#mensaje{
+  display:flex;align-items:center;gap:10px;font-size:12.5px;font-weight:600;
+  padding:7px 13px;border-radius:9px;white-space:pre-line;
+}
+#mensaje.ok{background:#e6f5ec;color:#0a5c33}
+#mensaje.mal{background:#fdecea;color:#8f1d16}
+#mensaje.aviso{background:#fff8e1;color:#7a5a00}
+#mensaje:empty{display:none}
+
+/* --- cuerpo --- */
+main{display:grid;grid-template-columns:1fr 372px;min-height:0}
+#lienzo{position:relative;overflow:hidden;background:var(--fondo);cursor:crosshair}
+#s{position:absolute;inset:0;width:100%;height:100%;display:block}
+#ayuda{
+  position:absolute;left:12px;bottom:12px;background:#fffffff2;border:1px solid var(--linea);
+  border-radius:10px;padding:8px 12px;font-size:11.5px;color:var(--tenue);
+  line-height:1.6;pointer-events:none;max-width:60ch;
+}
+#ayuda b{color:var(--texto)}
+#flotante{position:absolute;top:12px;right:12px;display:flex;gap:6px}
+#flotante .boton{background:#fffffff2}
+
+/* --- panel --- */
+#panel{background:var(--panel);border-left:1px solid var(--linea);overflow-y:auto}
+.bloque{border-bottom:1px solid var(--linea);padding:13px 14px}
+.bloque h2{
+  font-size:10.5px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tenue);margin:0 0 10px;
+}
+.fila{display:flex;gap:7px;align-items:center}
+.fila + .fila{margin-top:7px}
+label{display:block;font-size:11px;font-weight:650;color:var(--tenue);margin:0 0 3px}
+input[type=text],textarea{
+  width:100%;padding:7px 9px;border:1px solid var(--linea);border-radius:8px;
+  font:inherit;background:#fcfdfc;color:var(--texto);resize:vertical;
+}
+input[type=text]:focus,textarea:focus{
+  outline:2px solid #00723f33;border-color:var(--verde);background:#fff;
+}
+.campo + .campo{margin-top:9px}
+
+/* lista de zonas */
+#listaZonas{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}
+.zona{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:8px;
+      border:1px solid transparent;background:#f4f8f7;text-align:left;width:100%}
+.zona:hover{background:#eaf2f0}
+.zona.sel{border-color:var(--verde);background:#e6f2ec}
+.zona.mal{background:#fdecea}
+.zona.mal.sel{border-color:var(--alerta)}
+.zona .punto{flex:none;width:9px;height:9px;border-radius:50%;background:var(--verde)}
+.zona.mal .punto{background:var(--alerta)}
+.zona .nom{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+           font-weight:600;font-size:12.5px}
+.zona .npt{font-size:11px;color:var(--tenue)}
+
+/* paleta de iconos */
+#paleta{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.palo{
+  display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 3px;
+  border:1px solid var(--linea);border-radius:10px;background:#fcfdfc;cursor:grab;
+}
+.palo:hover{border-color:var(--verde);background:#f2f8f5}
+.palo.acto{border-color:var(--verde);background:#e6f2ec;box-shadow:inset 0 0 0 1px var(--verde)}
+.palo svg{width:26px;height:26px;flex:none}
+.palo span{font-size:9.5px;color:var(--tenue);text-align:center;line-height:1.15;
+           overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.palo svg *{fill:none;stroke:var(--tinta);stroke-width:1.9;
+            stroke-linecap:round;stroke-linejoin:round}
+.palo svg .relleno{fill:var(--tinta);stroke:none}
+
+/* lista de iconos colocados */
+#listaIconos{display:flex;flex-direction:column;gap:3px;max-height:170px;overflow-y:auto}
+.icono{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;
+       border:1px solid transparent;background:#f4f8f7;text-align:left;width:100%}
+.icono:hover{background:#eaf2f0}
+.icono.sel{border-color:var(--verde);background:#e6f2ec}
+.icono svg{width:19px;height:19px;flex:none}
+.icono svg *{fill:none;stroke:var(--tinta);stroke-width:2}
+.icono svg .relleno{fill:var(--tinta);stroke:none}
+.icono .nom{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+            font-weight:600;font-size:12.5px}
+.icono .coor{font-size:10.5px;color:var(--tenue);font-variant-numeric:tabular-nums}
+#sinIconos{font-size:12px;color:var(--tenue);padding:6px 2px}
+
+/* avisos */
+#avisos{display:flex;flex-direction:column;gap:6px}
+#avisos:empty::before{content:"Sin problemas. Todo listo para guardar.";
+                      font-size:12px;color:#0a5c33}
+.aviso{display:flex;gap:7px;font-size:12px;line-height:1.4;padding:7px 9px;
+       border-radius:8px;background:#fdecea;color:#8f1d16}
+.aviso.info{background:#eef4f2;color:var(--tenue)}
+.aviso b{flex:none}
+
+/* --- SVG del mapa --- */
+.hoja{fill:#f3f9ee}
+#gZonas polygon{
+  fill:#00723f1f;stroke:var(--verde);stroke-width:1.5;cursor:move;
+  vector-effect:non-scaling-stroke;
+}
+#gZonas polygon:hover{fill:#00723f33}
+#gZonas polygon.sel{fill:#00723f33;stroke-width:2.5}
+#gZonas polygon.mal{fill:#b3261e26;stroke:var(--alerta);stroke-width:2.5}
+#gZonas circle{
+  fill:#fff;stroke:var(--verde);stroke-width:2;cursor:grab;
+  vector-effect:non-scaling-stroke;
+}
+#gZonas circle:hover{fill:var(--oro)}
+#gZonas circle.mal{stroke:var(--alerta)}
+#gIconos g{cursor:move}
+#gIconos .aro{fill:#ffffffdd;stroke:#0a484266;stroke-width:1.2;
+              vector-effect:non-scaling-stroke}
+#gIconos .lam *{fill:none;stroke:var(--tinta);stroke-width:1.9;
+                stroke-linecap:round;stroke-linejoin:round;
+                vector-effect:non-scaling-stroke}
+#gIconos .lam .relleno{fill:var(--tinta);stroke:none}
+#gIconos g.sel .aro{stroke:var(--verde);stroke-width:2.5;stroke-opacity:1}
+#gAyudas{pointer-events:none}
+#gAyudas text{
+  fill:var(--tinta);font-weight:700;font-family:system-ui,sans-serif;
+  paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round;
+}
+#gAyudas text.mal{fill:var(--alerta)}
+</style>
+</head>
+<body>
+
+<header id="barra">
+  <h1>Editor del croquis<small>Orgullo Cimarrón 2026 · solo en este equipo</small></h1>
+  <span id="marcaGit">…</span>
+  <span class="empuja"></span>
+  <span id="mensaje"></span>
+  <button class="boton" id="btnGuardar">Guardar</button>
+  <input type="text" id="commit" placeholder="Mensaje del cambio" style="width:230px">
+  <button class="boton principal" id="btnSubir">Subir a GitHub</button>
+</header>
+
+<main>
+  <div id="lienzo">
+    <svg id="s" preserveAspectRatio="xMidYMid meet">
+      <rect class="hoja" id="hoja" x="0" y="0" rx="0"/>
+      <image id="fondo" preserveAspectRatio="none"/>
+      <g id="gZonas"></g>
+      <g id="gIconos"></g>
+      <g id="gAyudas"></g>
+    </svg>
+    <div id="flotante">
+      <button class="boton" id="btnTodo">Ver todo</button>
+      <button class="boton" id="btnVertice">Añadir vértice</button>
+    </div>
+    <div id="ayuda">
+      <b>Arrastra</b> los puntos blancos para mover las esquinas, o el interior de una zona para moverla entera · <b>Rueda</b> para acercar · <b>Flechas</b> mueven lo seleccionado (con Mayús, más rápido) · <b>Supr</b> borra
+    </div>
+  </div>
+
+  <aside id="panel">
+    <div class="bloque">
+      <h2>Antes de guardar</h2>
+      <div id="avisos"></div>
+    </div>
+
+    <div class="bloque">
+      <h2>Zonas del mapa</h2>
+      <div id="listaZonas"></div>
+      <div class="fila" style="margin-top:9px">
+        <button class="boton" id="btnNueva">Nueva zona</button>
+        <button class="boton peligro" id="btnBorrarZona">Borrar</button>
+      </div>
+    </div>
+
+    <div class="bloque" id="bloqueForm">
+      <h2>Datos de la zona</h2>
+      <div class="campo">
+        <label for="fNombre">Nombre en la ficha</label>
+        <input type="text" id="fNombre" placeholder="Rectoría · Exposición CGECDC">
+      </div>
+      <div class="campo">
+        <label for="fCorto">Nombre corto del botón</label>
+        <input type="text" id="fCorto" maxlength="22" placeholder="Rectoría">
+      </div>
+      <div class="campo">
+        <label for="fDesc">Descripción</label>
+        <textarea id="fDesc" rows="2" placeholder="La exposición del CGECDC…"></textarea>
+      </div>
+    </div>
+
+    <div class="bloque">
+      <h2>Iconos</h2>
+      <div id="paleta"></div>
+      <div id="sinIconos" style="margin-top:10px">
+        Ninguno colocado. Arrastra uno de arriba al mapa, o púlsalo y luego
+        haz clic en el sitio.
+      </div>
+      <div id="listaIconos"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------------------
+// Estado. Todo vive aqui y el SVG se vuelve a dibujar entero en cada cambio:
+// con once zonas y un puñado de iconos, reconstruir es mas rapido que
+// averiguar que hay que actualizar, y no hay forma de que el dibujo y los
+// datos se desincronicen.
+// ---------------------------------------------------------------------------
+var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, avisos: [],
+         vista: [110, 100, 1005, 640], ancho: 1224, alto: 792, git: {}};
+var sel = null;          // {tipo:"zona"|"icono", i: n}
+var tipoPalo = null;     // icono elegido en la paleta, listo para colocar
+var modoVertice = false; // el siguiente clic mete una esquina nueva
+var sucio = false;       // hay cambios sin guardar
+var vb = {x: 0, y: 0, w: 1224, h: 792};
+
+var s = document.getElementById("s"),
+    gZonas = document.getElementById("gZonas"),
+    gIconos = document.getElementById("gIconos"),
+    gAyudas = document.getElementById("gAyudas"),
+    fondo = document.getElementById("fondo"),
+    hoja = document.getElementById("hoja"),
+    listaZonas = document.getElementById("listaZonas"),
+    listaIconos = document.getElementById("listaIconos"),
+    paleta = document.getElementById("paleta"),
+    avisos = document.getElementById("avisos"),
+    mensaje = document.getElementById("mensaje"),
+    marcaGit = document.getElementById("marcaGit"),
+    fNombre = document.getElementById("fNombre"),
+    fCorto = document.getElementById("fCorto"),
+    fDesc = document.getElementById("fDesc");
+
+var TAM_ICONO = 46;   // el mismo que croquis.html
+var VERTICE = 5.5;    // radio en unidades de mapa, se reajusta con el zoom
+
+function escapa(t) {
+  return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function aviso(texto, tipo) {
+  if (!texto) { mensaje.textContent = ""; mensaje.className = ""; return; }
+  mensaje.textContent = texto;
+  mensaje.className = tipo || "";
+}
+
+// --- geometria, calcada de editor/validar.py (que es la que decide de verdad)
+function cajaDe(puntos) {
+  var xs = puntos.map(function (p) { return p[0] }), ys = puntos.map(function (p) { return p[1] });
+  var x = Math.min.apply(null, xs), y = Math.min.apply(null, ys);
+  return [x, y, Math.max.apply(null, xs) - x, Math.max.apply(null, ys) - y];
+}
+function areaDe(puntos) {
+  var a = 0;
+  for (var i = 0; i < puntos.length; i++) {
+    var p = puntos[i], q = puntos[(i + 1) % puntos.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return Math.abs(a) / 2;
+}
+function proyecta(pts, e) {
+  var v = pts.map(function (p) { return p[0] * e[0] + p[1] * e[1] });
+  return [Math.min.apply(null, v), Math.max.apply(null, v)];
+}
+function sePisan(a, b) {
+  var listas = [a, b], i, j, k;
+  for (k = 0; k < 2; k++) {
+    for (i = 0; i < listas[k].length; i++) {
+      var p1 = listas[k][i], p2 = listas[k][(i + 1) % listas[k].length];
+      var dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+      var largo = Math.sqrt(dx * dx + dy * dy);
+      if (!largo) continue;
+      var e = [-dy / largo, dx / largo];
+      var A = proyecta(a, e), B = proyecta(b, e);
+      if (A[1] < B[0] || B[1] < A[0]) return false;
+    }
+  }
+  return true;
+}
+
+// Los mismos problemas que va a reportar el servidor, para avisar mientras se
+// edita y no al pulsar Guardar. El servidor sigue siendo el que decide.
+function problemas() {
+  var mal = E.zonas.map(function () { return [] });
+  E.zonas.forEach(function (z, k) {
+    var p = z[2], ancho = E.ancho, alto = E.alto;
+    if (z[1].length > 22) mal[k].push("El nombre corto no cabe en el botón (máximo 22).");
+    if (!z[0].trim()) mal[k].push("Falta el nombre que sale en la ficha.");
+    if (!z[1].trim()) mal[k].push("Falta el nombre corto del botón.");
+    if (z[3].trim().length < 10) mal[k].push("La descripción es demasiado corta.");
+    if (p.length < 3) mal[k].push("La zona necesita al menos 3 esquinas.");
+    var c = cajaDe(p);
+    if (c[0] < 0 || c[1] < 0 || c[0] + c[2] > ancho || c[1] + c[3] > alto)
+      mal[k].push("Se sale del mapa.");
+    if (c[2] < 20 || c[3] < 20) mal[k].push("Es muy pequeña para tocarla con el dedo.");
+    else if (areaDe(p) < 400) mal[k].push("El área es muy pequeña.");
+  });
+  for (var a = 0; a < E.zonas.length; a++)
+    for (var b = a + 1; b < E.zonas.length; b++)
+      if (sePisan(E.zonas[a][2], E.zonas[b][2])) {
+        mal[a].push("Se solapa con «" + E.zonas[b][1] + "».");
+        mal[b].push("Se solapa con «" + E.zonas[a][1] + "».");
+      }
+  return mal;
+}
+
+// --- vista ----------------------------------------------------------------
+function aplicaVista() {
+  s.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h);
+  VERTICE = vb.w * 0.0072;   // los tiradores no se achican al acercar
+}
+function verTodo() {
+  var v = E.vista;
+  var margen = Math.min(E.ancho, E.alto) * 0.02;
+  vb = {x: v[0] - margen, y: v[1] - margen, w: v[2] + margen * 2, h: v[3] + margen * 2};
+  aplicaVista(); dibuja();
+}
+function acerca(f, cx, cy) {
+  var nw = Math.min(Math.max(vb.w * f, 40), E.ancho * 1.8);
+  var nh = nw * (vb.h / vb.w);
+  vb.x = cx - (cx - vb.x) * (nw / vb.w);
+  vb.y = cy - (cy - vb.y) * (nh / vb.h);
+  vb.w = nw; vb.h = nh;
+  aplicaVista(); dibuja();
+}
+
+// De coordenadas de pantalla a coordenadas del mapa. La CTM del <svg> manda
+// sobre el transform del <g> (aqui no hay ninguno), asi que vale la inversa.
+function aMapa(ev) {
+  var p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(s.getScreenCTM().inverse());
+  return [Math.round(p.x), Math.round(p.y)];
+}
+
+// --- dibujo ---------------------------------------------------------------
+function dibuja() {
+  var mal = problemas();
+
+  gZonas.innerHTML = E.zonas.map(function (z, k) {
+    var clase = "z" + (sel && sel.tipo === "zona" && sel.i === k ? " sel" : "")
+              + (mal[k].length ? " mal" : "");
+    var poli = '<polygon class="' + clase.trim() + '" data-zona="' + k + '" points="'
+             + z[2].map(function (p) { return p[0] + "," + p[1] }).join(" ") + '"/>';
+    if (sel && sel.tipo === "zona" && sel.i === k) {
+      poli += z[2].map(function (p, v) {
+        return '<circle class="' + (mal[k].length ? "mal" : "") + '" data-zona="' + k
+             + '" data-vert="' + v + '" cx="' + p[0] + '" cy="' + p[1]
+             + '" r="' + VERTICE + '"/>';
+      }).join("");
+    }
+    return poli;
+  }).join("");
+
+  gIconos.innerHTML = E.iconos.map(function (ic, k) {
+    var forma = E.formas[ic[0]];
+    if (!forma) return "";
+    return '<g class="' + (sel && sel.tipo === "icono" && sel.i === k ? "sel" : "")
+         + '" data-icono="' + k + '" transform="translate(' + ic[1] + "," + ic[2]
+         + ") scale(" + (TAM_ICONO / 24) + ')"><title>' + escapa(ic[3] || ic[0])
+         + '</title><circle class="aro" r="13.4"/><g class="lam">' + forma + "</g></g>";
+  }).join("");
+
+  var tam = vb.w * 0.0135;
+  gAyudas.innerHTML = E.zonas.map(function (z, k) {
+    var c = cajaDe(z[2]);
+    return '<text class="' + (mal[k].length ? "mal" : "") + '" data-zona="' + k
+         + '" x="' + (c[0] + c[2] / 2) + '" y="' + (c[1] + c[3] / 2 + tam * 0.35)
+         + '" font-size="' + tam + '" text-anchor="middle">' + escapa(z[1]) + "</text>";
+  }).join("");
+
+  pintaPanel(mal);
+}
+
+function pintaPanel(mal) {
+  listaZonas.innerHTML = E.zonas.map(function (z, k) {
+    return '<button class="zona' + (sel && sel.tipo === "zona" && sel.i === k ? " sel" : "")
+         + (mal[k].length ? " mal" : "") + '" data-zona="' + k + '">'
+         + '<span class="punto"></span><span class="nom">' + escapa(z[1]) + "</span>"
+         + '<span class="npt">' + z[2].length + (z[2].length === 1 ? " esquina" : " esquinas")
+         + "</span></button>";
+  }).join("");
+
+  var hechos = E.iconos.map(function (ic, k) {
+    var forma = E.formas[ic[0]] || "";
+    return '<button class="icono' + (sel && sel.tipo === "icono" && sel.i === k ? " sel" : "")
+         + '" data-icono="' + k + '"><svg viewBox="-13 -13 26 26">' + forma + "</svg>"
+         + '<span class="nom">' + escapa(ic[3] || E.simbolos[ic[0]] || ic[0]) + "</span>"
+         + '<span class="coor">' + ic[1] + "," + ic[2] + "</span></button>";
+  }).join("");
+  listaIconos.innerHTML = hechos;
+  document.getElementById("sinIconos").style.display = E.iconos.length ? "none" : "";
+
+  var todos = [];
+  E.zonas.forEach(function (z, k) {
+    mal[k].forEach(function (p) { todos.push(escapa(z[1]) + ": " + escapa(p)) });
+  });
+  if (E.avisos && E.avisos.length) todos.push.apply(todos, E.avisos.map(escapa));
+  avisos.innerHTML = todos.map(function (t) {
+    return '<div class="aviso"><b>●</b><span>' + t + "</span></div>";
+  }).join("");
+  document.getElementById("btnGuardar").disabled = mal.some(function (l) { return l.length > 0 });
+
+  // El formulario solo manda cuando hay una zona elegida.
+  var hay = sel && sel.tipo === "zona" && E.zonas[sel.i];
+  document.getElementById("bloqueForm").style.display = hay ? "" : "none";
+  if (hay) {
+    var z = E.zonas[sel.i];
+    if (document.activeElement !== fNombre) fNombre.value = z[0];
+    if (document.activeElement !== fCorto) fCorto.value = z[1];
+    if (document.activeElement !== fDesc) fDesc.value = z[3];
+  }
+  // Borrar borra lo que este elegido, sea una zona o un icono. Antes solo
+  // miraba las zonas y con un icono seleccionado el boton quedaba apagado
+  // sin decir por que, que es la peor forma de desactivar algo.
+  var hayIcono = sel && sel.tipo === "icono" && E.iconos[sel.i];
+  var btnBorrar = document.getElementById("btnBorrarZona");
+  btnBorrar.disabled = !hay && !hayIcono;
+  btnBorrar.textContent = hayIcono ? "Borrar icono" : "Borrar zona";
+  document.getElementById("btnVertice").classList.toggle("principal", modoVertice);
+}
+
+function elige(tipo, i) {
+  sel = (i === undefined ? null : {tipo: tipo, i: i});
+  modoVertice = modoVertice && tipo === "zona";
+  dibuja();
+  if (tipo === "icono" && i !== undefined)
+    listaIconos.querySelector('.icono[data-icono="' + i + '"]')
+      ?.scrollIntoView({block: "nearest"});
+}
+function hayCambios() {
+  sucio = true;
+  dibuja();
+}
+
+// --- arrastre -------------------------------------------------------------
+var arrastre = null;
+s.addEventListener("pointerdown", function (ev) {
+  if (ev.button !== 0) return;
+  var p = aMapa(ev);
+
+  // 1. Colocar un icono de la paleta: el clic sobre el mapa lo pone.
+  if (tipoPalo) {
+    E.iconos.push([tipoPalo, p[0], p[1], E.simbolos[tipoPalo] || tipoPalo]);
+    tipoPalo = null;
+    pintaPaleta();
+    elige("icono", E.iconos.length - 1);
+    hayCambios();
+    return;
+  }
+
+  // 2. Meter una esquina nueva en la zona elegida, en el lado mas cercano.
+  if (modoVertice && sel && sel.tipo === "zona") {
+    var pts = E.zonas[sel.i][2], mejor = 0, menor = Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[i], b = pts[(i + 1) % pts.length];
+      var d = distaSobreSegmento(p, a, b);
+      if (d.dist < menor) { menor = d.dist; mejor = i; }
+    }
+    pts.splice(mejor + 1, 0, p);
+    hayCambios();
+    return;
+  }
+
+  var vertice = ev.target.closest("circle[data-vert]");
+  var zona = ev.target.closest("polygon[data-zona]");
+  var icono = ev.target.closest("g[data-icono]");
+
+  if (vertice) {
+    elige("zona", +vertice.dataset.zona);
+    arrastre = {que: "vertice", k: +vertice.dataset.zona, v: +vertice.dataset.vert,
+                desde: p, original: E.zonas[+vertice.dataset.zona][2].map(function (q) { return q.slice() })};
+  } else if (zona) {
+    elige("zona", +zona.dataset.zona);
+    arrastre = {que: "zona", k: +zona.dataset.zona, desde: p,
+                original: E.zonas[+zona.dataset.zona][2].map(function (q) { return q.slice() })};
+  } else if (icono) {
+    elige("icono", +icono.dataset.icono);
+    arrastre = {que: "icono", k: +icono.dataset.icono, desde: p,
+                original: [E.iconos[+icono.dataset.icono][1], E.iconos[+icono.dataset.icono][2]]};
+  } else {
+    elige(null);
+    return;
+  }
+  s.setPointerCapture(ev.pointerId);
+  ev.preventDefault();
+});
+
+s.addEventListener("pointermove", function (ev) {
+  if (!arrastre) return;
+  var p = aMapa(ev), dx = p[0] - arrastre.desde[0], dy = p[1] - arrastre.desde[1];
+  if (arrastre.que === "vertice") {
+    E.zonas[arrastre.k][2][arrastre.v] = [
+      arrastre.original[arrastre.v][0] + dx, arrastre.original[arrastre.v][1] + dy];
+  } else if (arrastre.que === "zona") {
+    E.zonas[arrastre.k][2] = arrastre.original.map(function (q) { return [q[0] + dx, q[1] + dy] });
+  } else {
+    E.iconos[arrastre.k][1] = arrastre.original[0] + dx;
+    E.iconos[arrastre.k][2] = arrastre.original[1] + dy;
+  }
+  hayCambios();
+});
+
+function suelta(ev) {
+  if (!arrastre) return;
+  arrastre = null;
+  try { s.releasePointerCapture(ev.pointerId) } catch (e) {}
+}
+s.addEventListener("pointerup", suelta);
+s.addEventListener("pointercancel", suelta);
+
+s.addEventListener("dblclick", function (ev) {
+  var vertice = ev.target.closest("circle[data-vert]");
+  if (!vertice) return;
+  var pts = E.zonas[+vertice.dataset.zona][2];
+  if (pts.length <= 3) { aviso("Una zona no puede tener menos de 3 esquinas.", "aviso"); return; }
+  pts.splice(+vertice.dataset.vert, 1);
+  hayCambios();
+});
+
+s.addEventListener("wheel", function (ev) {
+  ev.preventDefault();
+  var p = aMapa(ev);
+  acerca(ev.deltaY < 0 ? 1 / 1.18 : 1.18, p[0], p[1]);
+}, {passive: false});
+
+// Cuanto hay que moverse para caer del punto p al segmento ab, y a que altura.
+function distaSobreSegmento(p, a, b) {
+  var dx = b[0] - a[0], dy = b[1] - a[1];
+  var largo2 = dx * dx + dy * dy;
+  var t = largo2 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / largo2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  var q = [a[0] + t * dx, a[1] + t * dy];
+  return {dist: Math.hypot(p[0] - q[0], p[1] - q[1]), t: t, punto: q};
+}
+
+// --- teclado --------------------------------------------------------------
+addEventListener("keydown", function (ev) {
+  if (/^(INPUT|TEXTAREA)$/.test(ev.target.tagName)) {
+    if (ev.key === "s" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); guardar() }
+    return;
+  }
+  if (ev.key === "s" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); guardar(); return }
+  if (ev.key === "Escape") { tipoPalo = null; modoVertice = false; pintaPaleta(); elige(null); return }
+  if (!sel) return;
+  if (ev.key === "Delete" || ev.key === "Backspace") {
+    ev.preventDefault(); borrar(); return;
+  }
+  var paso = ev.shiftKey ? 10 : 1, d = null;
+  if (ev.key === "ArrowLeft") d = [-paso, 0];
+  else if (ev.key === "ArrowRight") d = [paso, 0];
+  else if (ev.key === "ArrowUp") d = [0, -paso];
+  else if (ev.key === "ArrowDown") d = [0, paso];
+  if (!d) return;
+  ev.preventDefault();
+  if (sel.tipo === "zona") {
+    E.zonas[sel.i][2] = E.zonas[sel.i][2].map(function (q) { return [q[0] + d[0], q[1] + d[1]] });
+  } else {
+    E.iconos[sel.i][1] += d[0];
+    E.iconos[sel.i][2] += d[1];
+  }
+  hayCambios();
+});
+
+// --- paleta ---------------------------------------------------------------
+function pintaPaleta() {
+  paleta.innerHTML = Object.keys(E.simbolos).map(function (t) {
+    return '<div class="palo' + (tipoPalo === t ? " acto" : "") + '" draggable="true" data-tipo="'
+         + t + '" title="' + escapa(E.simbolos[t]) + '"><svg viewBox="-13 -13 26 26">'
+         + (E.formas[t] || "") + "</svg><span>" + escapa(E.simbolos[t]) + "</span></div>";
+  }).join("");
+}
+paleta.addEventListener("dragstart", function (ev) {
+  var p = ev.target.closest(".palo");
+  if (!p) return;
+  tipoPalo = p.dataset.tipo;
+  pintaPaleta();
+  ev.dataTransfer.setData("text/plain", tipoPalo);
+  ev.dataTransfer.effectAllowed = "copy";
+});
+paleta.addEventListener("click", function (ev) {
+  var p = ev.target.closest(".palo");
+  if (!p) return;
+  tipoPalo = (tipoPalo === p.dataset.tipo) ? null : p.dataset.tipo;
+  modoVertice = false;
+  pintaPaleta();
+  if (tipoPalo) aviso("Haz clic en el mapa para poner " + E.simbolos[tipoPalo].toLowerCase() + ".", "");
+});
+// El arrastre HTML5 dispara pointerup en el destino; aqui se lee el tipo que
+// venia en el dataTransfer. Sin esto, el pointerdown del mapa colocaria el
+// icono en la esquina por no saber que se solto dentro.
+s.addEventListener("dragover", function (ev) { ev.preventDefault(); ev.dataTransfer.dropEffect = "copy" });
+s.addEventListener("drop", function (ev) {
+  ev.preventDefault();
+  var tipo = ev.dataTransfer.getData("text/plain") || tipoPalo;
+  if (!tipo || !E.simbolos[tipo]) return;
+  var p = aMapa(ev);
+  E.iconos.push([tipo, p[0], p[1], E.simbolos[tipo]]);
+  tipoPalo = null;
+  pintaPaleta();
+  elige("icono", E.iconos.length - 1);
+  hayCambios();
+});
+
+// --- panel ----------------------------------------------------------------
+listaZonas.addEventListener("click", function (ev) {
+  var b = ev.target.closest(".zona");
+  if (b) elige("zona", +b.dataset.zona);
+});
+listaIconos.addEventListener("click", function (ev) {
+  var b = ev.target.closest(".icono");
+  if (b) elige("icono", +b.dataset.icono);
+});
+
+[fNombre, fCorto, fDesc].forEach(function (campo, j) {
+  campo.addEventListener("input", function () {
+    if (!sel || sel.tipo !== "zona") return;
+    E.zonas[sel.i][j === 0 ? 0 : j === 1 ? 1 : 3] = campo.value;
+    hayCambios();
+  });
+});
+
+function borrar() {
+  if (!sel) return;
+  if (sel.tipo === "zona") {
+    E.zonas.splice(sel.i, 1);
+  } else {
+    E.iconos.splice(sel.i, 1);
+  }
+  elige(null);
+  hayCambios();
+}
+document.getElementById("btnBorrarZona").addEventListener("click", borrar);
+document.getElementById("btnNueva").addEventListener("click", function () {
+  // Un cuadrado en medio del mapa, para moverlo desde ahi. Nace con nombre
+  // provisional porque una zona sin nombre sale como un boton vacio.
+  var cx = E.ancho / 2, cy = E.alto / 2, r = 90;
+  E.zonas.push(["Zona nueva", "Nueva " + (E.zonas.length + 1),
+    [[cx - r, cy - r], [cx + r, cy - r], [cx + r, cy + r], [cx - r, cy + r]],
+    "Describe aqui que hay en esta zona del evento."]);
+  elige("zona", E.zonas.length - 1);
+  hayCambios();
+  fNombre.focus(); fNombre.select();
+});
+document.getElementById("btnVertice").addEventListener("click", function () {
+  if (!sel || sel.tipo !== "zona") {
+    aviso("Elige antes una zona para añadirle una esquina.", "aviso"); return;
+  }
+  modoVertice = !modoVertice;
+  tipoPalo = null;
+  pintaPaleta();
+  dibuja();
+  if (modoVertice) aviso("Haz clic en el borde de la zona: la esquina se mete ahí.", "");
+  else aviso("", "");
+});
+document.getElementById("btnTodo").addEventListener("click", verTodo);
+
+// --- guardar y subir ------------------------------------------------------
+function guardar() {
+  if (problemas().some(function (lista) { return lista.length > 0 })) {
+    aviso("Hay zonas con problemas. Revisa la lista de la derecha.", "mal");
+    return Promise.resolve(false);
+  }
+  return fetch("/api/guardar", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zonas: E.zonas, iconos: E.iconos})
+  }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
+    .then(function (par) {
+      var ok = par[0], d = par[1];
+      if (!ok) { aviso(d.mensaje || "No se pudo guardar.", "mal"); return false }
+      sucio = false;
+      aviso("Guardado: " + d.guardado.zonas + " zonas y " + d.guardado.iconos
+            + " iconos. Ya se puede subir.", "ok");
+      pintaGit(d.git);
+      return true;
+    })
+    .catch(function (e) { aviso("No hay conexión con el editor: " + e.message, "mal"); return false });
+}
+
+document.getElementById("btnGuardar").addEventListener("click", guardar);
+document.getElementById("btnSubir").addEventListener("click", function () {
+  var campo = document.getElementById("commit");
+  var texto = campo.value.trim();
+  if (!texto) { aviso("Escribe antes el mensaje del cambio.", "aviso"); campo.focus(); return }
+  var encadenar = sucio ? guardar() : Promise.resolve(true);
+  encadenar.then(function (listo) {
+    if (!listo) return;
+    aviso("Subiendo…", "");
+    return fetch("/api/subir", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({mensaje: texto})
+    }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
+      .then(function (par) {
+        var ok = par[0], d = par[1];
+        var texto = (d.pasos || []).map(function (p) { return p[0] + ": " + p[1] }).join("\n\n");
+        aviso((d.mensaje || "") + (texto ? "\n\n" + texto : ""), ok && d.ok ? "ok" : "mal");
+        if (ok && d.ok) campo.value = "";
+        recargaGit();
+      });
+  }).catch(function (e) { aviso("Fallo al subir: " + e.message, "mal") });
+});
+
+function pintaGit(g) {
+  E.git = g || {};
+  if (!g || !g.hay) {
+    marcaGit.textContent = (g && g.error) || "git no disponible";
+    marcaGit.className = "pend";
+    return;
+  }
+  var t = g.rama + " · " + (g.pendientes ? g.pendientes + " archivo(s) por subir" : "todo subido");
+  if (g.sinSubir) t += " · " + g.sinSubir + " commit(s) sin subir";
+  marcaGit.innerHTML = "<b>" + escapa(t) + "</b>";
+  marcaGit.className = g.pendientes || g.sinSubir ? "pend" : "";
+  marcaGit.title = g.detalle || "";
+}
+function recargaGit() {
+  fetch("/api/git").then(function (r) { return r.json() }).then(pintaGit).catch(function () {});
+}
+
+// --- arranque -------------------------------------------------------------
+fetch("/api/estado").then(function (r) {
+  if (!r.ok) throw new Error("el editor respondió " + r.status);
+  return r.json();
+}).then(function (d) {
+  E = Object.assign(E, d);
+  hoja.setAttribute("width", E.ancho);
+  hoja.setAttribute("height", E.alto);
+  fondo.setAttribute("x", 0); fondo.setAttribute("y", 0);
+  fondo.setAttribute("width", E.ancho); fondo.setAttribute("height", E.alto);
+  fondo.setAttribute("href", "/mapa");
+  document.getElementById("commit").value = "Croquis: ";
+  pintaGit(d.git);
+  pintaPaleta();
+  verTodo();
+  if (d.avisos && d.avisos.length) aviso(d.avisos.join(" "), "aviso");
+}).catch(function (e) {
+  aviso("No se pudo hablar con el editor: " + e.message
+        + ". ¿Sigue abierta la ventana de editor.py?", "mal");
+});
+
+addEventListener("beforeunload", function (ev) {
+  if (!sucio) return;
+  ev.preventDefault();
+  ev.returnValue = "";
+});
+</script>
+</body>
+</html>

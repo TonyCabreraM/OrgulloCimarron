@@ -265,6 +265,18 @@ comparando cajas: dos bandas diagonales tienen cajas que se cruzan sin que los
 polígonos se toquen, y comparar cajas daba falsos positivos. También verifica
 que el `<image href>` apunte a un archivo que exista de verdad.
 
+Las reglas no están escritas dos veces: viven en `editor/validar.py` y la
+prueba las importa. Son las mismas que usa el editor para decidir si deja
+guardar, así que no pueden separarse sin que salte una prueba.
+
+`el croquis publicado no edita nada` es la que protege lo que ve el público:
+comprueba que `croquis.html` no tenga ni formularios, ni `fetch`, ni
+`localStorage`, ni nada que cargue código de fuera. `el editor rechaza lo
+ajeno` levanta el servidor del editor en un puerto libre y le ataca con un
+`Host` que no es localhost, con dos zonas solapadas y con un icono de un tipo
+inventado: los tres tienen que rebotar, y el croquis no puede cambiar ni un
+byte.
+
 > OpenCV no sirve para esta comprobación: su detector falla a partir de la
 > versión ~20 del QR, muy por debajo de lo que decodifica un teléfono.
 
@@ -280,6 +292,11 @@ plantilla/
   rectoria.webp    El arte, en ráster: 3400 x 2200 px, ~0.50 MB
   plantilla.html   Documento de ejemplo
   planos/          Croquis del campus descargados (referencia vieja)
+editor/            Herramienta de edición. NO se publica.
+  editor.py        Servidor local: el único que puede escribir el croquis
+  editor.html      La interfaz de edición
+  validar.py       Las reglas, compartidas con las pruebas
+  _respaldo/       Copia del croquis antes de cada guardado (fuera de git)
 salida/            QR generado
 ```
 
@@ -353,12 +370,14 @@ en el mismo sistema de coordenadas que el archivo de Illustrator. Así los
 números de `ZONAS` se leen directamente sobre el `.ai`.
 
 ```javascript
+/* === INICIO ZONAS === */
 var ZONAS = [
   ["Rectoría · Exposición CGECDC", "Rectoría",
    [[540,330],[788,330],[788,582],[540,582]],
    "La exposición del CGECDC, en el edificio de Rectoría."],
   …
 ];
+/* === FIN ZONAS === */
 ```
 
 Cada zona es `[nombre, nombre corto, polígono, descripción]`. La caja que se
@@ -366,6 +385,9 @@ encuadra al ampliar **no se guarda**: se calcula del polígono con `caja()`.
 Tener las dos cosas era pedir que se desincronizaran, y de hecho pasó — al
 ajustar los polígonos las cajas se quedaron viejas y el zoom dejaba parte de
 la zona fuera de cuadro.
+
+Los comentarios `INICIO`/`FIN` los usa el editor para saber qué trozo
+reescribir. Se explican más abajo.
 
 - **Las bandas diagonales van como cuadriláteros**, no como rectángulos. Los
   estacionamientos y las hileras de stands están inclinados en el dibujo; un
@@ -394,6 +416,39 @@ la zona fuera de cuadro.
 > únicamente la dirección del HTML. La prueba `QR actual decodificable` usa
 > `plantilla/plantilla.html` para verificar el mecanismo, no este documento.
 
+### Los iconos
+
+Los símbolos de punto del mapa (baños, primeros auxilios, comida) van en un
+array aparte, con el mismo formato de siempre:
+
+```javascript
+var ICONOS = [
+  ["bano", 499, 470, "Baños junto al escenario"],
+  ["primeros", 620, 300, "Módulo de primeros auxilios"],
+];
+```
+
+Cada icono es `[tipo, x, y, etiqueta]`. El tipo elige la forma entre las de
+`SIMBOLOS`, que están dibujadas a mano en el propio archivo y en una caja de
+24×24 centrada en el origen: colocar una es solo un `translate` más un
+`scale`. La etiqueta no se ve en el mapa (a 46 unidades de ancho saldría de
+6 px) y está para los lectores de pantalla y para el editor.
+
+Los iconos **forman parte del plano y crecen con el zoom**, igual que las
+calles. El grosor del trazo va con `vector-effect: non-scaling-stroke` para
+que no engorde: un icono ampliado 4× con el trazo escalado se ve como un
+garabato. Llevan un aro claro detrás porque el pasto es una textura cargada y
+se come los trazos finos.
+
+**No reciben el toque.** El grupo `#iconos` va con `pointer-events: none`, así
+que una pulsación sobre un icono sigue llegando a la zona que hay debajo. Si
+no, un icono plantado en medio de un estacionamiento se comería esa parte del
+estacionamiento y la zona quedaría con un hueco.
+
+Los tipos están validados contra `SIMBOLOS` y hay una prueba que compara esa
+lista con la de `editor/validar.py`. Un tipo inventado saldría como un hueco
+vacío y sin ningún error en consola, que es la peor forma de fallar.
+
 ### Al reemplazar el mapa por una versión nueva
 
 Se sustituyen dos cosas y nada más:
@@ -407,6 +462,95 @@ El zoom, el encuadre y la ficha se calculan solos. La prueba
 que quepa en el mapa, que su polígono tenga al menos 3 puntos y 20 pt² de
 área, que la descripción pase de 10 caracteres, que ningún par de zonas se
 solape y que el `<image href>` apunte a un archivo que exista.
+
+Para mover zonas e iconos sin tocar las coordenadas a mano está el editor, que
+es la sección siguiente.
+
+## El editor
+
+Mover once polígonos a mano sobre un archivo de 18 KB es una forma segura de
+romper el croquis. `editor/` es una herramienta aparte para hacerlo con el
+ratón, y es **lo único que puede modificar el mapa**.
+
+```bash
+python editor/editor.py
+```
+
+Abre el navegador en `http://127.0.0.1:8730/` y no necesita nada instalado más
+allá de Python: el servidor es `http.server` de la biblioteca estándar y la
+interfaz es un HTML suelto.
+
+| Se puede hacer | Cómo |
+| --- | --- |
+| Mover una esquina | Arrastrar el punto blanco |
+| Mover una zona entera | Arrastrar su interior |
+| Mover con precisión | Flechas del teclado (con Mayús, de 10 en 10) |
+| Añadir una esquina | Botón **Añadir vértice**, luego clic en el borde |
+| Quitar una esquina | Doble clic sobre el punto, o `Supr` |
+| Poner un icono | Arrastrarlo de la paleta al mapa, o pulsarlo y hacer clic |
+| Editar el texto | El formulario del panel, mientras la zona está elegida |
+| Acercar | Rueda del ratón |
+
+Abajo a la izquierda del mapa están las mismas instrucciones.
+
+### Por qué el croquis público no puede editar nada
+
+Es la razón de que esto sea un programa aparte y no un botón dentro del mapa.
+
+El croquis que abre el QR es un HTML suelto en GitHub Pages: sin servidor, sin
+backend y sin formularios. Quien lo escanea solo puede mirarlo, y una prueba
+(`el croquis publicado no edita nada`) comprueba que siga siendo así.
+
+El editor es lo contrario: escribe archivos y ejecuta `git push`. Por eso:
+
+| Medida | Por qué |
+| --- | --- |
+| Escucha en `127.0.0.1`, no en `0.0.0.0` | Desde otro equipo de la red no se llega |
+| Rechaza peticiones con `Host` que no sea localhost | Una web abierta en este equipo no puede apuntar un dominio a 127.0.0.1 y colarse por el navegador |
+| No sirve archivos por ruta | Solo responde a las direcciones de una lista fija |
+| Valida antes de escribir, y si algo falla no escribe nada | A medias sería peor: el croquis quedaría publicado con la mitad del cambio |
+| `noindex` en la interfaz | Aunque acabe publicada, no aparece en buscadores |
+
+Y si alguien llegara a abrir la interfaz del editor, no podría hacer nada: sin
+el servidor local no hay quien reciba lo que edite. La interfaz sola no escribe
+nada.
+
+### Guardar y subir
+
+**Guardar** valida y reescribe los bloques del croquis. Antes de tocar el
+archivo deja una copia en `editor/_respaldo/croquis.html`, que está fuera de
+git porque git ya guarda todas las versiones.
+
+**Subir a GitHub** hace `git add -A`, `git commit` y `git push` con el mensaje
+que se escriba. Si el push falla (la red, los permisos), el commit ya está
+hecho y el aviso lo dice: se puede reintentar sin perder nada. Después hay que
+esperar uno o dos minutos a que GitHub Pages reconstruya, y el QR ya abre la
+versión nueva.
+
+### Cómo reescribe el croquis
+
+El croquis lleva marcadores alrededor de los dos bloques que el editor toca:
+
+```javascript
+/* === INICIO ZONAS === */
+var ZONAS = [ … ];
+/* === FIN ZONAS === */
+```
+
+Se usan marcadores y no expresiones regulares sobre el código porque el día
+que alguien reformatee el archivo, una expresión regular falla en silencio o,
+peor, se lleva por delante el bloque de al lado. **Esas dos líneas no se pueden
+borrar**: sin ellas el editor avisa de que no sabe qué trozo reescribir, en vez
+de estropear el croquis.
+
+El contenido de los bloques es JavaScript, pero también es JSON válido: un
+array de números y textos con comillas dobles. Así que se lee con `json.loads`
+en vez de con expresiones regulares, y un error de sintaxis se convierte en un
+mensaje claro en lugar de en un croquis a medias.
+
+La paleta de iconos no lleva su propia copia de los dibujos: el servidor los
+lee del bloque `SIMBOLOS` del croquis y se los manda a la interfaz. Lo que se
+ve en la paleta es exactamente lo que el croquis va a dibujar.
 
 ## Nota sobre el minificador
 

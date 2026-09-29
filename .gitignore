@@ -3,3 +3,8 @@ __pycache__/
 _tmp_*
 !plantilla/**
 !test_qr.py
+
+# La copia de seguridad que deja el editor antes de tocar el croquis. Vive en
+# el equipo de quien edita; en el repositorio solo seria ruido, y git ya
+# guarda todas las versiones del croquis.
+editor/_respaldo/

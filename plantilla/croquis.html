@@ -38,6 +38,22 @@ body{
 /* El mapa es una hoja: un filo tenue y una sombra lo despegan del fondo. */
 #hoja{filter:drop-shadow(0 10px 26px #0a484233)}
 
+/* Los iconos son los simbolos de punto: banos, primeros auxilios, comida...
+   Van encima del mapa pero NO reciben el toque, que sigue siendo de las
+   zonas; si no, un icono plantado en medio de un estacionamiento se comeria
+   la pulsacion de esa parte del estacionamiento.
+
+   El aro claro los despega del pasto, que es una textura cargada y se come
+   los trazos finos. El grosor va con vector-effect para que no engorde al
+   ampliar: un icono ampliado 4x con el trazo escalado se ve como un garabato. */
+#iconos{pointer-events:none}
+#iconos .aro{fill:#fffffff2;stroke:#0a4842;stroke-opacity:.32;stroke-width:1.2;
+             vector-effect:non-scaling-stroke}
+#iconos .lam *{fill:none;stroke:var(--tinta);stroke-width:1.9;
+               stroke-linecap:round;stroke-linejoin:round;
+               vector-effect:non-scaling-stroke}
+#iconos .lam .relleno{fill:var(--tinta);stroke:none}
+
 /* Al tocar, solo se hace zoom. Las zonas no se resaltan ni se oscurece el
    resto del mapa: el diseno de Illustrator ya se lee solo y cualquier
    adorno encima lo ensucia. */
@@ -99,6 +115,7 @@ body{
             stroke="#b8d4bb" stroke-width="2"/>
     </g>
     <g id="zonas"></g>
+    <g id="iconos"></g>
   </g>
 </svg>
 
@@ -139,7 +156,11 @@ body{
 // Dos zonas no pueden solaparse: al tocar caeria la de encima y la otra
 // quedaria inalcanzable justo ahi. Hay una prueba que lo comprueba con los
 // ejes separadores, y otra que verifica que todas quepan en el mapa.
+//
+// Lo de abajo lo reescribe editor/editor.py. Si se edita a mano aqui, el
+// editor no se entera y lo pisa la proxima vez que se guarde desde el.
 // ===========================================================================
+/* === INICIO ZONAS === */
 var ZONAS = [
   ["Teatro al aire libre", "Teatro",
    [[330,108],[592,108],[592,228],[330,228]],
@@ -185,15 +206,90 @@ var ZONAS = [
    [[464,394],[534,394],[534,586],[464,586]],
    "Baños, primeros auxilios, escenario y las dos entradas."]
 ];
+/* === FIN ZONAS === */
 
 // Vista general: el predio del campus con las dos calles que lo enmarcan.
 var VISTA = [110, 100, 1005, 640];
+
+// ===========================================================================
+// Iconos: los simbolos de punto del mapa (banos, primeros auxilios, comida).
+//
+// Cada icono es [tipo, x, y, etiqueta]. El tipo elige la forma en SIMBOLOS y
+// la etiqueta es para lectores de pantalla y para el editor; en el mapa solo
+// se ve el simbolo, porque a 46 unidades de mapa el texto saldria de 6 px y
+// no lo leeria nadie.
+//
+// El tipo se valida contra SIMBOLOS: uno desconocido saldria como un hueco
+// vacio y sin ningun error en la consola, que es la peor forma de fallar.
+//
+// Lo de abajo lo reescribe editor/editor.py, igual que las zonas.
+// ===========================================================================
+/* === INICIO ICONOS === */
+var ICONOS = [];
+/* === FIN ICONOS === */
+
+// Las formas de los iconos, dibujadas a mano en una caja de 24x24 centrada en
+// (0,0), para que colocar una sea solo translate + scale. Solo el contenido:
+// el <g> que las envuelve pone el color y el grosor del trazo.
+//
+// Se dibujan aqui y no se cargan de fuera para que el mapa no dependa de
+// ninguna biblioteca de iconos ni de ninguna red.
+//
+// Tienen que ser las mismas que la lista SIMBOLOS de editor/validar.py: el
+// editor ofrece esos tipos y el croquis solo sabe dibujar estos. Hay una
+// prueba que compara las dos listas.
+/* === INICIO SIMBOLOS === */
+var SIMBOLOS = {
+  bano: '<circle cx="-4.7" cy="-7.1" r="2.3"/><path d="M-4.7 -4.8v6.4M-7.8 -1.6h6.2"/>'
+      + '<circle cx="4.7" cy="-7.1" r="2.3"/><path d="M4.7 -4.8v3.2"/>'
+      + '<path d="M4.7 -1.6l-2.6 6.2M4.7 -1.6l2.6 6.2"/>',
+  primeros: '<circle cx="0" cy="0" r="9.3"/>'
+      + '<path d="M0 -5.2v10.4M-5.2 0h10.4"/>',
+  comida: '<path d="M-8.2 -9.6v5.2M-5.8 -9.6v5.2M-3.4 -9.6v5.2"/>'
+      + '<path d="M-8.2 -4.4h4.8M-5.8 -4.4v14"/>'
+      + '<path d="M4.6 -9.6v19"/>'
+      + '<path d="M4.6 -9.6c2.6 .9 4.2 3.1 4.2 5.7 0 2.1-1.4 3.6-4.2 4"/>',
+  bebida: '<path d="M-5.6 -5.6h11.2L4.2 9.8h-8.4z"/>'
+      + '<path d="M-2.2 -5.6 -4.4 -10.8"/>',
+  escenario: '<rect x="-3.4" y="-11" width="6.8" height="10.4" rx="3.4"/>'
+      + '<path d="M-7 -3.4a7 7 0 0014 0"/>'
+      + '<path d="M0 3.6v6.2M-3.4 9.8h6.8"/>',
+  entrada: '<path d="M3.2 -10.4h7v20.8h-7"/>'
+      + '<path d="M-9.8 0h10.6"/><path d="M-4.4 -4.4 0 0l-4.4 4.4"/>',
+  informacion: '<circle cx="0" cy="0" r="9.3"/><path d="M0 1.2v5.4"/>'
+      + '<circle class="relleno" cx="0" cy="-3.6" r="1.2"/>',
+  auto: '<rect x="-9" y="-9" width="18" height="18" rx="3.4"/>'
+      + '<path d="M-2.8 6.2v-12.4h4.6a3.9 3.9 0 010 7.8h-4.6"/>',
+  agua: '<path d="M0 -10.4C0 -10.4 6.6 -2.8 6.6 1.4a6.6 6.6 0 01-13.2 0'
+      + 'C-6.6 -2.8 0 -10.4 0 -10.4z"/>',
+  basura: '<path d="M-8.6 -5.2h17.2"/>'
+      + '<path d="M-3.4 -5.2v-2.4a1.6 1.6 0 011.6-1.6h3.6a1.6 1.6 0 011.6 1.6v2.4"/>'
+      + '<path d="M-6.6 -5.2l1.2 14.2a1.6 1.6 0 001.6 1.4h7.6a1.6 1.6 0 001.6-1.4l1.2-14.2"/>'
+      + '<path d="M-2.2 0v8.4M2.2 0v8.4"/>',
+  sonido: '<path d="M-9 -3.2h3.6l5.6-4.6v15.6l-5.6-4.6H-9z"/>'
+      + '<path d="M3.8 -4a6.2 6.2 0 010 8"/>'
+      + '<path d="M6.8 -7.2a10.4 10.4 0 010 14.4"/>',
+  estrella: '<path d="M0 -9.8l2.9 5.9 6.5 .9-4.7 4.6 1.1 6.5L0 4.8l-5.8 3.1'
+      + ' 1.1-6.5-4.7-4.6 6.5-.9z"/>'
+};
+/* === FIN SIMBOLOS === */
+
+// Cuanto mide un icono, en unidades del mapa y no en pixeles: los iconos son
+// parte del plano y crecen con el zoom igual que las calles.
+var TAM_ICONO = 46;
 
 var s = document.getElementById("s"), M = document.getElementById("m"),
     cab = document.getElementById("cab"), F = document.getElementById("ficha"),
     TITULO = document.getElementById("titulo"), PISTA = document.getElementById("pista"),
     PUNTO = document.getElementById("punto"), ZON = document.getElementById("zonas"),
+    ICN = document.getElementById("iconos"),
     CH = document.getElementById("chips"), K = [], A = -1, i;
+
+// Un texto que va a acabar dentro del SVG. Las etiquetas de los iconos las
+// escribe una persona, asi que pueden traer un & o un < y romper el dibujo.
+function escapa(t) {
+  return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 // Los poligonos son transparentes: existen solo para recibir el toque, sin
 // dibujar nada encima del arte del mapa.
@@ -207,6 +303,18 @@ CH.innerHTML = ZONAS.map(function (z, k) {
 }).join("");
 K = CH.querySelectorAll(".chip");
 var G = ZON.querySelectorAll(".g");
+
+// Los iconos, encima del mapa pero fuera del alcance del toque. Uno con un
+// tipo que no exista se salta en vez de dibujar un hueco: mejor un icono de
+// menos que un circulo vacio que nadie sabe de donde sale.
+ICN.innerHTML = ICONOS.map(function (ic) {
+  var forma = SIMBOLOS[ic[0]];
+  if (!forma) return "";
+  return '<g class="ic" transform="translate(' + ic[1] + "," + ic[2]
+       + ") scale(" + (TAM_ICONO / 24) + ')"><title>'
+       + escapa(ic[3] || ic[0]) + '</title>'
+       + '<circle class="aro" r="13.4"/><g class="lam">' + forma + "</g></g>";
+}).join("");
 
 // La caja de una zona, sacada de su poligono: [x, y, ancho, alto].
 //

@@ -10,6 +10,7 @@ import base64
 import contextlib
 import gzip
 import io
+import json
 import os
 import re
 import shutil
@@ -25,6 +26,13 @@ from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_L, ERROR_CORRECT_M
 
 import generar_qr as g
 from generar_qr import URL_HTML
+
+# El editor vive en su propia carpeta y se ejecuta como script, asi que su
+# carpeta tiene que estar en el path para poder importarlo desde aqui. Con
+# ella dentro, "validar" y "editor" se resuelven solos.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "editor"))
+import editor  # noqa: E402  (el servidor del editor)
+import validar as v  # noqa: E402  (las reglas, compartidas con el editor)
 
 NIVELES = {"L": ERROR_CORRECT_L, "M": ERROR_CORRECT_M, "H": ERROR_CORRECT_H}
 
@@ -190,101 +198,74 @@ def test_url_publicada_responde() -> bool:
     if estado != 200:
         print(f"    (la URL devuelve {estado})")
         return False
-    if "UABC Campus Mexicali" not in cuerpo:
+    if "Día del Orgullo Cimarrón 2026" not in cuerpo:
         print("    (la URL responde, pero no es el documento del croquis)")
         return False
-    print(f"    {URL_HTML} -> {estado}, {len(cuerpo)} bytes")
+    # Que la publicada sea la de aqui es lo que hace que el QR sirva: si el
+    # HTML local se cambio y no se subio, el QR abre una version vieja. No es
+    # un fallo (se esta trabajando), pero conviene decirlo.
+    if cuerpo != marcador:
+        print(f"    {URL_HTML} -> {estado}, {len(cuerpo)} bytes")
+        print(f"    (ojo: la publicada pesa {len(cuerpo)} y la local "
+              f"{len(marcador)}; hay cambios sin subir)")
+        return True
+    print(f"    {URL_HTML} -> {estado}, {len(cuerpo)} bytes, igual a la local")
     return True
 
 
+def leer_bloque(texto: str, nombre: str):
+    """El array de dentro de un bloque /* === INICIO X === */. None si no esta.
+
+    El bloque es JavaScript, pero un array de numeros y textos con comillas
+    dobles es JSON valido, asi que se lee con json y no con expresiones
+    regulares. Una expresion regular se rompe en silencio el dia que alguien
+    reformatee el bloque; json.loads falla y aqui se ve por que.
+    """
+    ini = f"/* === INICIO {nombre} === */"
+    fin = f"/* === FIN {nombre} === */"
+    a, b = texto.find(ini), texto.find(fin)
+    if a < 0 or b < 0:
+        return None
+    cuerpo = texto[a + len(ini):b]
+    i, j = cuerpo.find("["), cuerpo.rfind("]")
+    if i < 0 or j < i:
+        return None
+    try:
+        return json.loads(cuerpo[i:j + 1])
+    except json.JSONDecodeError:
+        return None
+
+
+CROQUIS = Path("plantilla/croquis.html")
+
+
 def test_croquis_zonas_coherentes() -> bool:
-    """Cada zona del croquis está completa y cae dentro del mapa.
+    """Las zonas y los iconos del croquis están completos y no se pisan.
 
     Las zonas son filas de cuatro campos: nombre largo, nombre corto, el
     polígono para el toque y la descripción. La caja que se encuadra al hacer
     zoom NO se guarda: se calcula del polígono, porque tener las dos cosas a
     mano garantiza que algún día se desincronicen.
 
-    Aquí se recalcula esa caja igual que lo hace la página y se comprueba que
-    quepa en el mapa. Si a una fila le falta un campo, la zona se rompe en
-    silencio: el botón sale sin texto o el zoom encuadra cualquier cosa.
+    Las reglas viven en editor/validar.py, que es la misma que usa el editor
+    para decidir si deja guardar. Están compartidas a propósito: si cada uno
+    tuviera su copia, un día dirían cosas distintas y la que estuviera más
+    floja sería la que decidiera.
     """
-    texto = Path("plantilla/croquis.html").read_text(encoding="utf-8")
-
-    bloque = re.search(r"var ZONAS = \[(.*?)\n\];", texto, flags=re.S)
-    if not bloque:
-        print("    (no se encuentra 'var ZONAS = [...]' en croquis.html)")
+    if not CROQUIS.is_file():
+        print(f"    (no existe {CROQUIS})")
         return False
-    interior = bloque.group(1)
+    texto = CROQUIS.read_text(encoding="utf-8")
 
-    # Cada zona: ["nombre", "corto", [[x,y],...], "descripción"]
-    zonas = re.findall(
-        r'\[\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*(\[\[.*?\]\])\s*,\s*"([^"]+)"\s*\]',
-        interior, flags=re.S)
-    if not zonas:
-        print("    (no se pudo parsear ninguna zona)")
+    zonas = leer_bloque(texto, "ZONAS")
+    iconos = leer_bloque(texto, "ICONOS")
+    if zonas is None or iconos is None:
+        print("    (no se pueden leer los bloques ZONAS o ICONOS de croquis.html).")
+        print("    Los marcadores /* === INICIO X === */ no se pueden borrar:")
+        print("    sin ellos el editor no sabe qué trozo reescribir.")
         return False
 
-    # El mapa mide 1224x792 pt, que es el viewBox del SVG.
-    ANCHO, ALTO = 1224, 792
-    problemas = []
-    for nombre, corto, poligono, desc in zonas:
-        puntos = [(int(a), int(b)) for a, b in
-                  re.findall(r"\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]", poligono)]
-        if len(puntos) < 3:
-            problemas.append(f"{corto}: el polígono tiene {len(puntos)} puntos, hacen falta 3")
-            continue
-
-        xs = [p[0] for p in puntos]
-        ys = [p[1] for p in puntos]
-        if min(xs) < 0 or min(ys) < 0 or max(xs) > ANCHO or max(ys) > ALTO:
-            problemas.append(f"{corto}: el polígono se sale del mapa {ANCHO}x{ALTO}")
-
-        # La misma cuenta que hace caja() en la página.
-        ancho, alto = max(xs) - min(xs), max(ys) - min(ys)
-        if ancho < 20 or alto < 20:
-            problemas.append(f"{corto}: la zona es muy pequeña para tocarla "
-                             f"({ancho}x{alto} pt)")
-        if len(desc) < 10:
-            problemas.append(f"{corto}: la descripción es demasiado corta")
-
-    # Dos zonas no pueden solaparse: al tocar caeria la que esté encima y la
-    # otra quedaría inalcanzable justo ahí.
-    #
-    # Se comparan los POLÍGONOS, no sus cajas. Las bandas diagonales tienen
-    # cajas que se cruzan en las esquinas aunque las bandas no se toquen, así
-    # que comparar cajas daba medio reporte de falsos positivos.
-    #
-    # El método es el de los ejes separadores: dos convexos se solapan si no
-    # existe ningún eje (normal a una arista de cualquiera de los dos) donde
-    # sus proyecciones queden separadas. Todas las zonas son convexas.
-    def proyectar(puntos: list, eje: tuple) -> tuple:
-        valores = [p[0] * eje[0] + p[1] * eje[1] for p in puntos]
-        return min(valores), max(valores)
-
-    def eje_separador(a: list, b: list) -> tuple | None:
-        for poli in (a, b):
-            for i in range(len(poli)):
-                p1, p2 = poli[i], poli[(i + 1) % len(poli)]
-                dx, dy = p2[0] - p1[0], p2[1] - p1[1]
-                largo = (dx * dx + dy * dy) ** 0.5
-                if not largo:
-                    continue
-                eje = (-dy / largo, dx / largo)
-                amin, amax = proyectar(a, eje)
-                bmin, bmax = proyectar(b, eje)
-                if amax < bmin or bmax < amin:
-                    return eje
-        return None
-
-    poligonos = [[(int(x), int(y)) for x, y in re.findall(
-        r"\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]", z[2])] for z in zonas]
-    for a in range(len(zonas)):
-        for b in range(a + 1, len(zonas)):
-            if eje_separador(poligonos[a], poligonos[b]) is None:
-                problemas.append(
-                    f"{zonas[a][1]} y {zonas[b][1]} se solapan: una tapa a la otra")
-
+    problemas = v.revisar(zonas, iconos)
     for p in problemas:
         print(f"    {p}")
     if problemas:
@@ -300,7 +281,187 @@ def test_croquis_zonas_coherentes() -> bool:
     if not ruta_mapa.is_file():
         print(f"    (el mapa {ruta_mapa} no existe junto al HTML)")
         return False
-    print(f"    {len(zonas)} zonas coherentes, mapa de {ruta_mapa.stat().st_size // 1024} KB")
+    print(f"    {len(zonas)} zonas y {len(iconos)} iconos, "
+          f"mapa de {ruta_mapa.stat().st_size // 1024} KB")
+    return True
+
+
+def test_iconos_y_simbolos_coinciden() -> bool:
+    """El croquis sabe dibujar todos los tipos de icono que el editor ofrece.
+
+    Son dos listas que tienen que decir lo mismo: la de editor/validar.py
+    decide qué tipos se pueden guardar y la del croquis (el bloque SIMBOLOS)
+    sabe dibujarlos. Si se separan, se puede guardar un icono que luego no se
+    dibuja: sale un hueco en el mapa y ningún error en consola.
+    """
+    texto = CROQUIS.read_text(encoding="utf-8")
+    ini, fin = "/* === INICIO SIMBOLOS === */", "/* === FIN SIMBOLOS === */"
+    a, b = texto.find(ini), texto.find(fin)
+    if a < 0 or b < 0:
+        print("    (no se encuentra el bloque SIMBOLOS en croquis.html)")
+        return False
+
+    # Los símbolos están escritos como trozos de texto encadenados con +, para
+    # que las líneas no se hagan kilométricas. Aquí se vuelven a pegar.
+    formas = {clave: "".join(re.findall(r"'([^']*)'", trozos))
+              for clave, trozos in re.findall(
+                  r"^\s*(\w+):\s*((?:\s*'[^']*'\s*\+?)+)", texto[a:b], flags=re.M)}
+
+    faltan = sorted(set(v.SIMBOLOS) - set(formas))
+    sobran = sorted(set(formas) - set(v.SIMBOLOS))
+    if faltan:
+        print(f"    (validar.py ofrece tipos que el croquis no puede dibujar: "
+              f"{', '.join(faltan)})")
+    if sobran:
+        print(f"    (el croquis dibuja tipos que validar.py no deja usar: "
+              f"{', '.join(sobran)})")
+    if faltan or sobran:
+        print("    Hay que tocar las dos listas, o los iconos salen en blanco.")
+        return False
+
+    # Un símbolo dibujado de verdad, no una cadena vacía.
+    vacios = [k for k, forma in formas.items() if "<" not in forma]
+    if vacios:
+        print(f"    (estos símbolos no tienen dibujo: {', '.join(vacios)})")
+        return False
+    print(f"    {len(formas)} símbolos dibujables, uno por cada tipo del editor")
+    return True
+
+
+def _sin_comentarios(texto: str) -> str:
+    """El croquis sin comentarios, que es donde puede haber codigo.
+
+    Los comentarios no ejecutan nada y en el croquis son utiles: avisan de
+    que hay un editor y de que los marcadores no se pueden borrar. Lo que se
+    vigila es el codigo, asi que se quitan antes de mirar.
+    """
+    texto = re.sub(r"/\*.*?\*/", " ", texto, flags=re.S)
+    texto = re.sub(r"<!--.*?-->", " ", texto, flags=re.S)
+    return re.sub(r"^\s*//.*$", " ", texto, flags=re.M)
+
+
+def test_el_croquis_publicado_no_edita_nada() -> bool:
+    """El croquis que abre el QR no puede modificar el mapa.
+
+    Es la razón de que el editor sea un programa aparte. Aquí se comprueba que
+    la página publicada no tenga con qué escribir: ni formularios, ni llamadas
+    que manden datos a ningún sitio, ni nada que cargue código de fuera.
+
+    Una página suelta en GitHub Pages no puede escribir en el repositorio de
+    todas formas, pero eso es una garantía de la plataforma. Esto comprueba
+    que además el archivo no lleve la puerta puesta.
+    """
+    texto = _sin_comentarios(CROQUIS.read_text(encoding="utf-8"))
+
+    # Nada de formularios: no hay campos que rellenar ni nada que enviar.
+    for etiqueta in ("<form", "<input", "<textarea", "contenteditable"):
+        if etiqueta in texto:
+            print(f"    (el croquis publicado lleva un {etiqueta}: puede editarse)")
+            return False
+
+    # Nada de hablar con un servidor. El croquis se carga solo: su unica
+    # peticion es la imagen del mapa, que va con <image href>.
+    for llamada in ("fetch(", "XMLHttpRequest", "sendBeacon", "WebSocket",
+                    "<script src", "<link", "import(", "navigator.send"):
+        if llamada in texto:
+            print(f"    (el croquis publicado usa {llamada}: carga o manda algo)")
+            return False
+
+    # Ni formas de guardar nada en el equipo de quien mira el mapa.
+    for escritura in ("localStorage", "sessionStorage", "document.cookie", "indexedDB"):
+        if escritura in texto:
+            print(f"    (el croquis publicado usa {escritura})")
+            return False
+
+    # Los unicos recursos externos que puede pedir son la imagen del mapa.
+    recursos = re.findall(r'(?:href|src)="([^"]+)"', texto)
+    ajenos = [r for r in recursos if r.startswith(("http://", "https://", "//"))]
+    if ajenos:
+        print(f"    (el croquis publicado carga recursos de fuera: {', '.join(ajenos)})")
+        return False
+
+    print("    sin formularios, sin peticiones y sin codigo de fuera")
+    return True
+
+
+def test_el_editor_rechaza_lo_ajeno() -> bool:
+    """El editor solo atiende en local y no escribe nada que no valide.
+
+    Se levanta el servidor de verdad en un puerto libre y se le ataca como lo
+    haría una página web abierta en el mismo equipo: con un Host que no es
+    localhost. Si el editor atendiera esa petición, cualquier web podría
+    usarlo de puente para escribir en el croquis y subirlo a GitHub.
+
+    Y de paso se comprueba lo más importante: que un guardado inválido NO
+    toque el archivo. A medias sería peor que no escribir, porque el croquis
+    quedaría publicado con la mitad del cambio.
+    """
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    antes = CROQUIS.read_bytes()
+    servidor = ThreadingHTTPServer(("127.0.0.1", 0), editor.Manejador)
+    hilo = threading.Thread(target=servidor.serve_forever, daemon=True)
+    hilo.start()
+    puerto = servidor.server_address[1]
+    base = f"http://127.0.0.1:{puerto}"
+    problemas = []
+    try:
+        # El manejador escribe cada peticion a stderr. Dentro de una prueba eso
+        # solo ensucia la salida y hace que PowerShell la tome por un error.
+        with contextlib.redirect_stderr(io.StringIO()):
+            # 1. Host ajeno: se rechaza con 403.
+            peticion = urllib.request.Request(
+                base + "/api/estado", headers={"Host": "sitio-ajeno.example"})
+            try:
+                with urllib.request.urlopen(peticion, timeout=5) as r:
+                    problemas.append(f"aceptó un Host ajeno ({r.status})")
+            except urllib.error.HTTPError as e:
+                if e.code != 403:
+                    problemas.append(f"con Host ajeno esperaba 403 y dio {e.code}")
+
+            # 2. Guardar zonas que se solapan: se rechaza con 400 y no se escribe.
+            malas = [
+                ["Una", "Una", [[100, 100], [400, 100], [400, 400], [100, 400]],
+                 "Una zona cualquiera."],
+                ["Otra", "Otra", [[200, 200], [500, 200], [500, 500], [200, 500]],
+                 "Otra zona encima."]]
+            peticion = urllib.request.Request(
+                base + "/api/guardar",
+                data=json.dumps({"zonas": malas, "iconos": []}).encode("utf-8"),
+                method="POST", headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(peticion, timeout=5) as r:
+                    problemas.append(f"aceptó dos zonas solapadas ({r.status})")
+            except urllib.error.HTTPError as e:
+                if e.code != 400:
+                    problemas.append(f"con zonas solapadas esperaba 400 y dio {e.code}")
+
+            # 3. Un icono de un tipo que no existe: también se rechaza.
+            peticion = urllib.request.Request(
+                base + "/api/guardar",
+                data=json.dumps({"zonas": [], "iconos": [["inventado", 100, 100, "Nada"]]}).encode("utf-8"),
+                method="POST", headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(peticion, timeout=5) as r:
+                    problemas.append(f"aceptó un icono de tipo inventado ({r.status})")
+            except urllib.error.HTTPError as e:
+                if e.code != 400:
+                    problemas.append(f"con un tipo inventado esperaba 400 y dio {e.code}")
+
+            # 4. Y nada de eso puede haber tocado el archivo.
+            if CROQUIS.read_bytes() != antes:
+                problemas.append("el croquis cambió con guardados que debían rechazarse")
+    finally:
+        servidor.shutdown()
+        servidor.server_close()
+        hilo.join(timeout=5)
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    rechaza Host ajeno, zonas solapadas y tipos inventados, sin escribir")
     return True
 
 
@@ -485,6 +646,9 @@ def main() -> int:
         ("minificado conserva estructura", test_minificado_conserva_estructura),
         ("atributos sin comillas no se tragan", test_atributos_sin_comillas_no_se_tragan),
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
+        ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
+        ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
+        ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),
         ("modo enlace: QR = URL", test_modo_enlace_es_una_url),
         ("colores institucionales legibles", test_colores_legibles),
