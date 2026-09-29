@@ -204,10 +204,17 @@ def test_url_publicada_responde() -> bool:
     # Que la publicada sea la de aqui es lo que hace que el QR sirva: si el
     # HTML local se cambio y no se subio, el QR abre una version vieja. No es
     # un fallo (se esta trabajando), pero conviene decirlo.
-    if cuerpo != marcador:
+    #
+    # Se comparan los saltos de linea normalizados. En Windows el archivo en
+    # disco lleva CRLF y git (con core.autocrlf) guarda LF, asi que comparar
+    # byte a byte daria una diferencia de un byte por linea. El contenido es
+    # el mismo y avisar de eso seria un aviso que salta siempre.
+    aqui = marcador.replace("\r\n", "\n")
+    alla = cuerpo.replace("\r\n", "\n")
+    if alla != aqui:
         print(f"    {URL_HTML} -> {estado}, {len(cuerpo)} bytes")
-        print(f"    (ojo: la publicada pesa {len(cuerpo)} y la local "
-              f"{len(marcador)}; hay cambios sin subir)")
+        print(f"    (ojo: la publicada tiene {len(alla)} caracteres y la local "
+              f"{len(aqui)}; hay cambios sin subir)")
         return True
     print(f"    {URL_HTML} -> {estado}, {len(cuerpo)} bytes, igual a la local")
     return True
