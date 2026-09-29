@@ -357,6 +357,10 @@ def test_el_croquis_publicado_no_edita_nada() -> bool:
     Una página suelta en GitHub Pages no puede escribir en el repositorio de
     todas formas, pero eso es una garantía de la plataforma. Esto comprueba
     que además el archivo no lleve la puerta puesta.
+
+    Y de paso vigila los enlaces de salida, que son lo único que puede apuntar
+    fuera: no pueden ser javascript: y, si abren en pestaña nueva, tienen que
+    llevar rel="noopener" o la página de destino puede manipular esta.
     """
     texto = _sin_comentarios(CROQUIS.read_text(encoding="utf-8"))
 
@@ -380,9 +384,29 @@ def test_el_croquis_publicado_no_edita_nada() -> bool:
             print(f"    (el croquis publicado usa {escritura})")
             return False
 
-    # Los unicos recursos externos que puede pedir son la imagen del mapa.
-    recursos = re.findall(r'(?:href|src)="([^"]+)"', texto)
-    ajenos = [r for r in recursos if r.startswith(("http://", "https://", "//"))]
+    # Los enlaces de salida. Un <a href> no carga nada por si solo: solo
+    # navega cuando alguien lo pulsa, asi que puede apuntar a donde haga
+    # falta. Lo que no puede es ser un javascript: ni abrirse en pestana
+    # nueva sin noopener.
+    enlaces = re.findall(r"<a\b([^>]*)>", texto)
+    for atributos in enlaces:
+        href = re.search(r'href="([^"]*)"', atributos)
+        if not href or href.group(1).startswith(("javascript:", "data:", "vbscript:")):
+            print("    (hay un <a> sin href o con un esquema peligroso: "
+                  f"{atributos.strip()[:60]})")
+            return False
+        if 'target="_blank"' in atributos and "noopener" not in atributos:
+            print(f"    (el enlace a {href.group(1)} abre en pestana nueva sin "
+                  "rel=\"noopener\")")
+            return False
+
+    # Lo que se CARGA solo si tiene que ser de casa: el croquis tiene que
+    # verse sin depender de nadie, ni aunque no haya internet mas alla del
+    # propio archivo. Se quitan antes los <a> para no confundirlos con
+    # recursos: un enlace no se carga.
+    sin_enlaces = re.sub(r"<a\b[^>]*>", " ", texto)
+    cargados = re.findall(r'(?:src|href)="([^"]+)"', sin_enlaces)
+    ajenos = [r for r in cargados if r.startswith(("http://", "https://", "//"))]
     if ajenos:
         print(f"    (el croquis publicado carga recursos de fuera: {', '.join(ajenos)})")
         return False

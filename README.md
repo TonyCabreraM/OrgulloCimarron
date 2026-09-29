@@ -310,6 +310,7 @@ se hizo en Illustrator, no un dibujo generado por código.
 | --- | --- |
 | Tocar una zona | Zoom hacia ella y la ficha muestra su nombre y su descripción |
 | Tocar un acceso rápido del panel | Lo mismo, sin tener que acertarle a la zona en el mapa |
+| Tocar el botón del programa | Abre, en otra pestaña, el programa alojado en el ownCloud de la UABC |
 | Tocar en cualquier parte | Vuelve a la vista general |
 
 **Al tocar solo se hace zoom.** Las zonas son polígonos transparentes: existen
@@ -321,24 +322,33 @@ diseño de Illustrator ya se lee solo y cualquier adorno encima lo ensucia.
 fondo, y eso casi nunca ocurría: al ampliar, la zona ocupa casi toda la
 pantalla y no queda fondo donde pulsar.
 
-### Las 11 zonas
+### Las zonas
 
-| Zona | Qué es |
-| --- | --- |
-| Teatro al aire libre | El foro del evento |
-| Estacionamiento poniente | El más grande, sobre Av. Reforma |
-| Estacionamiento oriente | Sobre Av. Sebastián Lerdo de Tejada |
-| Zona recreativa | Descanso, en el paseo central |
-| Estacionamiento invitado | Reservado para invitados |
-| Rectoría · Exposición CGECDC | La exposición, dentro del edificio |
-| Estacionamiento Norte 2 | Acceso por Calle Julián Carrillo |
-| Stands de Unidades Académicas | Stands de las facultades |
-| Estacionamiento Sur 2 | El más cercano a los stands |
-| Stands de alimentos y bebidas | Puestos de comida y bebida |
-| Entradas, escenario y servicios | Baños, primeros auxilios, escenario y las dos entradas |
+Las zonas y sus textos los define `ZONAS` en el propio `croquis.html`, y se
+editan con el editor. La lista no se copia aquí a propósito: cambia cada vez
+que se ajusta el mapa, y una copia acabaría mintiendo. El archivo es la única
+fuente.
 
-Calles del perímetro: Calle Guillermo Prieto (norte), Av. Reforma (poniente),
+Las calles del perímetro sí se pueden anotar, porque vienen del dibujo y no
+cambian: Calle Guillermo Prieto (norte), Av. Reforma (poniente),
 Av. Sebastián Lerdo de Tejada (oriente) y Calle Julián Carrillo (sur).
+
+### El botón del programa
+
+Debajo de los accesos rápidos hay un botón que **sale del mapa**: el programa
+del evento, alojado en el ownCloud de la UABC. Va aparte y con un filo que lo
+separa de los chips porque es otra cosa: los chips llevan a una zona del mapa,
+este lleva a otro sitio.
+
+Abre en pestaña nueva para que la persona no pierda el mapa, y lleva el icono
+de salir a otro sitio porque, sin esa pista, que el mapa no cambie al pulsar
+desconcierta.
+
+Es una etiqueta `<a>` escrita a mano en el HTML, no una zona ni un icono: el
+editor no la toca. La prueba `el croquis publicado no edita nada` vigila que
+los enlaces de salida no sean `javascript:` y que, si abren en pestaña nueva,
+lleven `rel="noopener"`. Sin ese atributo, la página de destino puede
+manipular la del mapa.
 
 ### El arte viene de Illustrator
 

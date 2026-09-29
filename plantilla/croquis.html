@@ -17,6 +17,7 @@
 :root{
   --papel:#f3f9ee; --fondo:#dfeada; --tinta:#0a4842; --pasto:#179e68;
   --lima:#80c458; --crema:#d6edce; --texto:#0d3b34; --tenue:#4d6d64; --borde:#b8d4bb;
+  --verde:#00723f;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;overflow:hidden}
@@ -95,12 +96,49 @@ body{
 .chip:hover{border-color:#8fbf9a}
 .chip.act{border-color:var(--tinta);background:var(--tinta);color:#fff}
 
+/* Debajo de los accesos rapidos va el enlace de fuera: el programa del
+   evento, que vive en el ownCloud de la UABC. Es otra cosa que los chips de
+   arriba (aquellos llevan a una zona del mapa; este sale del mapa), asi que
+   va separado con un filo y con un boton lleno del verde institucional, que
+   no se confunde con el chip activo.
+
+   Lleva el icono de salir a otro sitio porque abre en pestana nueva: sin esa
+   pista, que el mapa no cambie al pulsar desconcierta. */
+#enlaces{display:flex;flex-wrap:wrap;gap:8px;padding-top:13px;
+         border-top:1px solid var(--borde)}
+.enlace{display:inline-flex;align-items:center;gap:9px;padding:12px 18px;
+        border-radius:99px;background:var(--verde);color:#fff;
+        text-decoration:none;font:700 12.5px/1 system-ui,sans-serif;
+        white-space:nowrap;pointer-events:auto;
+        transition:background .25s ease,box-shadow .25s ease}
+.enlace:hover{background:#005c33;box-shadow:0 6px 18px #00723f4d}
+.enlace:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+.enlace svg{width:14px;height:14px;flex:none;opacity:.85}
+
 /* En pantalla ancha el panel pasa a lateral: una barra inferior desperdicia
-   el ancho sobrante y deja el mapa chico y centrado. */
+   el ancho sobrante y deja el mapa chico y centrado.
+
+   Va anclado de arriba a abajo en vez de centrado con translateY. Centrado
+   funcionaba con las seis filas de chips de antes, pero un movil acostado
+   tiene unos 360 px de alto: en cuanto el panel crece un poco se sale por
+   los dos lados, y lo primero que se pierde es el boton del programa, que va
+   al final. Anclado y con scroll propio, siempre se alcanza.
+
+   Aqui si puede recibir el toque (en vertical no, para no comerse el mapa):
+   el encuadre deja el mapa a la derecha del panel, asi que debajo no hay
+   mapa que se pierda y en cambio hace falta para poder desplazar la lista.
+
+   La barra de desplazamiento va oculta, como la de los chips: es un menu,
+   no un documento, y el filo gris al lado del mapa afea. El desplazamiento
+   sigue funcionando. */
 @media (min-width:760px) and (orientation:landscape){
-  #ficha{left:22px;right:auto;top:50%;bottom:auto;width:330px;
-         transform:translateY(-50%);padding:20px;border-radius:20px}
+  #ficha{left:22px;right:auto;top:14px;bottom:14px;width:330px;
+         transform:none;overflow-y:auto;pointer-events:auto;
+         padding:20px;border-radius:20px;scrollbar-width:none}
+  #ficha::-webkit-scrollbar{display:none}
   #chips{flex-wrap:wrap;overflow:visible}
+  #enlaces{margin-top:auto}
+  #enlaces .enlace{flex:1;justify-content:center}
 }
 </style>
 </head>
@@ -133,6 +171,15 @@ body{
     <span id="pista">Toca una zona para acercarla</span></div>
   </div>
   <div id="chips"></div>
+  <div id="enlaces">
+    <a class="enlace" href="https://owncloud.rec.uabc.mx/index.php/s/AWUxeuZCv9XdTPI"
+       target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 3.5h6.5V10"/><path d="M20.5 3.5 11 13"/>
+        <path d="M18 14.5v5A1.5 1.5 0 0 1 16.5 21h-12A1.5 1.5 0 0 1 3 19.5v-12A1.5 1.5 0 0 1 4.5 6h5"/>
+      </svg>Programa del evento</a>
+  </div>
 </footer>
 
 <script>
