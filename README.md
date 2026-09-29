@@ -1,8 +1,8 @@
-# Orgullo Cimarrón — QR que abre el croquis del campus
+# Orgullo Cimarrón — QR que abre el mapa del evento
 
-Un código QR que, al escanearlo con cualquier dispositivo, abre un croquis
-interactivo del campus Mexicali de la UABC. Tocar un edificio lo amplía y
-muestra su ficha.
+Un código QR que, al escanearlo con cualquier dispositivo, abre el mapa
+interactivo de la Rectoría de la UABC en Mexicali para el **Día del Orgullo
+Cimarrón 2026**. Tocar una zona la amplía y muestra su ficha.
 
 El QR **no lleva el HTML dentro**: lleva la dirección del HTML, que ya está
 publicado en GitHub Pages.
@@ -256,139 +256,157 @@ Y `atributos sin comillas no se tragan` y `croquis con zonas coherentes` vigilan
 dos fallos que **no dan error en la consola** pero dejan el croquis en negro o
 vacío. Son la razón de que existan.
 
+`croquis con zonas coherentes` merece un párrafo aparte, porque cubre cinco
+cosas que se rompen calladas: que cada zona tenga sus cuatro campos, que su
+polígono tenga al menos 3 puntos y 20 pt² de área, que quepa dentro del mapa,
+que la descripción pase de 10 caracteres y que **ningún par de zonas se
+solape**. Lo último se comprueba con el teorema de los ejes separadores, no
+comparando cajas: dos bandas diagonales tienen cajas que se cruzan sin que los
+polígonos se toquen, y comparar cajas daba falsos positivos. También verifica
+que el `<image href>` apunte a un archivo que exista de verdad.
+
 > OpenCV no sirve para esta comprobación: su detector falla a partir de la
 > versión ~20 del QR, muy por debajo de lo que decodifica un teléfono.
 
 ## Estructura
 
 ```
+Mapa Dia del Orgullo Cimarron 2026 VERSION 2.ai   Arte original de Illustrator
 generar_qr.py      Generador: mide, empaqueta y dibuja el QR
 test_qr.py         Pruebas del ciclo completo
 d.html             Página base, solo para el modo servidor
 plantilla/
-  croquis.html     El croquis interactivo (este es el que se publica)
+  croquis.html     El mapa interactivo (este es el que se publica)
+  rectoria.webp    El arte, en ráster: 3400 x 2200 px, ~0.50 MB
   plantilla.html   Documento de ejemplo
-  planos/          Croquis oficiales descargados (referencia)
+  planos/          Croquis del campus descargados (referencia vieja)
 salida/            QR generado
 ```
 
-## El croquis de Mexicali
+## El croquis de la Rectoría
 
-`plantilla/croquis.html` es un croquis interactivo del campus Mexicali.
+`plantilla/croquis.html` es el mapa interactivo del evento **Día del Orgullo
+Cimarrón 2026**, en la Rectoría de la UABC en Mexicali. El arte es el mapa que
+se hizo en Illustrator, no un dibujo generado por código.
 
 | Acción | Resultado |
 | --- | --- |
-| Tocar un edificio | Zoom hacia él, se resalta en verde y la ficha muestra su nombre |
-| Tocar un acceso rápido del panel | Lo mismo, sin tener que acertarle al edificio en el mapa |
+| Tocar una zona | Zoom hacia ella y la ficha muestra su nombre y su descripción |
+| Tocar un acceso rápido del panel | Lo mismo, sin tener que acertarle a la zona en el mapa |
 | Tocar en cualquier parte | Vuelve a la vista general |
+
+**Al tocar solo se hace zoom.** Las zonas son polígonos transparentes: existen
+para recibir el toque, no para dibujar nada encima del arte. Un primer diseño
+oscurecía el resto del mapa y contorneaba la zona activa; se quitó porque el
+diseño de Illustrator ya se lee solo y cualquier adorno encima lo ensucia.
 
 **El zoom se deshace tocando en cualquier parte.** Antes sólo servía tocar el
 fondo, y eso casi nunca ocurría: al ampliar, la zona ocupa casi toda la
 pantalla y no queda fondo donde pulsar.
 
-### Cómo está armado
+### Las 11 zonas
 
-- **Colores**: verde y oro institucionales. El verde `#00723F` es el del
-  escudo y hace de color principal; el oro `#FEBE10` aparece solo en la marca
-  «UABC» sobre fondo oscuro, igual que en el escudo. El verde lima `#9FCE00`
-  corona la zona activa. Ver la sección del color, con las fuentes.
-- **El encuadre se calcula en JavaScript**, no se deja al `viewBox`. El mapa se
+| Zona | Qué es |
+| --- | --- |
+| Teatro al aire libre | El foro del evento |
+| Estacionamiento poniente | El más grande, sobre Av. Reforma |
+| Estacionamiento oriente | Sobre Av. Sebastián Lerdo de Tejada |
+| Zona recreativa | Descanso, en el paseo central |
+| Estacionamiento invitado | Reservado para invitados |
+| Rectoría · Exposición CGECDC | La exposición, dentro del edificio |
+| Estacionamiento Norte 2 | Acceso por Calle Julián Carrillo |
+| Stands de Unidades Académicas | Stands de las facultades |
+| Estacionamiento Sur 2 | El más cercano a los stands |
+| Stands de alimentos y bebidas | Puestos de comida y bebida |
+| Entradas, escenario y servicios | Baños, primeros auxilios, escenario y las dos entradas |
+
+Calles del perímetro: Calle Guillermo Prieto (norte), Av. Reforma (poniente),
+Av. Sebastián Lerdo de Tejada (oriente) y Calle Julián Carrillo (sur).
+
+### El arte viene de Illustrator
+
+El original es `Mapa Dia del Orgullo Cimarron 2026 VERSION 2.ai`, en la raíz
+del repo. Un `.ai` de Illustrator es un PDF por dentro, así que se abre con
+PyMuPDF y se convierte a ráster:
+
+| | |
+| --- | --- |
+| Tamaño de página | 1224 × 792 pt (432 × 279 mm), una sola página |
+| Dibujos vectoriales | 142 443, unos 1 037 150 segmentos |
+| Ráster que se publica | `plantilla/rectoria.webp`, 3400 × 2200 px, ~0.50 MB |
+
+**Por qué un WebP y no el SVG.** Exportar el `.ai` a SVG da ~45 MB: el 73% del
+archivo es la textura de pasto, repetida en miles de trazados diminutos.
+Ningún teléfono va a bajar eso al escanear un QR. El WebP conserva el dibujo a
+resolución de sobra (3400 px de ancho para una pantalla de 400) y pesa 90
+veces menos.
+
+**El texto del mapa son contornos, no texto.** Al convertir las tipografías,
+los rótulos dejaron de ser texto extraíble: la única cadena legible en el PDF
+es «Zona recreativa». Por eso los nombres de las zonas viven en `croquis.html`
+y no se pueden leer del `.ai`.
+
+### Cómo está armado el HTML
+
+El mapa se dibuja con un `<image>` dentro de un `<svg viewBox="0 0 1224 792">`,
+en el mismo sistema de coordenadas que el archivo de Illustrator. Así los
+números de `ZONAS` se leen directamente sobre el `.ai`.
+
+```javascript
+var ZONAS = [
+  ["Rectoría · Exposición CGECDC", "Rectoría",
+   [[540,330],[788,330],[788,582],[540,582]],
+   "La exposición del CGECDC, en el edificio de Rectoría."],
+  …
+];
+```
+
+Cada zona es `[nombre, nombre corto, polígono, descripción]`. La caja que se
+encuadra al ampliar **no se guarda**: se calcula del polígono con `caja()`.
+Tener las dos cosas era pedir que se desincronizaran, y de hecho pasó — al
+ajustar los polígonos las cajas se quedaron viejas y el zoom dejaba parte de
+la zona fuera de cuadro.
+
+- **Las bandas diagonales van como cuadriláteros**, no como rectángulos. Los
+  estacionamientos y las hileras de stands están inclinados en el dibujo; un
+  rectángulo normal que los cubriera incluiría medio prado al lado.
+- **Dos zonas no pueden solaparse.** Al tocar caería la de encima y la otra
+  quedaría inalcanzable justo ahí. Hay una prueba que lo comprueba con el
+  teorema de los ejes separadores, y otra que verifica que todas quepan en el
+  mapa.
+- **El encuadre se calcula en JavaScript**, no se deja al `viewBox`: el mapa se
   centra y se amplía dentro del hueco libre que dejan el encabezado y el panel,
   midiéndolos con `getBoundingClientRect()`. Dejar el encuadre al `viewBox`
-  hacía que el mapa quedara pequeño y que la ficha tapara los edificios del
-  borde inferior.
+  hacía que el mapa quedara pequeño y que el panel tapara las zonas del borde.
 - **El zoom es un `transform` CSS** sobre el `<g>` interior con una
   `transition`, no un bucle que anima el `viewBox`: el navegador lo interpola
   solo y no hay JavaScript por fotograma.
 - **El panel es barra inferior en vertical y lateral en apaisado**
-  (`@media (min-width:740px) and (orientation:landscape)`). En pantalla ancha
+  (`@media (min-width:760px) and (orientation:landscape)`). En pantalla ancha
   una barra inferior desperdicia el ancho y deja el mapa chico y centrado.
-- **Accesos rápidos**: la fila de botones del panel. En un móvil el mapa queda
-  pequeño y tocar un edificio concreto es difícil, así que además de informar
-  el panel sirve para navegar.
+- **Accesos rápidos**: los botones del panel. El mapa es apaisado y en un móvil
+  vertical queda chico, así que tocar una banda diagonal con el dedo es difícil;
+  el panel sirve para navegar además de para informar.
 
-> **El croquis ya no cabe dentro del QR.** Con este diseño pesa unos 12 KB, y
-> en los modos que embeben el documento (`servidor` y `sin-servidor`) el QR más
-> grande solo admite ~2950 bytes de URL. Por eso el modo por defecto es
-> `enlace`, que lleva únicamente la dirección del HTML. La prueba
-> `QR actual decodificable` usa `plantilla/plantilla.html` para verificar el
-> mecanismo, no este documento.
+> **El croquis no cabe dentro del QR.** Pesa unos 12 KB más 0.50 MB de imagen,
+> y los modos que embeben el documento (`servidor` y `sin-servidor`) admiten
+> ~2950 bytes de URL. Por eso el modo por defecto es `enlace`, que lleva
+> únicamente la dirección del HTML. La prueba `QR actual decodificable` usa
+> `plantilla/plantilla.html` para verificar el mecanismo, no este documento.
 
-La geometría está trazada sobre el croquis oficial **"Mapa: Ubicación de
-Edificios"** de la UABC (3 páginas, el mismo que reparten en automotores). Las
-referencias originales quedaron en `plantilla/planos/`.
+### Al reemplazar el mapa por una versión nueva
 
-Nomenclatura del plano oficial, para cuando llegue el diseño de Illustrator:
+Se sustituyen dos cosas y nada más:
 
-| Zona | Edificio | | Zona | Edificio |
-| --- | --- | --- | --- | --- |
-| A | Fac. de Ingeniería | | E, E1 | Fac. de Arq. y Diseño |
-| B | Anexo Centro de Evaluación | | F | Centro de Evaluación |
-| 1, 2, 3, 4 | Fac. de Derecho | | I | Fac. de Idiomas |
-| H | Fac. de Deportes | | J | Fac. de Pedagogía |
-| L | Fac. de Ciencias Sociales y Políticas | | K | Fac. de Ciencias Administrativas |
+1. `plantilla/rectoria.webp` — el ráster nuevo, siempre a 1224 × 792 de
+   proporción (si cambia el tamaño de página, hay que cambiar el `viewBox`).
+2. Los polígonos de `ZONAS` — las coordenadas en puntos, leídas sobre el `.ai`.
 
-Estas son las 6 zonas que hay ahora en el croquis:
-
-| Sigla | Edificio | ¿Viene del plano? |
-| --- | --- | --- |
-| A | Fac. de Ingeniería | Sí |
-| 1-4 | Fac. de Derecho | Sí, las 4 aulas del mismo bloque, agrupadas en una zona |
-| E | Fac. de Arq. y Diseño | Sí |
-| V | Investigación y Posgrado | Octogonal; el plano lo llama "Posgrado Vicerrectoría" y el técnico "Investigación y Posgrado" |
-| T | Teatro | Rotulado en el mapa, no en la leyenda |
-| BIB | Biblioteca | Rotulado en el mapa |
-
-> **La Rectoria no está en este croquis, y no es un olvido.** El edificio de
-> Rectoría de la UABC es el antiguo Palacio de Gobierno, en la Colonia Nueva,
-> entre las avdas. Leyes de la Reforma y Sebastián Lerdo de Tejada. Está a unas
-> calles del campus de Blvd. Benito Juárez 2500, no dentro. Se declaró
-> Patrimonio Cultural de Baja California en 2022.
-
-Calles del perímetro: Av. López Rayón (norte), Blvd. Benito Juárez (poniente),
-Río Churubusco (oriente), Calle de la Normal (sur), Av. José A. Torres,
-Av. Monclova, Río Mocrorito, Blvd. Río Nuevo.
-
-Dirección del campus: Blvd. Benito Juárez 2500, Parcela 44, 21280 Mexicali, B.C.
-
-### Por qué no están todos los edificios
-
-Sacar del croquis lo que sí está en el plano oficial es una decisión de
-legibilidad, no un olvido:
-
-| Fuera | Motivo |
-| --- | --- |
-| Zonas B, F, E1 | Centro de Evaluación y su anexo: 3 edificios pequeños, poco uso en el croquis |
-| Rótulos de las calles | Con 6 edificios, llenar el mapa de texto lo ensucia más de lo que ayuda |
-| Páginas 2 y 3 del plano | Son otro sector del campus (Pedagogía, Deportes, FCA) |
-
-Hasta el rediseño esto era además una restricción de bytes: el documento viajaba
-dentro del QR y no cabía nada más. Con el modo `enlace` esa restricción
-desapareció, así que ahora el límite es sólo lo que se entienda bien mirando.
-
-Para reincorporarlos, basta con añadir la entrada a `Z`, el nombre largo a `D`
-y el corto a `C`. `plantilla/planos/` tiene las tres páginas del plano oficial
-para consultar las coordenadas.
-
-### Al sustituir el SVG de Illustrator
-
-El mapa se dibuja con JavaScript a partir de un array:
-
-```javascript
-var Z=[["A",654,599,115,106],["1-4",311,332,131,131],…];  // sigla x y ancho alto
-```
-
-`Z[i]` da `[sigla, x, y, ancho, alto]`. Con el SVG definitivo se reemplazan
-esas cajas y nada más: el zoom, el encuadre y la ficha se calculan solos. De
-las otras dos listas, `D` lleva el nombre que sale en la ficha y `C` el corto
-de los accesos rápidos; **las tres tienen que medir lo mismo**, y hay una
-prueba que lo comprueba porque un desajuste deja un botón sin texto.
-
-El zoom es un `transform` CSS sobre el `<g>` interior, no un `viewBox` animado:
-así el navegador interpola solo y no hace falta ningún bucle de JavaScript.
-Con `transform-box:view-box;transform-origin:0 0`, un `translate` en unidades
-CSS equivale a unidades del dibujo, y `getScreenCTM()` del `<svg>` (que nunca se
-transforma) dice cuántos píxeles mide una unidad.
+El zoom, el encuadre y la ficha se calculan solos. La prueba
+`croquis con zonas coherentes` revisa que cada zona tenga los cuatro campos,
+que quepa en el mapa, que su polígono tenga al menos 3 puntos y 20 pt² de
+área, que la descripción pase de 10 caracteres, que ningún par de zonas se
+solape y que el `<image href>` apunte a un archivo que exista.
 
 ## Nota sobre el minificador
 
@@ -408,8 +426,8 @@ croquis o la página base:
   genera con `-` y `_`, el decodificador los traduce a `+` y `/` antes de
   llamar a `atob`. Sin eso: `InvalidCharacterError`.
 - **En SVG, `el.className = "x"` no hace nada**: es un `SVGAnimatedString` de
-  solo lectura. Hay que usar `setAttribute("class", …)`, o el resaltado de la
-  zona activa nunca se aplica.
+  solo lectura. Hay que usar `setAttribute("class", …)` o `classList`, o la
+  clase nunca se aplica y el elemento no cambia de aspecto.
 - **Un `<svg>` sin `viewBox` no escala**: dibuja 1 unidad por píxel y se
   recorta. El `viewBox` va en el marcado, no sólo en el zoom por JavaScript.
 - **Cambiar sólo el `#` no recarga el documento.** Por eso la página base
@@ -434,8 +452,9 @@ croquis o la página base:
   y todas las coordenadas salen `NaN`. Tampoco falla la consola. Por eso las
   zonas van en un **array literal**, que no tiene esa trampa.
 - **`elemento.children` incluye los elementos del fondo.** Si el fondo y las
-  zonas comparten `<g>`, los índices quedan desplazados y el resaltado se
-  aplica al elemento equivocado. Hay que seleccionar solo las zonas.
+  zonas comparten `<g>`, los índices quedan desplazados y el toque activa la
+  zona equivocada. Por eso el código busca con `querySelectorAll(".g")`, que
+  selecciona solo las zonas, y no con `children`.
 - **Quitar comillas para ahorrar bytes es un arma de doble filo.** Ahorró 28
   bytes, pero provocó dos bugs silenciosos. Mide cada recorte.
 - **`getScreenCTM()` tiene dos escalas distintas:** `a` para el eje X y `d` para
@@ -446,3 +465,8 @@ croquis o la página base:
 - **En un zoom, "tocar el fondo para volver" casi nunca funciona**, porque la
   zona ampliada ocupa la pantalla entera. La condición correcta es mirar si ya
   hay una zona activa, no si el toque cayó en el fondo.
+- **`getBoundingClientRect()` durante una transición devuelve la posición
+  intermedia, no la final.** Medir justo después de disparar la animación da
+  números falsos: parece que las zonas se salen de la pantalla cuando en
+  realidad todavía van en camino. Hay que esperar a que la transición termine
+  (0.65s aquí) antes de medir.

@@ -198,64 +198,109 @@ def test_url_publicada_responde() -> bool:
 
 
 def test_croquis_zonas_coherentes() -> bool:
-    """El array de zonas y el de descripciones tienen la misma longitud.
+    """Cada zona del croquis está completa y cae dentro del mapa.
 
-    Si no coinciden, al tocar un edificio la ficha sale undefined. Y si el
-    array de zonas se define como texto con '+' y .split(), la precedencia
-    hace que Z sea una cadena: Z.length da el numero de caracteres, el
-    bucle dibuja un grupo por caracter y todas las coordenadas salen NaN
-    (el mapa sale vacio, sin error). Las dos cosas son silenciosas, asi que
-    se comprueban aqui.
+    Las zonas son filas de cuatro campos: nombre largo, nombre corto, el
+    polígono para el toque y la descripción. La caja que se encuadra al hacer
+    zoom NO se guarda: se calcula del polígono, porque tener las dos cosas a
+    mano garantiza que algún día se desincronicen.
+
+    Aquí se recalcula esa caja igual que lo hace la página y se comprueba que
+    quepa en el mapa. Si a una fila le falta un campo, la zona se rompe en
+    silencio: el botón sale sin texto o el zoom encuadra cualquier cosa.
     """
     texto = Path("plantilla/croquis.html").read_text(encoding="utf-8")
 
-    # Codicioso y con un solo ']': el array termina en ']]' (cierre de la ultima
-    # zona + cierre del array), y con ']]' en el patron se comeria el cierre de
-    # esa ultima zona y dejaria fuera la cuenta.
-    bloque_zonas = re.search(r"var Z=\[(.*)\],\s*\nD=", texto, flags=re.S)
-    if not bloque_zonas:
-        print("    (no se encuentra 'var Z=[[...]]' seguido de 'D=' en croquis.html)")
+    bloque = re.search(r"var ZONAS = \[(.*?)\n\];", texto, flags=re.S)
+    if not bloque:
+        print("    (no se encuentra 'var ZONAS = [...]' en croquis.html)")
         return False
-    interior = bloque_zonas.group(1)
+    interior = bloque.group(1)
 
-    # Z tiene que ser un array literal de arrays, no una cadena con split().
-    if ".split(" in interior:
-        print("    (Z se parte con split(): al concatenar textos con '+' solo se "
-              "aplicaria al ultimo trozo y Z volveria a ser una cadena)")
-        return False
-
-    zonas = re.findall(r"\[\s*[\"']?([\w-]+)[\"']?\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]", interior)
+    # Cada zona: ["nombre", "corto", [[x,y],...], "descripción"]
+    zonas = re.findall(
+        r'\[\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*(\[\[.*?\]\])\s*,\s*"([^"]+)"\s*\]',
+        interior, flags=re.S)
     if not zonas:
-        print("    (no se parses las zonas; se esperaba [[sigla,x,y,ancho,alto],...]")
+        print("    (no se pudo parsear ninguna zona)")
         return False
 
-    bloque_desc = re.search(r"D=\[(.*?)\]", texto, flags=re.S)
-    if not bloque_desc:
-        print("    (no se encuentra el array de descripciones D)")
-        return False
-    descripciones = re.findall(r"\"([^\"]*)\"", bloque_desc.group(1))
+    # El mapa mide 1224x792 pt, que es el viewBox del SVG.
+    ANCHO, ALTO = 1224, 792
+    problemas = []
+    for nombre, corto, poligono, desc in zonas:
+        puntos = [(int(a), int(b)) for a, b in
+                  re.findall(r"\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]", poligono)]
+        if len(puntos) < 3:
+            problemas.append(f"{corto}: el polígono tiene {len(puntos)} puntos, hacen falta 3")
+            continue
 
-    if len(zonas) != len(descripciones):
-        print(f"    (hay {len(zonas)} zonas pero {len(descripciones)} descripciones)")
+        xs = [p[0] for p in puntos]
+        ys = [p[1] for p in puntos]
+        if min(xs) < 0 or min(ys) < 0 or max(xs) > ANCHO or max(ys) > ALTO:
+            problemas.append(f"{corto}: el polígono se sale del mapa {ANCHO}x{ALTO}")
+
+        # La misma cuenta que hace caja() en la página.
+        ancho, alto = max(xs) - min(xs), max(ys) - min(ys)
+        if ancho < 20 or alto < 20:
+            problemas.append(f"{corto}: la zona es muy pequeña para tocarla "
+                             f"({ancho}x{alto} pt)")
+        if len(desc) < 10:
+            problemas.append(f"{corto}: la descripción es demasiado corta")
+
+    # Dos zonas no pueden solaparse: al tocar caeria la que esté encima y la
+    # otra quedaría inalcanzable justo ahí.
+    #
+    # Se comparan los POLÍGONOS, no sus cajas. Las bandas diagonales tienen
+    # cajas que se cruzan en las esquinas aunque las bandas no se toquen, así
+    # que comparar cajas daba medio reporte de falsos positivos.
+    #
+    # El método es el de los ejes separadores: dos convexos se solapan si no
+    # existe ningún eje (normal a una arista de cualquiera de los dos) donde
+    # sus proyecciones queden separadas. Todas las zonas son convexas.
+    def proyectar(puntos: list, eje: tuple) -> tuple:
+        valores = [p[0] * eje[0] + p[1] * eje[1] for p in puntos]
+        return min(valores), max(valores)
+
+    def eje_separador(a: list, b: list) -> tuple | None:
+        for poli in (a, b):
+            for i in range(len(poli)):
+                p1, p2 = poli[i], poli[(i + 1) % len(poli)]
+                dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+                largo = (dx * dx + dy * dy) ** 0.5
+                if not largo:
+                    continue
+                eje = (-dy / largo, dx / largo)
+                amin, amax = proyectar(a, eje)
+                bmin, bmax = proyectar(b, eje)
+                if amax < bmin or bmax < amin:
+                    return eje
+        return None
+
+    poligonos = [[(int(x), int(y)) for x, y in re.findall(
+        r"\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]", z[2])] for z in zonas]
+    for a in range(len(zonas)):
+        for b in range(a + 1, len(zonas)):
+            if eje_separador(poligonos[a], poligonos[b]) is None:
+                problemas.append(
+                    f"{zonas[a][1]} y {zonas[b][1]} se solapan: una tapa a la otra")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
         return False
 
-    # Los accesos rapidos del panel salen de C. Si no mide lo mismo que Z, el
-    # boton de esa zona sale sin nombre.
-    bloque_corto = re.search(r"C=\[(.*?)\]", texto, flags=re.S)
-    if not bloque_corto:
-        print("    (no se encuentra el array de nombres cortos C)")
+    # El mapa es un archivo aparte: si no está junto al HTML, la página sale
+    # con el fondo vacío y ni un error en consola.
+    mapa = re.search(r'<image[^>]+href="([^"]+)"', texto)
+    if not mapa:
+        print("    (no se encuentra el <image> con el mapa de fondo)")
         return False
-    cortos = re.findall(r"\"([^\"]*)\"", bloque_corto.group(1))
-    if len(cortos) != len(zonas):
-        print(f"    (hay {len(zonas)} zonas pero {len(cortos)} nombres cortos)")
+    ruta_mapa = Path("plantilla") / mapa.group(1)
+    if not ruta_mapa.is_file():
+        print(f"    (el mapa {ruta_mapa} no existe junto al HTML)")
         return False
-
-    # Ninguna coordenada puede ser cero o negativa: siempre es un fallo.
-    for sigla, x, y, w, alto in zonas:
-        if min(int(x), int(y), int(w), int(alto)) <= 0:
-            print(f"    (zona {sigla} con coordenada no positiva: {x},{y},{w},{alto})")
-            return False
-    print(f"    {len(zonas)} zonas coherentes: {' '.join(z[0] for z in zonas)}")
+    print(f"    {len(zonas)} zonas coherentes, mapa de {ruta_mapa.stat().st_size // 1024} KB")
     return True
 
 
