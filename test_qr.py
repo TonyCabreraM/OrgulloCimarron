@@ -33,6 +33,8 @@ from generar_qr import URL_HTML
 sys.path.insert(0, str(Path(__file__).resolve().parent / "editor"))
 import editor  # noqa: E402  (el servidor del editor)
 import validar as v  # noqa: E402  (las reglas, compartidas con el editor)
+import vector as vec  # noqa: E402  (los iconos en SVG)
+from validar import MAX_ICONO, MAX_VECTOR  # noqa: E402
 
 NIVELES = {"L": ERROR_CORRECT_L, "M": ERROR_CORRECT_M, "H": ERROR_CORRECT_H}
 
@@ -993,12 +995,15 @@ def test_los_ajustes_del_icono_propio_viajan() -> bool:
             datos_url = ("data:image/png;base64,"
                          + base64.b64encode(buf.getvalue()).decode("ascii"))
 
-            nombre, datos, png = editor.preparar_icono(datos_url, "Extintor.png", set())
+            nombre, datos, contenido, extension, quitado = editor.preparar_icono(
+                datos_url, "Extintor.png", set())
             if nombre != "extintor-png":
                 problemas.append(f"el nombre salió «{nombre}» y se esperaba «extintor-png»")
+            if extension != "png":
+                problemas.append(f"un PNG se guardó con extensión «{extension}»")
 
             ajustes = {"s": 16, "a": "flota", "c": 0}
-            editor.guarda_en_biblioteca(nombre, png, ajustes)
+            editor.guarda_en_biblioteca(nombre, contenido, extension, ajustes)
 
             # 1. Vuelven al leerlo, que es lo que hace falta para recuperarlo.
             leido = editor.lee_de_biblioteca(nombre)
@@ -1030,6 +1035,36 @@ def test_los_ajustes_del_icono_propio_viajan() -> bool:
                 problemas.append("se pudo leer un icono ya borrado")
             except editor.ErrorEditor:
                 pass
+
+            # 6. Y un SVG por el mismo camino, para que las dos rutas acaben
+            #    en el mismo sitio y con las mismas reglas.
+            nombre_v, datos_v, contenido_v, ext_v, _ = editor.preparar_icono(
+                "data:image/svg+xml;base64,"
+                + base64.b64encode(_SVG_DE_PRUEBA).decode("ascii"),
+                "Escudo.svg", {nombre})
+            if ext_v != "svg":
+                problemas.append(f"un SVG se guardó con extensión «{ext_v}»")
+            if not datos_v.startswith("data:image/svg+xml;base64,"):
+                problemas.append(f"el SVG no volvió como data URL de SVG: {datos_v[:40]}")
+            editor.guarda_en_biblioteca(nombre_v, contenido_v, ext_v, {"s": 90})
+            leido_v = editor.lee_de_biblioteca(nombre_v)
+            if not leido_v["vector"]:
+                problemas.append("el SVG recuperado no se marcó como vector")
+            if leido_v["ajustes"].get("s") != 90:
+                problemas.append("el SVG perdió sus ajustes")
+            if not v.revisar_iconos([{"t": nombre_v, "x": 300, "y": 300}],
+                                    {nombre_v: datos_v}):
+                pass  # pasa por diseño: solo se comprueba que no reviente
+            else:
+                problemas.append("un icono con SVG no pasó las reglas")
+
+            # El borrado se lleva las dos extensiones si el mismo nombre las
+            # tuviera: borrar solo una dejaría el icono a medias.
+            (Path(carpeta) / f"{nombre_v}.png").write_bytes(b"x")
+            editor.borra_de_biblioteca(nombre_v)
+            sobra = [p.name for p in Path(carpeta).glob(f"{nombre_v}.*")]
+            if sobra:
+                problemas.append(f"borrar un SVG dejó sus hermanos: {sobra}")
         finally:
             editor.BIBLIOTECA = original
 
@@ -1037,7 +1072,114 @@ def test_los_ajustes_del_icono_propio_viajan() -> bool:
         print(f"    {p}")
     if problemas:
         return False
-    print("    los ajustes se guardan con la imagen, vuelven con ella y se borran con ella")
+    print("    los ajustes y el formato viajan con el icono, en PNG y en SVG")
+    return True
+
+
+# Un SVG pequeño para las pruebas: formas, un degradado, un `url(#interno)` que
+# tiene que sobrevivir, y la basura que tiene que desaparecer.
+_SVG_DE_PRUEBA = (
+    b'<?xml version="1.0" encoding="UTF-8"?>\n'
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">\n'
+    b'  <script>alert("fuera")</script>\n'
+    b'  <defs><linearGradient id="cuerpo">'
+    b'<stop offset="0" stop-color="#e63946"/>'
+    b'<stop offset="1" stop-color="#8d1f2a"/></linearGradient></defs>\n'
+    b'  <rect x="20" y="10" width="24" height="44" rx="4" fill="url(#cuerpo)"/>\n'
+    b'  <circle cx="32" cy="32" r="28" fill="none" stroke="#333" onclick="alert(1)"/>\n'
+    b'  <image href="https://malo.example/x.png" width="8" height="8"/>\n'
+    b'</svg>')
+
+
+def test_los_svg_se_limpian_y_no_se_pixelan() -> bool:
+    """Un SVG subido como icono se limpia, se guarda entero y no se reduce.
+
+    Un PNG se guarda a 160 px de lado, y los iconos del mapa se amplían hasta
+    cuatro veces con el zoom: estirado a 1700 px se ve pixelado. Un SVG son
+    órdenes de dibujar, así que se ve igual de nítido a cualquier tamaño. Por
+    eso NO se reduce: reducir un vector sería destruir justo lo que lo hace
+    bueno.
+
+    Y por eso mismo se limpia en vez de rechazarlo. Lo que se quita es lo que
+    un icono no puede llevar —scripts, manejadores `on…`, referencias a otros
+    sitios— y nada más: los degradados, los filtros y los `url(#interno)`, que
+    son la mayoría de un dibujo de verdad, se quedan.
+
+    (Aunque el SVG se dibuje en un `<image>`, donde el navegador no ejecuta
+    nada, la limpieza se hace igual: el archivo puede acabar abriéndose solo,
+    y un SVG que viaja dentro de un documento ajeno no debería llevar según
+    qué.)
+    """
+    import tempfile
+
+    problemas: list[str] = []
+
+    # 1. Lo que se quita y lo que se queda.
+    limpio, quitado = vec.prepara(_SVG_DE_PRUEBA)
+    for etiqueta in ("script", "onclick", "malo.example"):
+        if etiqueta in limpio:
+            problemas.append(f"el SVG limpio todavía lleva «{etiqueta}»")
+    for etiqueta in ("url(#cuerpo)", "linearGradient", "rx="):
+        if etiqueta not in limpio:
+            problemas.append(f"la limpieza se llevó por delante «{etiqueta}»")
+    if not quitado:
+        problemas.append("no se quitó nada, y el SVG traía script, onclick y una image de fuera")
+    if b"<image" in _SVG_DE_PRUEBA and "<image" in limpio:
+        problemas.append("quedó un <image> sin su href, que no dibuja nada")
+    # Y sigue siendo un SVG de una sola pieza.
+    if not limpio.startswith("<svg") or not limpio.rstrip().endswith("</svg>"):
+        problemas.append(f"el SVG limpio no empieza y acaba donde debe: {limpio[:40]}")
+    if "\n" in limpio:
+        problemas.append("el SVG limpio quedó con saltos de línea: no se minificó")
+
+    # 2. Un vector NO se reduce: se guarda tal cual, así que no se pixela.
+    #    Se compara con lo que pesaría el mismo dibujo en PNG a 160 px.
+    with tempfile.TemporaryDirectory() as carpeta:
+        original = editor.BIBLIOTECA
+        editor.BIBLIOTECA = Path(carpeta)
+        try:
+            url = "data:image/svg+xml;base64," + base64.b64encode(
+                _SVG_DE_PRUEBA).decode("ascii")
+            nombre, datos, contenido, ext, _ = editor.preparar_icono(url, "Escudo.svg", set())
+            if ext != "svg":
+                problemas.append(f"un SVG acabó con extensión «{ext}»")
+            if contenido != limpio.encode("utf-8"):
+                problemas.append("lo que se guardó no es el SVG limpio")
+            # Y vale como icono del mapa, con las reglas de siempre.
+            problemas.extend(v.revisar_iconos(
+                [{"t": nombre, "x": 300, "y": 300, "s": 120}], {nombre: datos}))
+
+            # 3. Un SVG roto o sin con qué escalar se rechaza con un motivo.
+            for crudo, etiqueta, esperado in (
+                    (b'<svg xmlns="http://www.w3.org/2000/svg">x', "roto", "bien formado"),
+                    (b'<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
+                     "sin viewBox", "viewBox"),
+                    (b'<html><body>hola</body></html>', "que no es un SVG", "no un <svg>"),
+                    (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9">'
+                     b'<script>x</script></svg>', "que solo era un script", "nada")):
+                try:
+                    vec.prepara(crudo)
+                    problemas.append(f"aceptó un SVG {etiqueta}")
+                except vec.SvgInvalido as e:
+                    if esperado not in str(e):
+                        problemas.append(
+                            f"el SVG {etiqueta} se rechazó, pero el motivo no lo "
+                            f"explica: {str(e)[:60]}")
+
+            # 4. Y el tope de peso es el suyo, más alto que el de una imagen:
+            #    un vector pesado sigue siendo nítido y vale la pena.
+            if not (MAX_VECTOR > MAX_ICONO):
+                problemas.append(
+                    f"el tope del vector ({MAX_VECTOR}) no es mayor que el de "
+                    f"la imagen ({MAX_ICONO})")
+        finally:
+            editor.BIBLIOTECA = original
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el SVG se limpia, se guarda entero y no se reduce como una imagen")
     return True
 
 
@@ -1227,6 +1369,7 @@ def main() -> int:
         ("el círculo se puede quitar", test_el_circulo_se_puede_quitar),
         ("los modelos se guardan y se estampan", test_los_modelos_se_guardan_y_se_estamplan),
         ("los ajustes del icono propio viajan", test_los_ajustes_del_icono_propio_viajan),
+        ("los svg se limpian y no se pixelan", test_los_svg_se_limpian_y_no_se_pixelan),
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),

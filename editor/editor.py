@@ -80,6 +80,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     MAX_TAM_ICONO,
     MAX_TEXTO,
     MAX_TITULO,
+    MAX_VECTOR,
     MIN_ROT,
     MIN_TAM_ICONO,
     NOMBRE_PROPIO,
@@ -89,6 +90,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     revisar_ajustes,
     revisar_modelos,
 )
+import vector  # noqa: E402  (los iconos en SVG)
 
 HOSTS_LOCALES = {"127.0.0.1", "localhost", "::1", "[::1]"}
 
@@ -311,13 +313,26 @@ def _texto_propios(propios: dict) -> str:
 
 
 def preparar_icono(datos_url: str, nombre: str, ocupados: set,
-                   lado: int = LADO_ICONO) -> tuple[str, str]:
+                   lado: int = LADO_ICONO) -> tuple[str, str, bytes, str, list]:
     """Convierte una imagen subida en un icono listo para el croquis.
 
-    Se queda con lo que importa: la recorta a lo que no es transparente, la
-    encaja en un cuadro de lado x lado sin deformarla, la reduce a 160 px y la
-    guarda en PNG. Con el cuadro y el recorte, una imagen con margenes de
-    sobra ocupa el icono entero, y una foto alargada no sale aplastada.
+    Devuelve `(nombre, data URL, bytes para la biblioteca, extensión, quitado)`.
+
+    Hay dos caminos y no se parecen en nada:
+
+    - **Mapa de bits** (PNG, JPG, WebP, GIF, BMP): se recorta a lo que no es
+      transparente, se encaja en un cuadro de lado x lado sin deformarlo, se
+      reduce a 160 px y se guarda en PNG. Con el cuadro y el recorte, una
+      imagen con margenes de sobra ocupa el icono entero, y una foto alargada
+      no sale aplastada.
+
+    - **Vector** (SVG): no se toca el dibujo. Solo se limpia de lo que un icono
+      no necesita y se guarda tal cual. Reducir un SVG seria destruir
+      justamente lo que lo hace bueno: los iconos del mapa se amplian hasta
+      cuatro veces con el zoom, y un vector no se pixela.
+
+    `quitado` es la lista de lo que se le quito al SVG, para poder decirlo. En
+    un mapa de bits va vacia.
     """
     if not isinstance(datos_url, str):
         raise ErrorEditor("Falta la imagen.")
@@ -325,14 +340,18 @@ def preparar_icono(datos_url: str, nombre: str, ocupados: set,
                      datos_url, re.S | re.I)
     if not trozo:
         raise ErrorEditor(
-            "Eso no es una imagen. Sirven PNG, JPG, WebP, GIF y BMP "
-            "(los SVG no: al incrustarlos habria que confiar en su contenido).")
+            "Eso no es una imagen. Sirven PNG, JPG, WebP, GIF, BMP y SVG.")
     try:
         crudo = base64.b64decode(trozo.group(1), validate=False)
     except (ValueError, TypeError):
         raise ErrorEditor("La imagen viene mal codificada.") from None
     if len(crudo) > 12_000_000:
         raise ErrorEditor("La imagen pasa de 12 MB. Súbela más pequeña.")
+
+    # El SVG se reconoce por el contenido y no por la extension ni por el tipo
+    # que declara el navegador, que los dos mienten.
+    if vector.parece_svg(crudo):
+        return _preparar_vector(crudo, nombre, ocupados)
 
     try:
         from PIL import Image, ImageOps
@@ -349,7 +368,7 @@ def preparar_icono(datos_url: str, nombre: str, ocupados: set,
             imagen = ImageOps.exif_transpose(original).convert("RGBA")
     except Exception:
         raise ErrorEditor(
-            "No se pudo abrir la imagen. Prueba a guardarla como PNG o JPG.") from None
+            "No se pudo abrir la imagen. Prueba a guardarla como PNG, JPG o SVG.") from None
 
     # Fuera los margenes vacios: una imagen con mucho aire alrededor saldria
     # diminuta dentro del circulo.
@@ -369,28 +388,62 @@ def preparar_icono(datos_url: str, nombre: str, ocupados: set,
     if len(salida) > MAX_ICONO:
         raise ErrorEditor(
             f"La imagen queda en {len(salida) // 1024} KB y el tope son "
-            f"{MAX_ICONO // 1024} KB. Prueba con una más sencilla o más pequeña.")
+            f"{MAX_ICONO // 1024} KB. Prueba con una más sencilla o más pequeña, "
+            f"o súbela en SVG: un vector pesa poco y no se pixela.")
 
-    return _nombre_libre(nombre, ocupados), salida, png
+    return _nombre_libre(nombre, ocupados), salida, png, "png", []
 
 
-def guarda_en_biblioteca(nombre: str, png: bytes, ajustes: dict) -> None:
-    """Deja el PNG preparado en la biblioteca del editor, con sus ajustes.
+def _preparar_vector(crudo: bytes, nombre: str,
+                     ocupados: set) -> tuple[str, str, bytes, str, list]:
+    """El camino del SVG: limpiarlo y guardarlo tal cual, sin reducir."""
+    try:
+        limpio, quitado = vector.prepara(crudo)
+    except vector.SvgInvalido as e:
+        raise ErrorEditor(str(e)) from None
 
-    Se guarda el PNG ya recortado y reducido, no la imagen que subio el
-    usuario: asi volver a poner el icono es instantaneo y no hay que repetir
-    el trabajo. Vive fuera de git, como el respaldo: el croquis ya lleva
-    dentro las imagenes que usa, y esto es solo la despensa.
+    salida = vector.a_data_url(limpio)
+    if len(salida) > MAX_VECTOR:
+        raise ErrorEditor(
+            f"El SVG queda en {len(salida) // 1024} KB y el tope son "
+            f"{MAX_VECTOR // 1024} KB. Súbelo más simple.")
 
-    Los ajustes van en un JSON al lado del PNG. Son el tamano, la animacion y
-    el circulo con los que se configuro la imagen al subirla: lo que hace que
-    al volver a poner ese icono salga como se dejo, y no con los valores de
-    fabrica.
+    return _nombre_libre(nombre, ocupados), salida, limpio.encode("utf-8"), "svg", quitado
+
+
+def guarda_en_biblioteca(nombre: str, contenido: bytes, extension: str,
+                         ajustes: dict) -> None:
+    """Deja el icono preparado en la biblioteca del editor, con sus ajustes.
+
+    Se guarda el archivo ya preparado —el PNG recortado y reducido, o el SVG
+    limpiado—, no lo que subio el usuario: asi volver a poner el icono es
+    instantaneo y no hay que repetir el trabajo. Vive fuera de git, como el
+    respaldo: el croquis ya lleva dentro las imagenes que usa, y esto es solo
+    la despensa.
+
+    Los ajustes van en un JSON al lado. Son el tamano, la animacion y el
+    circulo con los que se configuro al subirlo: lo que hace que al volver a
+    poner ese icono salga como se dejo, y no con los valores de fabrica.
     """
     BIBLIOTECA.mkdir(exist_ok=True)
-    (BIBLIOTECA / f"{nombre}.png").write_bytes(png)
+    (BIBLIOTECA / f"{nombre}.{extension}").write_bytes(contenido)
     (BIBLIOTECA / f"{nombre}.json").write_text(
         json.dumps(ajustes, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+# Los archivos que puede tener un icono en la biblioteca. El PNG y el SVG son
+# el mismo icono en dos formatos distintos: si se sube uno encima del otro, el
+# nuevo reemplaza al viejo en vez de quedarse los dos.
+EXTENSIONES = ("png", "svg")
+
+
+def _archivo_de(nombre: str) -> Path | None:
+    """La ruta del icono en la biblioteca, busque donde busque. None si no esta."""
+    for ext in EXTENSIONES:
+        ruta = BIBLIOTECA / f"{nombre}.{ext}"
+        if ruta.is_file():
+            return ruta
+    return None
 
 
 def _ajustes_de(nombre: str) -> dict:
@@ -416,42 +469,59 @@ def lista_biblioteca(propios: dict) -> list[dict]:
     Los que ya estan no se listan: aparecen en la paleta, y ofrecerlos otra
     vez en dos sitios distintos solo confunde.
 
-    Cada uno lleva sus ajustes, para que la lista pueda decir con que se
-    configuro y al recuperarlo vuelvan.
+    Cada uno lleva sus ajustes y si es vector, para que la lista pueda decir
+    con que se configuro y al recuperarlo vuelvan.
     """
     if not BIBLIOTECA.is_dir():
         return []
     fuera = []
-    for ruta in sorted(BIBLIOTECA.glob("*.png")):
-        if ruta.stem in propios:
-            continue
-        fuera.append({"nombre": ruta.stem, "bytes": ruta.stat().st_size,
-                      "ajustes": _ajustes_de(ruta.stem)})
-    return fuera
+    for ext in EXTENSIONES:
+        for ruta in sorted(BIBLIOTECA.glob(f"*.{ext}")):
+            if ruta.stem in propios:
+                continue
+            # Un nombre puede tener el PNG y el SVG a la vez si se subieron
+            # los dos. Se enseña una vez, con el que se vaya a usar: el SVG,
+            # que se ve mejor a cualquier tamaño.
+            if any(o["nombre"] == ruta.stem for o in fuera):
+                continue
+            fuera.append({"nombre": ruta.stem, "bytes": ruta.stat().st_size,
+                          "vector": ext == "svg",
+                          "ajustes": _ajustes_de(ruta.stem)})
+    return sorted(fuera, key=lambda o: o["nombre"])
 
 
 def lee_de_biblioteca(nombre: str) -> dict:
     """Lo que hace falta para volver a poner un icono de la biblioteca."""
     if not NOMBRE_PROPIO.fullmatch(nombre or ""):
         raise ErrorEditor(f"«{nombre}» no es un nombre de icono valido.")
-    ruta = BIBLIOTECA / f"{nombre}.png"
-    if not ruta.is_file():
+    ruta = _archivo_de(nombre)
+    if ruta is None:
         raise ErrorEditor(f"En la biblioteca no hay ningun icono «{nombre}».")
     datos = ruta.read_bytes()
-    if len(datos) > MAX_ICONO:
+    es_vector = ruta.suffix.lower() == ".svg"
+    tope = MAX_VECTOR if es_vector else MAX_ICONO
+    # El data URL ocupa mas que el archivo, asi que se comprueba el data URL.
+    if es_vector:
+        url = vector.a_data_url(datos.decode("utf-8"))
+    else:
+        url = "data:image/png;base64," + base64.b64encode(datos).decode("ascii")
+    if len(url) > tope:
         raise ErrorEditor(
-            f"«{nombre}» pesa {len(datos) // 1024} KB y el tope son "
-            f"{MAX_ICONO // 1024} KB, asi que no cabe en el croquis.")
-    return {"datos": "data:image/png;base64," + base64.b64encode(datos).decode("ascii"),
-            "ajustes": _ajustes_de(nombre)}
+            f"«{nombre}» ocupa {len(url) // 1024} KB y el tope son "
+            f"{tope // 1024} KB, asi que no cabe en el croquis.")
+    return {"datos": url, "vector": es_vector, "ajustes": _ajustes_de(nombre)}
 
 
 def borra_de_biblioteca(nombre: str) -> None:
-    """Quita un icono de la biblioteca, con sus ajustes. No toca el croquis."""
+    """Quita un icono de la biblioteca, con sus ajustes. No toca el croquis.
+
+    Se llevan tanto el PNG como el SVG: si el mismo nombre tuviera los dos,
+    borrar solo uno dejaria el icono a medias.
+    """
     if not NOMBRE_PROPIO.fullmatch(nombre or ""):
         raise ErrorEditor(f"«{nombre}» no es un nombre de icono valido.")
-    for sufijo in (".png", ".json"):
-        ruta = BIBLIOTECA / f"{nombre}{sufijo}"
+    for ext in (*EXTENSIONES, "json"):
+        ruta = BIBLIOTECA / f"{nombre}.{ext}"
         if ruta.is_file():
             ruta.unlink()
 
@@ -758,6 +828,11 @@ class Manejador(BaseHTTPRequestHandler):
                 # dibuje como son y al ponerlos salgan ya configurados.
                 datos["ajustesPropios"] = {
                     n: _ajustes_de(n) for n in datos["propios"]}
+                # Y cuales son vectores: un SVG no se pixela al ampliarlo y un
+                # PNG si, y eso se ve en la paleta.
+                datos["vectores"] = {
+                    n: (_archivo_de(n) or Path("")).suffix.lower() == ".svg"
+                    for n in datos["propios"]}
                 datos["modelos"] = lee_modelos()
                 datos["git"] = estado_git()
                 datos["publicado"] = "https://tonycabreram.github.io/OrgulloCimarron/plantilla/croquis.html"
@@ -799,7 +874,7 @@ class Manejador(BaseHTTPRequestHandler):
                             "guardado": guardar_croquis(zonas, iconos, propios),
                             "git": estado_git()})
             elif ruta == "/api/icono":
-                nombre, imagen, png = preparar_icono(
+                nombre, imagen, contenido, extension, quitado = preparar_icono(
                     datos.get("datos"), str(datos.get("nombre") or ""),
                     set(SIMBOLOS) | set(datos.get("existentes") or []))
                 # Los ajustes se validan antes de guardar nada: unos ajustes
@@ -811,9 +886,10 @@ class Manejador(BaseHTTPRequestHandler):
                 # Se guarda en la biblioteca ademas de mandarlo: asi se puede
                 # volver a poner mas adelante sin buscar la imagen otra vez, y
                 # con los ajustes que se le pusieron.
-                guarda_en_biblioteca(nombre, png, ajustes)
+                guarda_en_biblioteca(nombre, contenido, extension, ajustes)
                 self._json({"ok": True, "nombre": nombre, "datos": imagen,
-                            "bytes": len(imagen), "ajustes": ajustes})
+                            "bytes": len(imagen), "ajustes": ajustes,
+                            "vector": extension == "svg", "quitado": quitado})
             elif ruta == "/api/biblioteca":
                 # Recuperar un icono guardado, o quitarlo de la despensa.
                 if datos.get("quitar"):

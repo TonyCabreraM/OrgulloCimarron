@@ -584,8 +584,11 @@ var PROPIOS = {
 **Van incrustadas como data URL y no en un archivo aparte** porque el croquis
 tiene que abrirse solo, sin pedirle nada a nadie: es lo que abre un QR escaneado
 en la calle, y hay una prueba que vigila que no cargue nada de fuera. El precio
-es que cada byte pesa dos veces, los datos y el texto base64, así que el editor
-las guarda pequeñas: **160 px de lado** y en PNG.
+es que cada byte pesa dos veces, los datos y el texto base64, así que las
+imágenes de mapa de bits se guardan pequeñas: **160 px de lado** y en PNG.
+
+Los SVG no tienen ese problema: no se reducen, se limpian y se guardan enteros
+(ver más abajo).
 
 Se dibujan recortadas en círculo, con un `clipPath` que vive en `<defs>`, para
 que se lean como iconos del mapa y no como fotos pegadas encima. Como el aro ya
@@ -596,14 +599,86 @@ Los topes de peso están en `editor/validar.py`: 64 KB por imagen y 800 KB entre
 todas. Con 160 px de lado no se llega ni de lejos, y los topes están para que un
 descuido no convierta la página del móvil en algo que tarda en abrir.
 
+#### Los SVG, que no se pixelan
+
+Un icono propio puede ser un **SVG**. La diferencia no es cosmética:
+
+| | PNG / JPG / WebP | SVG |
+| --- | --- | --- |
+| Cómo se guarda | recortado y reducido a **160 px** de lado | tal cual, solo limpiado y minificado |
+| Al ampliar | se estira y **se pixela** | se ve igual de nítido |
+| Un icono típico | ~13 KB | ~0.6 KB |
+
+Importa porque los iconos del mapa miden 24.4 unidades en un lienzo de 1224, y
+con el zoom se amplían hasta **cuatro veces**. Un PNG de 160 px estirado a 1700
+px se ve borroso; un SVG, perfecto. Y de paso pesa veinte veces menos, que en
+una página que abre un móvil escaneando un QR no es poco.
+
+Por eso al SVG **no se le hace lo mismo**: no se recorta (su `viewBox` ya dice
+cuáles son sus límites) y sobre todo **no se reduce**, porque reducir un vector
+sería destruir justo lo que lo hace bueno. Solo se limpia y se minifica.
+
+En la paleta y en los listados, los vectores llevan el fondo distinto y la
+palabra «vector», para saber cuál es cuál antes de poner uno en un sitio que se
+va a ver de cerca.
+
+#### Qué se le quita a un SVG
+
+Nada de lo que dibuja: las formas, los degradados, los filtros, las máscaras y
+el texto se quedan enteros. Se quitan las cuatro cosas que un icono no puede
+llevar:
+
+| Fuera | Por qué |
+| --- | --- |
+| `<script>` | Un icono no ejecuta código |
+| `<foreignObject>`, `<iframe>`, `<embed>`, `<object>` | Meten otro documento entero dentro |
+| Atributos `on…` (`onclick`, `onload`…) | Son manejadores de eventos |
+| `href` o `url(…)` que apunten a otro sitio | Traen cosas de fuera. Los `url(#degradado)` de dentro se quedan, que son la mayoría |
+
+Si a un `<image>` o un `<use>` se le quita su `href`, el elemento se va con él:
+sin su referencia no dibuja nada, y dejarlo sería un hueco que ocupa sitio en el
+archivo y no se ve.
+
+Cuando se quita algo, el editor lo dice al terminar. Casi siempre significa que
+el archivo venía de un sitio raro, y quien lo sube tiene que enterarse.
+
+> **Aunque el navegador no ejecutaría nada de todas formas.** El SVG se dibuja
+> con `<image href="data:image/svg+xml;…">`, que es contexto de imagen, como un
+> `<img src>`: ahí no corren los scripts, ni se cargan recursos de fuera, ni se
+> aplican hojas de estilo. Un `<script>` dentro del SVG, en ese contexto, es una
+> etiqueta ignorada. La limpieza se hace igual porque el archivo puede acabar
+> abriéndose solo —el data URL se puede copiar y pegar— y porque un SVG que
+> viaja dentro de un documento ajeno no debería llevar según qué. Es barato y no
+> depende de que el navegador cumpla.
+
+Un SVG que no se puede usar se rechaza con el motivo escrito, no con un error
+técnico. Los casos:
+
+- **No es XML bien formado** — no se dibujaría y el navegador no diría nada.
+- **Le falta el `viewBox`, o un ancho y un alto** — sin eso no se sabe qué
+  proporción tiene y el icono sale del tamaño que le apetezca al navegador.
+- **El dibujo de dentro no es un `<svg>`** — pasa cuando el archivo envuelve al
+  SVG de verdad; hay que abrir el de dentro.
+- **Solo llevaba cosas prohibidas** — al limpiarlo no quedó nada.
+- **Pasa del tope de peso** (120 KB, más que los 64 KB de una imagen): un
+  vector pesado sigue siendo nítido y vale la pena, pero un icono de 200 KB
+  suele ser un mapa o una foto convertida a trazados.
+
+También se tolera el `xlink:href` sin declarar `xmlns:xlink`. Un navegador lo
+acepta, pero un lector de XML estricto falla con «unbound prefix»: pasa con
+archivos exportados por programas que se saltan la declaración, y rechazarlos
+sería rechazar SVGs que en el navegador se ven perfectos. Se le añade la
+declaración en vez de quitarle el prefijo, que sería reescribir el dibujo.
+
 #### La biblioteca
 
-Cada imagen que se sube se guarda también en `editor/iconos/`, en PNG ya
-recortado y reducido, **junto a un JSON con sus ajustes**: el tamaño, la
-animación y si lleva círculo. Esa carpeta está fuera de git y es la despensa del
-editor: al quitar un icono propio del croquis, la imagen **no se pierde**, baja
-a la lista **Guardados** y se vuelve a poner con un clic, sin tener que buscarla
-otra vez en el disco y **con los mismos ajustes con los que se subió**.
+Cada imagen que se sube se guarda también en `editor/iconos/`, ya preparada
+—el PNG recortado y reducido, o el SVG limpiado— **junto a un JSON con sus
+ajustes**: el tamaño, la animación y si lleva círculo. Esa carpeta está fuera de
+git y es la despensa del editor: al quitar un icono propio del croquis, la
+imagen **no se pierde**, baja a la lista **Guardados** y se vuelve a poner con un
+clic, sin tener que buscarla otra vez en el disco y **con los mismos ajustes con
+los que se subió**.
 
 Cada fila de **Guardados** lleva una **×** para borrar la imagen de verdad. Es lo
 único del editor que borra algo que no se puede deshacer, así que pregunta
@@ -698,7 +773,7 @@ interfaz es un HTML suelto.
 | Ponerle información | Los campos de **Información que sale al pulsarlo**; si se dejan vacíos, el icono no se puede pulsar |
 | Guardar el icono entero | **Guardar como modelo** |
 | Poner varios iguales | Pulsar el modelo en **Modelos** y hacer clic en el mapa todas las veces que haga falta |
-| Crear un icono propio | **Subir una imagen…**: se abre el menú donde se elige tamaño, animación y círculo |
+| Crear un icono propio | **Subir una imagen…**: se abre el menú donde se elige tamaño, animación y círculo. Vale PNG, JPG, WebP, GIF, BMP o **SVG** |
 | Borrar iconos | Ver **Borrar iconos**, más arriba |
 | Deshacer un borrado | `Ctrl+Z` |
 | Volver a poner uno guardado | Pulsarlo en **Guardados** |

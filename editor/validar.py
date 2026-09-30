@@ -54,6 +54,12 @@ MAX_TAM_ICONO = 160
 MAX_ICONO = 64_000
 MAX_ICONOS_PROPIOS = 800_000
 
+# Un icono en SVG no se mide en pixeles sino en peso de texto. Y no se reduce
+# como una imagen: es vector, asi que se ve igual de nitido a cualquier
+# tamano. Por eso el tope es mas alto que el de un PNG: un SVG de 100 KB da
+# mejor resultado que 64 KB de mapa de bits, y aun asi cabe de sobra.
+MAX_VECTOR = 120_000
+
 # Los nombres de los iconos propios van tal cual dentro del HTML, asi que se
 # limitan a minusculas, numeros y guiones. Es lo mismo que hace el editor al
 # preparar la imagen, y evita que un nombre raro rompa el archivo.
@@ -107,6 +113,15 @@ CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "c", "i"}
 # que tarda en abrir, y en una ventana tampoco se lee.
 MAX_TITULO = 60
 MAX_TEXTO = 600
+
+# Los tipos de imagen que se admiten como icono propio.
+#
+# El SVG va aparte de los demas porque no se trata igual: no se reduce ni se
+# recorta, se limpia y se guarda tal cual. Es vector, asi que se ve nitido a
+# cualquier tamano y un icono ampliado no se pixela, que es justo lo que se
+# busca al subirlo en SVG.
+TIPOS_IMAGEN = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+TIPOS_VECTOR = (".svg",)
 
 MIN_LADOS = 3  # un poligono de verdad
 MIN_LADO_PT = 20  # mas chico que esto no se puede tocar con el dedo
@@ -551,10 +566,15 @@ def revisar_propios(propios) -> list[str]:
         if ";base64," not in datos:
             problemas.append(f"«{nombre}»: la imagen tiene que venir en base64")
             continue
-        if len(datos) > MAX_ICONO:
+        # Los vectores llevan su propio tope, mas alto: no se reducen como una
+        # imagen, asi que un SVG pesado sigue siendo nitido y vale la pena.
+        es_vector = datos.startswith("data:image/svg+xml")
+        tope = MAX_VECTOR if es_vector else MAX_ICONO
+        if len(datos) > tope:
             problemas.append(
-                f"«{nombre}»: la imagen pesa {len(datos) // 1024} KB y el tope "
-                f"son {MAX_ICONO // 1024} KB. Súbela más pequeña")
+                f"«{nombre}»: {'el SVG' if es_vector else 'la imagen'} ocupa "
+                f"{len(datos) // 1024} KB y el tope son {tope // 1024} KB. "
+                f"{'Simplifícalo' if es_vector else 'Súbela más pequeña'}")
             continue
         total += len(datos)
 

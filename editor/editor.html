@@ -135,6 +135,11 @@ select{
 /* Los iconos propios se distinguen de los de serie: si no, al ver la paleta no
    se sabe cuales viajan dentro del croquis y cuales son solo un tipo. */
 .palo.propio{border-style:dashed}
+/* Y los que son vectores llevan el fondo distinto: un SVG no se pixela al
+   ampliarlo y un PNG si, asi que conviene saber cual es cual antes de poner
+   uno en un sitio que se va a ver de cerca. */
+.palo.vector{background:#f2f8f5;border-color:#8fbf9a}
+.palo.vector:hover{background:#e8f4ec}
 .palo svg{width:26px;height:26px;flex:none}
 .palo span{font-size:9.5px;color:var(--tenue);text-align:center;line-height:1.15;
            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
@@ -447,7 +452,11 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       </div>
       <div class="fila" style="margin-top:10px">
         <button class="boton" id="btnImagen">Subir una imagen…</button>
-        <input type="file" id="archivo" accept="image/*" hidden>
+        <input type="file" id="archivo" accept="image/*,.svg" hidden>
+      </div>
+      <div class="pista">
+        PNG, JPG, WebP, GIF, BMP o <b>SVG</b>. El SVG no se pixela al
+        ampliarlo, así que es lo mejor para un logo.
       </div>
       <div id="listaPropios"></div>
       <div id="listaBiblioteca"></div>
@@ -604,6 +613,10 @@ var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [
          // animacion y circulo. Es lo que hace que al ponerlo en el mapa salga
          // como se dejo. Lo manda el servidor, que los guarda al lado del PNG.
          ajustesPropios: {},
+         // Cuales de esos iconos son vectores. Un SVG no se pixela al
+         // ampliarlo y un PNG si, asi que conviene saberlo al elegir con cual
+         // hacer un icono que se va a ver de cerca.
+         vectores: {},
          topes: {tam: [16, 160], rot: [-180, 180]},
          vista: [110, 100, 1005, 640], ancho: 1224, alto: 792, git: {}};
 var sel = null;          // {tipo:"zona"|"icono", i: n}
@@ -1093,6 +1106,7 @@ function pintaPropios() {
            + miniaturaDe(Object.assign({t: n}, aj))
            + '<span class="nom">' + escapa(n) + "</span>"
            + '<span class="coor">' + (usos ? usos + " en el mapa" : "sin usar")
+           + (E.vectores[n] ? " · vector" : "")
            + " · quitar</span></button>";
     }).join("");
 }
@@ -1115,7 +1129,8 @@ function pintaBiblioteca() {
            + '" title="Volver a poner ' + escapa(b.nombre) + ' en el croquis">'
            + miniaturaDe(Object.assign({t: b.nombre}, aj))
            + '<span class="nom">' + escapa(b.nombre) + "</span>"
-           + '<span class="coor">' + describeAjustes(aj) + " · añadir</span></button>"
+           + '<span class="coor">' + describeAjustes(aj)
+           + (b.vector ? " · vector" : "") + " · añadir</span></button>"
            + '<button class="quitaFicha" data-borrar="' + escapa(b.nombre)
            + '" title="Borrar ' + escapa(b.nombre) + ' de Guardados">×</button>'
            + "</div>";
@@ -1437,9 +1452,14 @@ function pintaPaleta() {
 function paloHTML(ic, etiqueta, propio) {
   var corto = etiqueta.length > 11 ? etiqueta.slice(0, 10) + "…" : etiqueta;
   var puesto = estampa && estampa.t === ic.t && !estampa.modelo;
+  // Los vectores llevan una marca: son los que se ven nitidos al ampliar, y
+  // saberlo al elegir ahorra tener que subir el icono otra vez mas adelante.
+  var vector = propio && E.vectores[ic.t];
   return '<div class="palo' + (puesto ? " acto" : "")
-       + (propio ? " propio" : "") + '" draggable="true" data-tipo="'
-       + escapa(ic.t) + '" title="' + escapa(etiqueta) + '">'
+       + (propio ? " propio" : "") + (vector ? " vector" : "")
+       + '" draggable="true" data-tipo="'
+       + escapa(ic.t) + '" title="' + escapa(etiqueta)
+       + (vector ? " · vector, no se pixela al ampliarlo" : "") + '">'
        + miniaturaDe(ic) + "<span>" + escapa(corto) + "</span></div>";
 }
 
@@ -1680,13 +1700,22 @@ document.getElementById("btnAceptarDialogo").addEventListener("click", function 
       cerrarOcupado();
       E.propios[d.nombre] = d.datos;
       E.ajustesPropios[d.nombre] = d.ajustes || {};
+      E.vectores[d.nombre] = !!d.vector;
       cerrarDialogo();
       hayCambios();
       pintaPaleta();
+      // Si al SVG hubo que quitarle algo, se dice. Casi siempre significa que
+      // el archivo venía de un sitio raro, y quien lo sube tiene que enterarse.
+      var extra = (d.quitado && d.quitado.length)
+        ? " Le quité " + d.quitado.length + " cosa(s) que un icono no puede "
+          + "llevar: " + d.quitado.slice(0, 3).join(", ")
+          + (d.quitado.length > 3 ? "…" : "") + "."
+        : "";
       aviso("«" + d.nombre + "» añadido a la paleta (" + Math.round(d.bytes / 1024)
-            + " KB). Sale con " + describeAjustes(d.ajustes)
-            + "; púlsalo y cada clic en el mapa pone uno. Pulsa Guardar para publicarlo.",
-            "ok");
+            + " KB" + (d.vector ? ", vector" : "") + "). Sale con "
+            + describeAjustes(d.ajustes) + "; púlsalo y cada clic en el mapa pone "
+            + "uno. Pulsa Guardar para publicarlo." + extra,
+            (d.quitado && d.quitado.length) ? "aviso" : "ok");
     })
     .catch(function (e) {
       cerrarOcupado();
@@ -1730,7 +1759,14 @@ document.getElementById("archivo").addEventListener("change", function (ev) {
   var f = ev.target.files && ev.target.files[0];
   ev.target.value = "";
   if (!f) return;
-  if (!/^image\//.test(f.type)) { aviso("Eso no es una imagen.", "mal"); return }
+  // Se mira el tipo y tambien el nombre: hay navegadores que dan
+  // `image/svg+xml` y otros que dan cadena vacia o `text/plain` para un SVG,
+  // y rechazar un dibujo que se ve perfecto por eso da rabia.
+  var esSvg = /\.svg$/i.test(f.name) || f.type === "image/svg+xml";
+  if (!esSvg && !/^image\//.test(f.type)) {
+    aviso("Eso no es una imagen. Sirven PNG, JPG, WebP, GIF, BMP y SVG.", "mal");
+    return;
+  }
   // La imagen no se manda todavia: se enseña en el menú y el usuario decide
   // con qué ajustes entra. Hasta que no pulsa Añadir, cancelar no deja rastro.
   var lector = new FileReader();
@@ -1805,6 +1841,7 @@ listaBiblioteca.addEventListener("click", function (ev) {
       // Los ajustes vuelven con el icono: si se subio sin circulo y con
       // animacion, al volver a ponerlo sale asi, no con los de fabrica.
       E.ajustesPropios[d.nombre] = d.ajustes || {};
+      E.vectores[d.nombre] = !!d.vector;
       E.biblioteca = E.biblioteca.filter(function (x) { return x.nombre !== d.nombre });
       hayCambios();
       pintaPaleta();
