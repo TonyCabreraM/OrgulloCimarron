@@ -50,6 +50,10 @@ CROQUIS = RAIZ / "plantilla" / "croquis.html"
 MAPA = RAIZ / "plantilla" / "rectoria.webp"
 EDITOR_HTML = Path(__file__).resolve().parent / "editor.html"
 RESPALDO = Path(__file__).resolve().parent / "_respaldo"
+# Los PNG ya preparados, uno por icono propio. Es lo que permite volver a
+# poner un icono que se quito del mapa sin tener que buscar otra vez la imagen
+# original: la que se subio ya no esta en ningun sitio, asi que se guarda aqui.
+BIBLIOTECA = Path(__file__).resolve().parent / "iconos"
 
 # validar.py vive junto a este archivo, pero cuando el proyecto se importa
 # desde fuera (test_qr.py lo hace) el paquete se llama editor. Se admiten las
@@ -58,10 +62,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     ALTO,
     ANCHO,
+    ANIMACIONES,
     MAX_ICONO,
     MAX_ICONOS_PROPIOS,
-    MIN_TAM_ICONO,
+    MAX_ROT,
     MAX_TAM_ICONO,
+    MAX_TEXTO,
+    MAX_TITULO,
+    MIN_ROT,
+    MIN_TAM_ICONO,
     NOMBRE_PROPIO,
     SIMBOLOS,
     revisar,
@@ -226,18 +235,43 @@ def _texto_zonas(zonas: list) -> str:
 
 
 def _texto_iconos(iconos: list) -> str:
-    """El array de iconos. El tamano se escribe solo si no es el de siempre,
-    para que la linea de un icono normal no cambie al guardar sin tocarlo."""
+    """El array de iconos, un objeto por linea.
+
+    Los campos van siempre en el mismo orden y solo se escriben los que hacen
+    falta: un icono normal ocupa una linea corta, y uno con informacion y
+    animacion se parte en dos. Asi el diff de git ensena lo que de verdad se
+    toco y no se llena de ceros y textos vacios.
+
+    El orden es t, x, y, n, s, r, a, i, que es de lo que mas se usa a lo que
+    menos. Con nombres en vez de posiciones, el dia que haga falta un campo
+    nuevo se añade al final y ningun icono se entera.
+    """
     if not iconos:
         return "var ICONOS = [];"
-    trozos = []
+    lineas = []
     for ic in iconos:
-        campos = [json.dumps(ic[0], ensure_ascii=False), _n(ic[1]), _n(ic[2]),
-                  json.dumps(ic[3], ensure_ascii=False)]
-        if len(ic) > 4:
-            campos.append(_n(ic[4]))
-        trozos.append("  [" + ", ".join(campos) + "]")
-    return "var ICONOS = [\n" + ",\n".join(trozos) + "\n];"
+        partes = [f'"t": {json.dumps(ic.get("t", ""), ensure_ascii=False)}',
+                  f'"x": {_n(ic.get("x", 0))}',
+                  f'"y": {_n(ic.get("y", 0))}']
+        if ic.get("n"):
+            partes.append(f'"n": {json.dumps(ic["n"], ensure_ascii=False)}')
+        if ic.get("s"):
+            partes.append(f'"s": {_n(ic["s"])}')
+        if ic.get("r"):
+            partes.append(f'"r": {_n(ic["r"])}')
+        if ic.get("a"):
+            partes.append(f'"a": {json.dumps(ic["a"], ensure_ascii=False)}')
+        if ic.get("i"):
+            titulo, texto = ic["i"]
+            partes.append('"i": [' + json.dumps(titulo, ensure_ascii=False)
+                          + ", " + json.dumps(texto, ensure_ascii=False) + "]")
+        lineas.append("  {" + ", ".join(partes) + "}")
+
+    # Cada objeto en una linea, separados por coma. Si alguno es largo (los
+    # que llevan informacion) la linea se pasa de ancho, pero partirla por
+    # campos daria un archivo mucho mas largo y mas dificil de leer en
+    # conjunto. Se prefiere la linea larga.
+    return "var ICONOS = [\n" + ",\n".join(lineas) + "\n];"
 
 
 def _texto_propios(propios: dict) -> str:
@@ -308,13 +342,66 @@ def preparar_icono(datos_url: str, nombre: str, ocupados: set,
 
     guardado = io.BytesIO()
     lienzo.save(guardado, "PNG", optimize=True)
-    salida = "data:image/png;base64," + base64.b64encode(guardado.getvalue()).decode("ascii")
+    png = guardado.getvalue()
+    salida = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
     if len(salida) > MAX_ICONO:
         raise ErrorEditor(
             f"La imagen queda en {len(salida) // 1024} KB y el tope son "
             f"{MAX_ICONO // 1024} KB. Prueba con una más sencilla o más pequeña.")
 
-    return _nombre_libre(nombre, ocupados), salida
+    return _nombre_libre(nombre, ocupados), salida, png
+
+
+def guarda_en_biblioteca(nombre: str, png: bytes) -> None:
+    """Deja el PNG preparado en la biblioteca del editor.
+
+    Se guarda el PNG ya recortado y reducido, no la imagen que subio el
+    usuario: asi volver a poner el icono es instantaneo y no hay que repetir
+    el trabajo. Vive fuera de git, como el respaldo: el croquis ya lleva
+    dentro las imagenes que usa, y esto es solo la despensa.
+    """
+    BIBLIOTECA.mkdir(exist_ok=True)
+    (BIBLIOTECA / f"{nombre}.png").write_bytes(png)
+
+
+def lista_biblioteca(propios: dict) -> list[dict]:
+    """Los iconos guardados que ahora mismo NO estan en el croquis.
+
+    Los que ya estan no se listan: aparecen en la paleta, y ofrecerlos otra
+    vez en dos sitios distintos solo confunde.
+    """
+    if not BIBLIOTECA.is_dir():
+        return []
+    fuera = []
+    for ruta in sorted(BIBLIOTECA.glob("*.png")):
+        if ruta.stem in propios:
+            continue
+        fuera.append({"nombre": ruta.stem, "bytes": ruta.stat().st_size})
+    return fuera
+
+
+def lee_de_biblioteca(nombre: str) -> str:
+    """La imagen de la biblioteca como data URL, lista para meter en el croquis."""
+    if not NOMBRE_PROPIO.fullmatch(nombre or ""):
+        raise ErrorEditor(f"«{nombre}» no es un nombre de icono valido.")
+    ruta = BIBLIOTECA / f"{nombre}.png"
+    if not ruta.is_file():
+        raise ErrorEditor(f"En la biblioteca no hay ningun icono «{nombre}».")
+    datos = ruta.read_bytes()
+    if len(datos) > MAX_ICONO:
+        raise ErrorEditor(
+            f"«{nombre}» pesa {len(datos) // 1024} KB y el tope son "
+            f"{MAX_ICONO // 1024} KB, asi que no cabe en el croquis.")
+    return "data:image/png;base64," + base64.b64encode(datos).decode("ascii")
+
+
+def borra_de_biblioteca(nombre: str) -> None:
+    """Quita un icono de la biblioteca. No toca el croquis."""
+    if not NOMBRE_PROPIO.fullmatch(nombre or ""):
+        raise ErrorEditor(f"«{nombre}» no es un nombre de icono valido.")
+    ruta = BIBLIOTECA / f"{nombre}.png"
+    if ruta.is_file():
+        ruta.unlink()
 
 
 def _nombre_libre(nombre: str, ocupados: set) -> str:
@@ -538,13 +625,22 @@ class Manejador(BaseHTTPRequestHandler):
                 datos["avisos"] = tipos_coinciden(formas)
                 datos["ancho"], datos["alto"] = ANCHO, ALTO
                 datos["topes"] = {"tam": [MIN_TAM_ICONO, MAX_TAM_ICONO],
+                                  "rot": [MIN_ROT, MAX_ROT],
                                   "lado": LADO_ICONO,
+                                  "titulo": MAX_TITULO, "texto": MAX_TEXTO,
                                   "totalPropios": MAX_ICONOS_PROPIOS}
+                datos["animaciones"] = ANIMACIONES
+                datos["biblioteca"] = lista_biblioteca(datos["propios"])
                 datos["git"] = estado_git()
                 datos["publicado"] = "https://tonycabreram.github.io/OrgulloCimarron/plantilla/croquis.html"
                 self._json(datos)
             elif ruta == "/api/git":
                 self._json(estado_git())
+            elif ruta == "/api/biblioteca":
+                # Solo la lista: los PNG que hay guardados y no estan en el
+                # croquis. El contenido se pide aparte, con POST, para no
+                # mandar medio mega de imagenes cada vez que se pinta el panel.
+                self._json({"biblioteca": lista_biblioteca(leer_croquis()["propios"])})
             else:
                 self._error("Esa direccion no existe en el editor.", 404)
         except ErrorEditor as e:
@@ -573,11 +669,23 @@ class Manejador(BaseHTTPRequestHandler):
                             "guardado": guardar_croquis(zonas, iconos, propios),
                             "git": estado_git()})
             elif ruta == "/api/icono":
-                nombre, imagen = preparar_icono(
+                nombre, imagen, png = preparar_icono(
                     datos.get("datos"), str(datos.get("nombre") or ""),
                     set(SIMBOLOS) | set(datos.get("existentes") or []))
+                # Se guarda en la biblioteca ademas de mandarlo: asi se puede
+                # volver a poner mas adelante sin buscar la imagen otra vez.
+                guarda_en_biblioteca(nombre, png)
                 self._json({"ok": True, "nombre": nombre, "datos": imagen,
                             "bytes": len(imagen)})
+            elif ruta == "/api/biblioteca":
+                # Recuperar un icono guardado, o quitarlo de la despensa.
+                if datos.get("quitar"):
+                    borra_de_biblioteca(str(datos["quitar"]))
+                    self._json({"ok": True, "mensaje": "Quitado de la biblioteca."})
+                else:
+                    nombre = str(datos.get("nombre") or "")
+                    self._json({"ok": True, "nombre": nombre,
+                                "datos": lee_de_biblioteca(nombre)})
             elif ruta == "/api/subir":
                 mensaje = str(datos.get("mensaje") or "").strip()
                 if not mensaje:

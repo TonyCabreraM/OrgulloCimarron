@@ -297,6 +297,7 @@ editor/            Herramienta de edición. NO se publica.
   editor.html      La interfaz de edición
   validar.py       Las reglas, compartidas con las pruebas
   _respaldo/       Copia del croquis antes de cada guardado (fuera de git)
+  iconos/          PNG de los iconos propios, para reutilizarlos (fuera de git)
 salida/            QR generado
 ```
 
@@ -436,42 +437,84 @@ efecto invisible.
 ### Los iconos
 
 Los símbolos de punto del mapa (baños, primeros auxilios, comida) van en un
-array aparte, con el mismo formato de siempre:
+array de objetos, uno por icono:
 
 ```javascript
+/* === INICIO ICONOS === */
 var ICONOS = [
-  ["bano", 499, 470, "Baños junto al escenario", 46],
-  ["primeros", 620, 300, "Módulo de primeros auxilios", 60],
+  {"t": "bano", "x": 300, "y": 250, "n": "Baños junto al escenario", "i": ["Baños", "Los baños están junto al escenario."]},
+  {"t": "estrella", "x": 500, "y": 400, "n": "Punto de interés", "s": 70, "r": -15, "a": "late"}
 ];
+/* === FIN ICONOS === */
 ```
 
-Cada icono es `[tipo, x, y, etiqueta, tamaño]`. El **tamaño es opcional** (si
-falta se usan 46 unidades, que es lo que medían todos antes de que se pudieran
-ajustar) y va **en unidades del mapa, no en píxeles**: los iconos son parte del
-plano y crecen con el zoom igual que las calles. El mínimo son 16 y el máximo
-160; con más, un icono tapa media zona.
+| Clave | Qué es | ¿Hace falta? |
+| --- | --- | --- |
+| `t` | El tipo: un símbolo de serie o un icono propio | Sí |
+| `x`, `y` | Dónde va, en las coordenadas del mapa | Sí |
+| `n` | El nombre que se lee al pasar el ratón | No |
+| `s` | Lo que mide, de 16 a 160 unidades | No, 46 |
+| `r` | El giro, en grados | No, 0 |
+| `a` | La animación | No, ninguna |
+| `i` | `[título, texto]`: la ventana que sale al pulsarlo | No, y sin esto no se puede pulsar |
 
-El tipo elige la forma entre las de `SIMBOLOS`, que están dibujadas a mano en
-el propio archivo y en una caja de 24×24 centrada en el origen: colocar una es
-solo un `translate` más un `scale`. La etiqueta no se ve en el mapa (a 46
-unidades de ancho saldría de 6 px) y está para los lectores de pantalla y para
-el editor.
+**Antes era una tupla posicional** y creció hasta siete campos, que es donde uno
+empieza a contar comas con la vista. Con nombres, cada dato se lee solo, se
+pueden dejar fuera los que no hacen falta y añadir uno nuevo no rompe los
+iconos que ya había. El serializador escribe siempre el mismo orden y omite lo
+vacío, así que un icono normal ocupa una línea corta y el diff de git enseña lo
+que de verdad se tocó.
 
-Los iconos **forman parte del plano y crecen con el zoom**, igual que las
-calles. El grosor del trazo va con `vector-effect: non-scaling-stroke` para
-que no engorde: un icono ampliado 4× con el trazo escalado se ve como un
-garabato. Llevan un aro claro detrás porque el pasto es una textura cargada y
-se come los trazos finos.
+**El tamaño va en unidades del mapa, no en píxeles**: los iconos son parte del
+plano y crecen con el zoom igual que las calles.
 
-**No reciben el toque.** El grupo `#iconos` va con `pointer-events: none`, así
-que una pulsación sobre un icono sigue llegando a la zona que hay debajo. Si
-no, un icono plantado en medio de un estacionamiento se comería esa parte del
-estacionamiento y la zona quedaría con un hueco.
+**Los iconos no reciben el toque**, salvo los que llevan información. El grupo
+va con `pointer-events: none`, que heredan los hijos, así que un icono plantado
+en medio de un estacionamiento no se come esa parte del estacionamiento. Los
+que llevan ventana se lo devuelven uno por uno: son pocos y pequeños, y a
+cambio de un trozo mínimo de zona se puede consultar algo.
 
-Los tipos están validados contra `SIMBOLOS` más los iconos propios, y hay una
-prueba que compara esa lista con la de `editor/validar.py`. Un tipo inventado
-saldría como un hueco vacío y sin ningún error en consola, que es la peor forma
-de fallar.
+### La ventana de información
+
+Al pulsar un icono con `i` sale una ventana con su título y su texto. Es la
+misma ventana para todos: se le cambia el contenido y se muestra, así que no
+hay forma de que queden dos abiertas ni de que se acumulen en el DOM.
+
+En el móvil se pega abajo y ocupa el ancho, en pantalla ancha sale centrada, y
+en los dos casos lleva el mismo fondo, el mismo filo y el mismo verde que el
+panel: se tiene que ver que es algo que se abre encima del mapa y no una
+pantalla aparte.
+
+Se cierra con el botón, tocando el fondo o con `Escape`. Empieza en `hidden`,
+que además de esconderla la saca del alcance del teclado; y al cerrarse espera a
+que acabe la transición antes de volver a esconderla, porque si no el fondo
+seguiría interceptando el toque y el mapa dejaría de responder.
+
+El toque sobre un icono **corta la propagación** en el `pointerdown`. Si no, el
+`<svg>` lo recibiría también y además de abrir la ventana desharía el zoom por
+detrás.
+
+### Las animaciones
+
+Hay cinco, y todas se mueven con `transform` y `opacidad`, que el navegador
+compone sin repintar. Son suaves a propósito: esto es un mapa, no un anuncio.
+
+| Nombre | Qué hace |
+| --- | --- |
+| `late` | El icono crece y vuelve, como un latido |
+| `flota` | Sube y baja despacio |
+| `gira` | Da vueltas despacio |
+| `brilla` | Aparece y desaparece |
+| `ondas` | Un anillo que se expande y se desvanece, como un radar |
+
+**Se aplican a un `<g>` interior, nunca al que lleva la posición.** En SVG el
+`transform` de CSS pisa al atributo `transform`, así que animar el grupo de
+fuera borraría el `translate` que pone el icono en su sitio y todos se
+apilarían en la esquina. Ese grupo interior lleva `transform-box: fill-box` y
+`transform-origin: center` para que giren y latan sobre su propio centro.
+
+Si el sistema pide menos movimiento (`prefers-reduced-motion`), se quedan
+quietos.
 
 ### Los iconos propios
 
@@ -491,15 +534,24 @@ es que cada byte pesa dos veces, los datos y el texto base64, así que el editor
 las guarda pequeñas: **160 px de lado** y en PNG.
 
 Se dibujan recortadas en círculo, con un `clipPath` que vive en `<defs>`, para
-que se lean como iconos del mapa y no como fotos pegadas encima. Ese recorte se
-aplica en el espacio del propio icono, así que el mismo sirve para todos aunque
-cada uno tenga su tamaño y su sitio. Como el aro ya es redondo, una imagen
-cuadrada pierde un poco de las esquinas; el editor enseña la vista previa con el
-recorte puesto para que se vea antes de guardar.
+que se lean como iconos del mapa y no como fotos pegadas encima. Como el aro ya
+es redondo, una imagen cuadrada pierde un poco de las esquinas; el editor
+enseña la vista previa con el recorte puesto para que se vea antes de guardar.
 
 Los topes de peso están en `editor/validar.py`: 64 KB por imagen y 800 KB entre
 todas. Con 160 px de lado no se llega ni de lejos, y los topes están para que un
 descuido no convierta la página del móvil en algo que tarda en abrir.
+
+#### La biblioteca
+
+Cada imagen que se sube se guarda también en `editor/iconos/`, en PNG ya
+recortado y reducido. Esa carpeta está fuera de git y es la despensa del
+editor: al quitar un icono propio del croquis, la imagen **no se pierde**,
+baja a la lista **Guardados** del panel y se vuelve a poner con un clic, sin
+tener que buscarla otra vez en el disco.
+
+El croquis sigue siendo la única fuente de lo que se publica: la biblioteca
+solo sirve para no repetir el trabajo de subir y recortar.
 
 ### Al reemplazar el mapa por una versión nueva
 
@@ -540,13 +592,43 @@ interfaz es un HTML suelto.
 | Añadir una esquina | Botón **Añadir vértice**, luego clic en el borde |
 | Quitar una esquina | Doble clic sobre el punto, o `Supr` |
 | Poner un icono | Arrastrarlo de la paleta al mapa, o pulsarlo y hacer clic |
-| Ajustar su tamaño | El deslizador **Tamaño** del icono elegido; los nuevos salen con el que diga **Tamaño de los nuevos** |
+| Ajustar su tamaño | El deslizador **Tamaño**; los nuevos salen con el que diga **Tamaño de los nuevos** |
+| Girarlo | El deslizador **Giro**, o los botones de ±15° y ±90° |
+| Animarlo | El desplegable **Animación** |
+| Ponerle información | Los campos de **Información que sale al pulsarlo**; si se dejan vacíos, el icono no se puede pulsar |
 | Crear un icono propio | **Subir una imagen…**; queda en la paleta con el borde discontinuo |
-| Quitar un icono propio | Pulsarlo en **Mis iconos** |
-| Editar el texto | El formulario del panel, mientras la zona está elegida |
+| Volver a poner uno guardado | Pulsarlo en **Guardados** |
+| Quitar un icono propio | Pulsarlo en **En el croquis**; la imagen baja a **Guardados** |
+| Alinear varios | Marcarlos con Mayús y usar **En fila**, **En columna** o **En rejilla** |
 | Acercar | Rueda del ratón, o los botones **+** y **−** |
 
 Abajo a la izquierda del mapa están las mismas instrucciones.
+
+### Marcar varios iconos y alinearlos
+
+Con **Mayús + clic** se van marcando iconos, y salen tres formas de colocarlos
+de golpe. Se calculan a partir de donde están ahora: los iconos se ordenan
+según su posición actual y se reparten parejos, así que el resultado es el que
+uno espera sin tener que decir dónde va cada uno.
+
+| Botón | Qué hace |
+| --- | --- |
+| **En fila** | Todos a la misma altura, repartidos en horizontal |
+| **En columna** | Todos a la misma columna, repartidos en vertical |
+| **En rejilla** | En cuadrícula, empezando por arriba a la izquierda |
+
+El hueco entre uno y otro es el mayor entre el reparto exacto y lo que mide el
+icono más grande de los marcados. Con eso casi nunca se tocan; si no caben, se
+quedan pegados, que es mejor que meterlos donde no van. Al final se comprueba
+que el grupo entero quepa en el mapa y, si se sale, se mete hacia dentro de una
+pieza: mover uno solo deformaría la alineación recién hecha.
+
+Los marcados también se mueven juntos: arrastrando uno se van todos, y las
+flechas del teclado los mueven en bloque. Es la forma de cuadrar un grupo al
+milímetro sin pelearse con el ratón.
+
+Las marcas se guardan por posición, así que al borrar un icono se limpian y se
+vuelven a poner: si no, quedarían corridas y marcarían a uno que no es.
 
 ### El zoom del editor
 
@@ -564,7 +646,9 @@ de la derecha. Ahora el zoom solo toca lo que depende de la escala, que es el
 
 Los eventos se juntan y se aplican **una vez por fotograma**
 (`requestAnimationFrame`), para que un trackpad que manda 100 eventos por
-segundo no dispare 100 encuadres.\n\n### Por qué el croquis público no puede editar nada
+segundo no dispare 100 encuadres.
+
+### Por qué el croquis público no puede editar nada
 
 Es la razón de que esto sea un programa aparte y no un botón dentro del mapa.
 
@@ -666,10 +750,14 @@ croquis o la página base:
   `')><title>'` en vez de `')"><title>'`. Falta la comilla, así que el
   navegador se traga media etiqueta, el atributo se queda con basura dentro y
   el elemento no se dibuja. En el croquis eso deja el mapa sin iconos y solo
-  se ve un error en la consola, que nadie mira. Lo pasé por alto al escribirlo
-  y lo cazó la consola del navegador; ahora hay una prueba
-  (`etiqueta sin comilla de cierre`) que busca el rastro que deja, un `>`
-  pegado a un `)` dentro de un texto de JavaScript.
+  se ve un error en la consola, que nadie mira. **Pasó dos veces.**
+  La primera prueba que lo vigilaba miraba cada trozo entrecomillado por su
+  cuenta, y no bastaba: los trozos van encadenados con `+`, y la comilla que
+  falta puede estar al final de un trozo y el `>` al principio del siguiente,
+  con lo que ninguno de los dos tiene el rastro completo. Ahora la prueba
+  (`etiqueta sin comilla de cierre`) pega los trozos de cada `return` como los
+  pegaría el navegador y mira el resultado. Comprobado que falla de verdad
+  metiendo el fallo a mano.
 - **`.split()` aplicado a un texto concatenado con `+` solo afecta al último
   trozo.** `var Z="a"+"b".split(";")` deja `Z` como texto, no como array:
   `Z.length` da el número de caracteres, el bucle dibuja un grupo por carácter

@@ -59,6 +59,41 @@ MAX_ICONOS_PROPIOS = 800_000
 # preparar la imagen, y evita que un nombre raro rompa el archivo.
 NOMBRE_PROPIO = re.compile(r"[a-z0-9][a-z0-9-]{0,23}")
 
+# Lo que mide un icono, en unidades del mapa. El de por defecto es el que
+# tenian todos antes de que se pudieran ajustar; el minimo se sigue leyendo
+# en la vista general y el maximo no llega a tapar una zona entera.
+TAM_ICONO = 46
+MIN_TAM_ICONO = 16
+MAX_TAM_ICONO = 160
+
+# La rotacion, en grados. Se admiten vueltas completas porque girar un icono
+# es girarlo: -90 y 270 son lo mismo y no hay razon para rechazar ninguna.
+MIN_ROT = -360
+MAX_ROT = 360
+
+# Las animaciones que el croquis sabe hacer. Se mueven cosas baratas de
+# dibujar (transform y opacidad) y son suaves a proposito: esto es un mapa,
+# no un anuncio, y un icono que llama demasiado la atencion molesta.
+ANIMACIONES = {
+    "": "Quieto",
+    "late": "Late",
+    "flota": "Flota",
+    "gira": "Gira",
+    "brilla": "Brilla",
+    "ondas": "Ondas",
+}
+
+# Las claves de un icono. Se rechaza cualquier otra: un nombre mal escrito
+# (`X` por `x`) dejaria el icono sin ese dato y no se notaria hasta verlo en
+# el mapa, que es la peor forma de enterarse.
+CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "i"}
+
+# El texto que sale en la ventana al tocar un icono. Va dentro del croquis,
+# asi que se limita: una parrafada convertiria la pagina del movil en algo
+# que tarda en abrir, y en una ventana tampoco se lee.
+MAX_TITULO = 60
+MAX_TEXTO = 600
+
 MIN_LADOS = 3  # un poligono de verdad
 MIN_LADO_PT = 20  # mas chico que esto no se puede tocar con el dedo
 MIN_AREA_PT = 400  # 20x20, el mismo criterio que el lado
@@ -199,10 +234,18 @@ def revisar_zonas(zonas: list) -> list[str]:
 def revisar_iconos(iconos: list, propios=None) -> list[str]:
     """Devuelve la lista de problemas de los iconos. Vacia es que todo bien.
 
-    Cada icono es [tipo, x, y, etiqueta] o [tipo, x, y, etiqueta, tamano].
-    El tamano es opcional a proposito: los iconos guardados antes de que
-    existiera el control no lo llevan y tienen que seguir valiendo, con el
-    tamano de siempre.
+    Cada icono es un objeto, y solo hacen falta el tipo y el sitio:
+
+        {t: "bano", x: 499, y: 470}
+        {t: "informacion", x: 620, y: 300, s: 60, r: -15, a: "late",
+         n: "Módulo de información",
+         i: ["Información", "Aquí puedes preguntar por el programa..."]}
+
+    Los nombres de las claves son cortos porque se repiten en cada icono y el
+    archivo se escribe a mano. Antes era una tupla posicional y crecio hasta
+    siete campos, que es donde uno empieza a contar comas con la vista; con
+    nombres cada dato se lee solo y se pueden dejar fuera los que no hacen
+    falta.
 
     El tipo puede ser uno de los simbolos de SIMBOLOS o un icono propio, que
     son los que vienen en `propios`. Uno que no este en ninguna de las dos
@@ -215,35 +258,84 @@ def revisar_iconos(iconos: list, propios=None) -> list[str]:
     conocidos = set(SIMBOLOS) | set(propios or {})
     for k, ic in enumerate(iconos):
         sitio = f"icono {k + 1}"
-        if not isinstance(ic, (list, tuple)) or len(ic) not in (4, 5):
+        if not isinstance(ic, dict):
             problemas.append(
-                f"{sitio}: tiene que ser [tipo, x, y, etiqueta] o "
-                f"[tipo, x, y, etiqueta, tamano]")
+                f"{sitio}: tiene que ser un objeto como "
+                f'{{t:"bano", x:499, y:470}}')
             continue
-        tipo, x, y, etiqueta = ic[0], ic[1], ic[2], ic[3]
-        tam = ic[4] if len(ic) == 5 else TAM_ICONO
 
+        raros = sorted(set(ic) - CLAVES_ICONO)
+        if raros:
+            problemas.append(
+                f"{sitio}: no conozco {' ni '.join(raros)}. "
+                f"Las claves son {', '.join(sorted(CLAVES_ICONO))} "
+                f"(t=tipo, x, y, n=etiqueta, s=tamaño, r=rotación, "
+                f"a=animación, i=información)")
+            continue
+
+        tipo = ic.get("t")
         if tipo not in conocidos:
             problemas.append(
                 f"{sitio}: «{tipo}» no es un simbolo conocido ni un icono tuyo. "
                 f"Los que hay: {', '.join(sorted(conocidos))}")
             continue
-        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (x, y)):
-            problemas.append(f"{sitio}: las coordenadas tienen que ser numeros")
+
+        x, y = ic.get("x"), ic.get("y")
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                   for v in (x, y)):
+            problemas.append(f"{sitio}: hacen falta las coordenadas x e y como numeros")
             continue
         if not (MARGEN_ICONO <= x <= ANCHO - MARGEN_ICONO and
                 MARGEN_ICONO <= y <= ALTO - MARGEN_ICONO):
             problemas.append(
                 f"{sitio} ({titulo_de(tipo, propios)}): esta pegado al borde del "
                 f"mapa ({x:.0f}, {y:.0f}); el centro tiene que caer dentro")
-        if not isinstance(etiqueta, str):
+
+        if "n" in ic and not isinstance(ic["n"], str):
             problemas.append(f"{sitio}: la etiqueta tiene que ser texto")
-        if not isinstance(tam, (int, float)) or isinstance(tam, bool):
-            problemas.append(f"{sitio}: el tamano tiene que ser un numero")
-        elif not MIN_TAM_ICONO <= tam <= MAX_TAM_ICONO:
+
+        if "s" in ic:
+            tam = ic["s"]
+            if not isinstance(tam, (int, float)) or isinstance(tam, bool):
+                problemas.append(f"{sitio}: el tamaño tiene que ser un numero")
+            elif not MIN_TAM_ICONO <= tam <= MAX_TAM_ICONO:
+                problemas.append(
+                    f"{sitio}: el tamaño {tam:.0f} se sale del rango de "
+                    f"{MIN_TAM_ICONO} a {MAX_TAM_ICONO}")
+
+        if "r" in ic:
+            rot = ic["r"]
+            if not isinstance(rot, (int, float)) or isinstance(rot, bool):
+                problemas.append(f"{sitio}: la rotación tiene que ser un numero")
+            elif not MIN_ROT <= rot <= MAX_ROT:
+                problemas.append(
+                    f"{sitio}: la rotación {rot:.0f}° se sale de "
+                    f"{MIN_ROT} a {MAX_ROT}")
+
+        if "a" in ic and ic["a"] not in ANIMACIONES:
             problemas.append(
-                f"{sitio}: el tamano {tam:.0f} se sale del rango de "
-                f"{MIN_TAM_ICONO} a {MAX_TAM_ICONO}")
+                f"{sitio}: «{ic['a']}» no es una animación de las que hay. "
+                f"Las que hay: {', '.join(k for k in ANIMACIONES if k) or 'ninguna'}")
+
+        if "i" in ic:
+            info = ic["i"]
+            if (not isinstance(info, (list, tuple)) or len(info) != 2
+                    or not all(isinstance(t, str) for t in info)):
+                problemas.append(
+                    f'{sitio}: la información tiene que ser [título, texto]')
+            else:
+                titulo, texto = info
+                if not titulo.strip():
+                    problemas.append(f"{sitio}: la información no tiene título")
+                elif len(titulo) > MAX_TITULO:
+                    problemas.append(
+                        f"{sitio}: el título pasa de {MAX_TITULO} caracteres")
+                if not texto.strip():
+                    problemas.append(f"{sitio}: la información no tiene texto")
+                elif len(texto) > MAX_TEXTO:
+                    problemas.append(
+                        f"{sitio}: el texto de la información pasa de "
+                        f"{MAX_TEXTO} caracteres y no se lee en una ventana")
 
     return problemas
 

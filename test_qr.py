@@ -322,6 +322,10 @@ def test_iconos_y_simbolos_coinciden() -> bool:
     decide qué tipos se pueden guardar y la del croquis (el bloque SIMBOLOS)
     sabe dibujarlos. Si se separan, se puede guardar un icono que luego no se
     dibuja: sale un hueco en el mapa y ningún error en consola.
+
+    Y una tercera: los NOMBRES del croquis, que son los que se anuncian en el
+    <title> de cada icono. Si se separan, un icono acabaría llamándose «bano»
+    en el mapa y «Baños» en el editor, y nadie sabe cuál de los dos manda.
     """
     texto = CROQUIS.read_text(encoding="utf-8")
     ini, fin = "/* === INICIO SIMBOLOS === */", "/* === FIN SIMBOLOS === */"
@@ -353,7 +357,21 @@ def test_iconos_y_simbolos_coinciden() -> bool:
     if vacios:
         print(f"    (estos símbolos no tienen dibujo: {', '.join(vacios)})")
         return False
-    print(f"    {len(formas)} símbolos dibujables, uno por cada tipo del editor")
+
+    # Y los nombres, que viven en su propia lista porque no los reescribe el
+    # editor: son los mismos para todos los mapas.
+    nombres = dict(re.findall(r'(\w+):\s*"([^"]+)"',
+                              texto[texto.find("var NOMBRES"):]))
+    malos = [k for k in v.SIMBOLOS if nombres.get(k) != v.SIMBOLOS[k]]
+    if malos:
+        for k in malos:
+            print(f"    «{k}»: el croquis dice «{nombres.get(k)}» y validar.py "
+                  f"«{v.SIMBOLOS[k]}»")
+        print("    Los nombres son los que se leen al pasar el ratón por el mapa.")
+        return False
+
+    print(f"    {len(formas)} símbolos dibujables y con el mismo nombre, "
+          f"uno por cada tipo del editor")
     return True
 
 
@@ -493,7 +511,7 @@ def test_el_editor_rechaza_lo_ajeno() -> bool:
             # 3. Un icono de un tipo que no existe: también se rechaza.
             peticion = urllib.request.Request(
                 base + "/api/guardar",
-                data=json.dumps({"zonas": [], "iconos": [["inventado", 100, 100, "Nada"]]}).encode("utf-8"),
+                data=json.dumps({"zonas": [], "iconos": [{"t": "inventado", "x": 100, "y": 100}]}).encode("utf-8"),
                 method="POST", headers={"Content-Type": "application/json"})
             try:
                 with urllib.request.urlopen(peticion, timeout=5) as r:
@@ -502,10 +520,70 @@ def test_el_editor_rechaza_lo_ajeno() -> bool:
                 if e.code != 400:
                     problemas.append(f"con un tipo inventado esperaba 400 y dio {e.code}")
 
-            # 4. Y nada de eso puede haber tocado el archivo.
-            if CROQUIS.read_bytes() != antes:
-                problemas.append("el croquis cambió con guardados que debían rechazarse")
+            # 4. Lo mismo con los campos nuevos: un giro imposible, una
+            #    animación que el croquis no sabe hacer, una información a la
+            #    que le falta el texto y una clave mal escrita. Los cuatro dan
+            #    un icono roto o, peor, uno que se queda sin el dato y no se
+            #    nota hasta verlo en el mapa.
+            rotos = [
+                ({"t": "bano", "x": 100, "y": 100, "r": 9999}, "giro imposible"),
+                ({"t": "bano", "x": 100, "y": 100, "a": "temblar"}, "animación inventada"),
+                ({"t": "bano", "x": 100, "y": 100, "i": ["Solo título", "  "]},
+                 "información sin texto"),
+                ({"t": "bano", "X": 100, "y": 100}, "clave mal escrita"),
+            ]
+            for icono, etiqueta in rotos:
+                peticion = urllib.request.Request(
+                    base + "/api/guardar",
+                    data=json.dumps({"zonas": [], "iconos": [icono]}).encode("utf-8"),
+                    method="POST", headers={"Content-Type": "application/json"})
+                try:
+                    with urllib.request.urlopen(peticion, timeout=5) as r:
+                        problemas.append(f"aceptó un icono con {etiqueta} ({r.status})")
+                except urllib.error.HTTPError as e:
+                    if e.code != 400:
+                        problemas.append(f"con {etiqueta} esperaba 400 y dio {e.code}")
+
+            # 5. Y uno bien formado, con todo, sí tiene que entrar. Es la otra
+            #    mitad de la prueba: un validador que lo rechaza todo no vale.
+            #
+            #    Hay que mandar también las zonas de verdad: un croquis sin
+            #    zonas se rechaza, y con razon, porque el mapa se quedaría sin
+            #    nada que tocar.
+            #
+            #    Este paso SÍ escribe en el croquis, así que al terminar se
+            #    deja como estaba. Se comprueba antes de restaurar, que es lo
+            #    único que se puede comprobar.
+            zonas_reales = leer_bloque(CROQUIS.read_text(encoding="utf-8"), "ZONAS")
+            peticion = urllib.request.Request(
+                base + "/api/guardar",
+                data=json.dumps({"zonas": zonas_reales, "iconos": [
+                    {"t": "bano", "x": 300, "y": 250, "n": "Baños",
+                     "s": 60, "r": -30, "a": "late",
+                     "i": ["Baños", "Los baños están junto al escenario."]}]}).encode("utf-8"),
+                method="POST", headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(peticion, timeout=5) as r:
+                    if r.status != 200:
+                        problemas.append(f"un icono completo dio {r.status}")
+            except urllib.error.HTTPError as e:
+                problemas.append(f"rechazó un icono completo: {e.code}")
+
+            # 6. Lo que quedó escrito tiene que ser ese icono, entero y con
+            #    todos sus campos. Escrito como objeto, además: es el formato
+            #    que lee el croquis.
+            escrito = CROQUIS.read_text(encoding="utf-8")
+            if '"a": "late"' not in escrito or '"r": -30' not in escrito:
+                problemas.append("el icono bueno no se escribió con sus campos")
+            if "Los baños están junto al escenario." not in escrito:
+                problemas.append("la información del icono no se escribió")
+            if '"x": 300' not in escrito:
+                problemas.append("las coordenadas del icono no se escribieron")
     finally:
+        # Pase lo que pase, el croquis vuelve a como estaba. Una prueba que
+        # deja su basura en el archivo es peor que no tenerla: al dia
+        # siguiente nadie sabe de donde salió ese icono.
+        CROQUIS.write_bytes(antes)
         servidor.shutdown()
         servidor.server_close()
         hilo.join(timeout=5)
@@ -514,52 +592,116 @@ def test_el_editor_rechaza_lo_ajeno() -> bool:
         print(f"    {p}")
     if problemas:
         return False
-    print("    rechaza Host ajeno, zonas solapadas y tipos inventados, sin escribir")
+    print("    rechaza Host ajeno, zonas solapadas, tipos inventados, giros y")
+    print("    animaciones imposibles y claves mal escritas, sin tocar el archivo")
     return True
 
 
+def _literales_de_los_return(texto: str, inicio: int = 0) -> list[str]:
+    """Junta los trozos de texto de cada `return` que arma HTML.
+
+    Los trozos de HTML se escriben encadenados con +, y ahi esta el peligro:
+    una comilla que falta no se ve en ningun trozo suelto, solo en el
+    resultado de pegarlos. Por eso no basta con mirar cada literal por su
+    cuenta (que es lo que hacia antes esta prueba) y hay que reconstruir lo
+    que saldria.
+
+    Se recorre el texto buscando `return`, se salta los textos de verdad y se
+    para en el `;` que cierra la sentencia. Los trozos entrecomillados que hay
+    dentro se pegan en orden: las expresiones que van en medio desaparecen,
+    que es justo lo que interesa, porque asi queda la plantilla con los
+    huecos, y en esa plantilla se ve si un atributo se queda sin comilla.
+    """
+    plantillas = []
+    n = len(texto)
+    i = 0
+    while True:
+        j = texto.find("return", i)
+        if j < 0:
+            break
+        # Que sea la palabra `return` y no parte de otra.
+        antes = texto[j - 1] if j else " "
+        if antes.isalnum() or antes in "_$":
+            i = j + 6
+            continue
+
+        trozos, k, comilla = [], j + 6, None
+        while k < n:
+            c = texto[k]
+            if comilla:
+                if c == "\\":
+                    k += 2
+                    continue
+                if c == comilla:
+                    comilla = None
+                else:
+                    trozos.append(c)
+            elif c in "\"'`":
+                comilla = c
+            elif c == ";":
+                break
+            k += 1
+        plantilla = "".join(trozos)
+        # Solo interesan las plantillas que arman etiquetas.
+        if "<" in plantilla and "=" in plantilla:
+            plantillas.append(plantilla)
+        i = k + 1
+    return plantillas
+
+
+def _atributo_sin_cerrar(plantilla: str) -> str:
+    """El primer atributo que abre comilla y no la cierra antes del '>'.
+
+    Se recorren las etiquetas de la plantilla. Dentro de cada una, cada vez
+    que aparece `="` se busca la comilla que lo cierra; si antes aparece el
+    `>` de la etiqueta, es que falta.
+    """
+    for etiqueta in re.findall(r"<[^<>]*>", plantilla):
+        k = 0
+        while True:
+            a = etiqueta.find('="', k)
+            if a < 0:
+                break
+            cierra = etiqueta.find('"', a + 2)
+            if cierra < 0:
+                return etiqueta
+            k = cierra + 1
+    return ""
+
+
 def test_ningun_literal_cierra_una_etiqueta_sin_comilla() -> bool:
-    """Ningun trozo de HTML armado en JavaScript cierra una etiqueta con el
-    atributo sin cerrar.
+    """Ninguna etiqueta armada en JavaScript cierra un atributo sin su comilla.
 
-    Es el hermano del fallo de los atributos sin comillas, y se coló de
-    verdad: al escribir el transform de los iconos quedo
+    Cerrar la etiqueta antes de cerrar la comilla del atributo es el fallo
+    mas facil de cometer al encadenar textos, y se cometio dos veces en este
+    proyecto. El navegador se traga media etiqueta, el atributo se queda con
+    basura dentro y el elemento no se dibuja: en el croquis eso deja el mapa
+    sin iconos y lo unico que sale es un aviso en la consola, que nadie mira.
 
-        + ')><title>' + ...
-
-    cuando tenia que ser
-
-        + ')"><title>' + ...
-
-    Falta la comilla del atributo, asi que el navegador se traga media
-    etiqueta: el transform se queda con basura dentro y el icono no se dibuja.
-    En el croquis eso deja el mapa sin iconos y solo se ve un error en la
-    consola del navegador, que nadie mira.
-
-    El rastro que deja es inconfundible: un '>' pegado a un ')' dentro de un
-    texto de JavaScript. Cerrar una llamada y despues cerrar la etiqueta sin
-    comilla en medio no tiene ningun uso legitimo, y en estos dos archivos no
-    hay ni un caso.
+    Al principio esta prueba miraba cada trozo entrecomillado por su cuenta y
+    buscaba un `)>` dentro. No bastaba: los trozos van encadenados con +, y la
+    comilla que falta puede estar al final de un trozo y el `>` al principio
+    del siguiente, con lo que ninguno de los dos tiene el rastro completo.
+    Ahora se pegan los trozos de cada `return` como los pegaria el navegador
+    y se mira el resultado, que es donde el fallo se ve siempre.
     """
     problemas = []
     for archivo in (CROQUIS, Path("editor/editor.html")):
         if not archivo.is_file():
             print(f"    (no existe {archivo})")
             return False
-        texto = archivo.read_text(encoding="utf-8")
-        # Solo los textos entrecomillados: fuera de ellos, ') >' seria codigo.
-        literales = re.findall(r"'[^'\n]*'|\"[^\"\n]*\"", texto)
-        for k, literal in enumerate(literales):
-            if ")>" in literal:
-                problemas.append(f"{archivo.name}: {literal.strip()[:60]}")
+        for plantilla in _literales_de_los_return(archivo.read_text(encoding="utf-8")):
+            malo = _atributo_sin_cerrar(plantilla)
+            if malo:
+                problemas.append(f"{archivo.name}: {malo[:70]}")
 
-    for p in problemas:
-        print(f"    {p}")
     if problemas:
+        for p in problemas:
+            print(f"    {p}")
         print("    Falta la comilla que cierra el atributo antes del '>'.")
         print("    El navegador se traga media etiqueta y el elemento no se dibuja.")
         return False
-    print("    ningun atributo se queda sin cerrar antes del '>'")
+    print("    ninguna etiqueta armada en JavaScript se queda sin cerrar")
     return True
 
 

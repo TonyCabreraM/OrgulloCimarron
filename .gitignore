@@ -4,7 +4,9 @@ _tmp_*
 !plantilla/**
 !test_qr.py
 
-# La copia de seguridad que deja el editor antes de tocar el croquis. Vive en
-# el equipo de quien edita; en el repositorio solo seria ruido, y git ya
-# guarda todas las versiones del croquis.
+# La copia de seguridad que deja el editor antes de tocar el croquis, y los
+# PNG de la biblioteca de iconos. Viven en el equipo de quien edita; en el
+# repositorio solo serian ruido, y git ya guarda todas las versiones del
+# croquis, que es quien lleva dentro las imagenes que de verdad se usan.
 editor/_respaldo/
+editor/iconos/

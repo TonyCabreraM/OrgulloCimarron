@@ -56,6 +56,7 @@ button{font:inherit;cursor:pointer}
 .boton.oro{background:var(--oro);border-color:#e0a800;color:#3f2f00}
 .boton.oro:hover{background:#eab000}
 .boton.peligro:hover{border-color:var(--alerta);color:var(--alerta);background:#fdf2f1}
+.boton.chico{padding:5px 9px;font-size:11.5px;font-weight:650;border-radius:7px}
 #mensaje{
   display:flex;align-items:center;gap:10px;font-size:12.5px;font-weight:600;
   padding:7px 13px;border-radius:9px;white-space:pre-line;
@@ -92,9 +93,14 @@ input[type=text],textarea{
   width:100%;padding:7px 9px;border:1px solid var(--linea);border-radius:8px;
   font:inherit;background:#fcfdfc;color:var(--texto);resize:vertical;
 }
-input[type=text]:focus,textarea:focus{
+input[type=text]:focus,textarea:focus,select:focus{
   outline:2px solid #00723f33;border-color:var(--verde);background:#fff;
 }
+select{
+  width:100%;padding:7px 9px;border:1px solid var(--linea);border-radius:8px;
+  font:inherit;background:#fcfdfc;color:var(--texto);
+}
+.pista{font-size:11px;color:var(--tenue);line-height:1.45;margin-top:5px}
 .campo + .campo{margin-top:9px}
 
 /* lista de zonas */
@@ -184,6 +190,36 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
                 vector-effect:non-scaling-stroke}
 #gIconos .lam .relleno{fill:var(--tinta);stroke:none}
 #gIconos g.sel .aro{stroke:var(--verde);stroke-width:2.5;stroke-opacity:1}
+/* Los que estan en la seleccion multiple llevan un filo grueso y distinto del
+   de «el elegido»: son dos cosas diferentes y hay que poder verlas a la vez
+   (uno elegido y varios marcados para alinear). */
+#gIconos g.multi .aro{stroke:var(--oro);stroke-width:3.5;stroke-opacity:1;
+                      fill:#fffbe9}
+/* El que lleva informacion se toca en el mapa publicado, asi que aqui se
+   marca: si no, no hay forma de saber cuales van a responder al dedo. */
+#gIconos g.conInfo .aro{stroke-dasharray:3.2 2.4}
+/* Los propios y los animados tambien se distinguen en el mapa del editor,
+   para no tener que ir uno por uno mirando el panel. */
+#gIconos g.animado .aro{stroke:#6f4bd8;stroke-opacity:.75}
+/* Vista previa de las animaciones mientras se edita. Son las mismas que las
+   del croquis publicado, para que lo que se ve aqui sea lo que sale alli. */
+#gIconos .an{transform-box:fill-box;transform-origin:center}
+#gIconos .an.late{animation:icLate 2.4s ease-in-out infinite}
+#gIconos .an.flota{animation:icFlota 3.2s ease-in-out infinite}
+#gIconos .an.gira{animation:icGira 14s linear infinite}
+#gIconos .an.brilla{animation:icBrilla 2.6s ease-in-out infinite}
+#gIconos .an.ondas{animation:icOndas 2.6s ease-out infinite}
+#gIconos .onda{fill:none;stroke:var(--verde);stroke-width:1.6;stroke-opacity:.9;
+               vector-effect:non-scaling-stroke}
+@keyframes icLate{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+@keyframes icFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes icGira{to{transform:rotate(360deg)}}
+@keyframes icBrilla{0%,100%{opacity:1}50%{opacity:.42}}
+@keyframes icOndas{
+  0%{transform:scale(1);opacity:.55}
+  70%{transform:scale(1.9);opacity:0}
+  100%{transform:scale(1.9);opacity:0}}
+@media (prefers-reduced-motion:reduce){#gIconos .an{animation:none}}
 #gAyudas{pointer-events:none}
 #gAyudas text{
   fill:var(--tinta);font-weight:700;font-family:system-ui,sans-serif;
@@ -275,6 +311,7 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <input type="file" id="archivo" accept="image/*" hidden>
       </div>
       <div id="listaPropios"></div>
+      <div id="listaBiblioteca"></div>
       <div id="sinIconos" style="margin-top:10px">
         Ninguno colocado. Arrastra uno de la paleta al mapa, o púlsalo y luego
         haz clic en el sitio.
@@ -292,8 +329,50 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <label for="fTam">Tamaño · <b id="vTam">46</b></label>
         <input type="range" id="fTam" min="16" max="160" step="1" value="46">
       </div>
+      <div class="campo">
+        <label for="fRot">Giro · <b id="vRot">0°</b></label>
+        <input type="range" id="fRot" min="-180" max="180" step="1" value="0">
+        <div class="fila" style="margin-top:6px">
+          <button class="boton chico" data-giro="-90">−90°</button>
+          <button class="boton chico" data-giro="-15">−15°</button>
+          <button class="boton chico" data-giro="15">+15°</button>
+          <button class="boton chico" data-giro="90">+90°</button>
+          <button class="boton chico" id="btnRot0">0°</button>
+        </div>
+      </div>
+      <div class="campo">
+        <label for="fAnim">Animación</label>
+        <select id="fAnim"></select>
+      </div>
+      <div class="campo">
+        <label for="fInfoTitulo">
+          Información que sale al pulsarlo
+        </label>
+        <input type="text" id="fInfoTitulo" maxlength="60"
+               placeholder="Déjalo vacío para que el icono no se pueda pulsar">
+        <textarea id="fInfoTexto" rows="3" style="margin-top:6px"
+                  placeholder="El texto que sale en la ventana. Con saltos de línea se ve tal cual."></textarea>
+        <div class="pista" id="pistaInfo"></div>
+      </div>
       <div class="fila" style="margin-top:11px">
         <button class="boton peligro" id="btnBorrarIcono">Borrar icono</button>
+      </div>
+    </div>
+
+    <div class="bloque" id="bloqueAlinear">
+      <h2>Alinear los seleccionados</h2>
+      <div id="resumenSel" class="pista" style="margin:-4px 0 9px"></div>
+      <div class="fila">
+        <button class="boton" id="btnFila">En fila</button>
+        <button class="boton" id="btnColumna">En columna</button>
+        <button class="boton" id="btnRejilla">En rejilla</button>
+      </div>
+      <div class="pista">
+        Se colocan solos a partir de donde están ahora. Si no caben sin
+        tocarse, se quedan pegados: mejor eso que moverlos donde no van.
+      </div>
+      <div class="fila" style="margin-top:9px">
+        <button class="boton" id="btnLimpiarSel">Quitar la selección</button>
       </div>
     </div>
   </aside>
@@ -308,9 +387,11 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 // datos se desincronicen.
 // ---------------------------------------------------------------------------
 var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [],
-         topes: {tam: [16, 160]},
+         biblioteca: [], animaciones: {},
+         topes: {tam: [16, 160], rot: [-180, 180]},
          vista: [110, 100, 1005, 640], ancho: 1224, alto: 792, git: {}};
 var sel = null;          // {tipo:"zona"|"icono", i: n}
+var multi = [];          // indices de iconos marcados para alinear
 var tipoPalo = null;     // icono elegido en la paleta, listo para colocar
 var modoVertice = false; // el siguiente clic mete una esquina nueva
 var sucio = false;       // hay cambios sin guardar
@@ -335,7 +416,13 @@ var s = document.getElementById("s"),
     fDesc = document.getElementById("fDesc"),
     fTam = document.getElementById("fTam"),
     fTamNuevo = document.getElementById("fTamNuevo"),
-    listaPropios = document.getElementById("listaPropios");
+    fRot = document.getElementById("fRot"),
+    fAnim = document.getElementById("fAnim"),
+    fEtiqueta = document.getElementById("fEtiqueta"),
+    fInfoTitulo = document.getElementById("fInfoTitulo"),
+    fInfoTexto = document.getElementById("fInfoTexto"),
+    listaPropios = document.getElementById("listaPropios"),
+    listaBiblioteca = document.getElementById("listaBiblioteca");
 
 // Lo que mide un icono cuando no lleva tamano propio. Tiene que ser el mismo
 // que TAM_ICONO en croquis.html.
@@ -346,7 +433,7 @@ function escapa(t) {
   return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function tamDe(ic) { return ic[4] || TAM_ICONO; }
+function tamDe(ic) { return ic.s || TAM_ICONO; }
 function nombreDe(tipo) { return E.simbolos[tipo] || tipo; }
 
 // El dibujo de un icono: o la forma del simbolo, o la imagen propia recortada
@@ -359,6 +446,25 @@ function figuraDe(tipo) {
          + ' width="24.4" height="24.4" clip-path="url(#recorte)"/>';
   }
   return "";
+}
+
+// El transform completo de un icono, igual que el que arma croquis.html:
+// primero al sitio, luego el tamano y al final el giro, para que la rotacion
+// sea sobre su propio centro.
+function transformDe(ic) {
+  return "translate(" + ic.x + "," + ic.y + ") scale(" + (tamDe(ic) / 24) + ")"
+       + (ic.r ? " rotate(" + ic.r + ")" : "");
+}
+
+// El grupo animado de dentro, con el anillo de las ondas si toca. El de fuera
+// es el que lleva la posicion y no se puede animar: en SVG el transform de CSS
+// pisa al atributo transform y el icono se iria a la esquina.
+function dentroConAnimacion(ic) {
+  var forma = figuraDe(ic.t);
+  if (!forma) return "";
+  var clase = "an" + (ic.a ? " " + ic.a : "");
+  var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
+  return '<g class="' + clase + '">' + ondas + forma + "</g>";
 }
 function aviso(texto, tipo) {
   if (!texto) { mensaje.textContent = ""; mensaje.className = ""; return; }
@@ -402,7 +508,8 @@ function sePisan(a, b) {
 
 // Lo que dice el servidor (editor/validar.py). Aquí se adelanta para avisar
 // mientras se edita y no al pulsar Guardar; el que decide es el servidor.
-var TAM_MIN = 16, TAM_MAX = 160;
+var TAM_MIN = 16, TAM_MAX = 160, ROT_MIN = -180, ROT_MAX = 180;
+var TIT_MAX = 60, TEX_MAX = 600;
 
 function problemas() {
   var mal = E.zonas.map(function () { return [] });
@@ -434,17 +541,28 @@ function problemas() {
 function problemasDeIconos() {
   return E.iconos.map(function (ic) {
     var mal = [];
-    if (!E.formas[ic[0]] && !E.propios[ic[0]]) {
-      mal.push("El tipo «" + ic[0] + "» no existe"
-             + (E.propios[ic[0]] === undefined && ic[0].indexOf("-") > 0
+    if (!E.formas[ic.t] && !E.propios[ic.t]) {
+      mal.push("El tipo «" + ic.t + "» no existe"
+             + (E.propios[ic.t] === undefined && ic.t.indexOf("-") > 0
                 ? ". Puede que le hayas quitado la imagen que usaba." : "."));
     }
-    var x = ic[1], y = ic[2];
-    if (x < 12 || y < 12 || x > E.ancho - 12 || y > E.alto - 12)
+    if (ic.x < 12 || ic.y < 12 || ic.x > E.ancho - 12 || ic.y > E.alto - 12)
       mal.push("Está pegado al borde del mapa.");
     var t = tamDe(ic);
     if (t < TAM_MIN || t > TAM_MAX)
       mal.push("El tamaño " + Math.round(t) + " se sale de " + TAM_MIN + " a " + TAM_MAX + ".");
+    if (ic.r !== undefined && (ic.r < ROT_MIN || ic.r > ROT_MAX))
+      mal.push("El giro " + Math.round(ic.r) + "° se sale de " + ROT_MIN + " a " + ROT_MAX + ".");
+    if (ic.a && !E.animaciones[ic.a])
+      mal.push("La animación «" + ic.a + "» no existe.");
+    if (ic.i) {
+      if (!ic.i[0].trim()) mal.push("La información no tiene título.");
+      else if (ic.i[0].length > TIT_MAX)
+        mal.push("El título de la información pasa de " + TIT_MAX + " caracteres.");
+      if (!ic.i[1].trim()) mal.push("La información no tiene texto.");
+      else if (ic.i[1].length > TEX_MAX)
+        mal.push("El texto de la información pasa de " + TEX_MAX + " caracteres.");
+    }
     return mal;
   });
 }
@@ -517,15 +635,23 @@ function dibuja() {
   }).join("");
 
   gIconos.innerHTML = E.iconos.map(function (ic, k) {
-    var dentro = figuraDe(ic[0]);
+    var dentro = dentroConAnimacion(ic);
     if (!dentro) return "";
+    var clases = [];
+    if (sel && sel.tipo === "icono" && sel.i === k) clases.push("sel");
+    if (multi.indexOf(k) >= 0) clases.push("multi");
+    // Los que llevan informacion se marcan porque en el mapa publicado se
+    // pueden pulsar, y los animados porque se mueven. Sin estas pistas habria
+    // que ir abriendo uno por uno para saberlo.
+    if (ic.i) clases.push("conInfo");
+    if (ic.a) clases.push("animado");
     // Ojo con las comillas del transform: si se cuela el > sin cerrar el
     // atributo, el navegador se traga la etiqueta entera y el icono no sale.
     // Es justo el fallo que documenta el README del croquis.
-    return '<g class="' + (sel && sel.tipo === "icono" && sel.i === k ? "sel" : "")
-         + '" data-icono="' + k + '" transform="translate(' + ic[1] + "," + ic[2]
-         + ") scale(" + (tamDe(ic) / 24) + ')"><title>' + escapa(ic[3] || ic[0])
-         + '</title><circle class="aro" r="13.4"/>' + dentro + "</g>";
+    return '<g class="' + clases.join(" ") + '" data-icono="' + k
+         + '" transform="' + transformDe(ic) + '"><title>'
+         + escapa(ic.n || nombreDe(ic.t)) + "</title>"
+         + '<circle class="aro" r="13.4"/>' + dentro + "</g>";
   }).join("");
 
   var tam = vb.w * 0.0135;
@@ -552,16 +678,23 @@ function pintaPanel(mal) {
   }).join("");
 
   listaIconos.innerHTML = E.iconos.map(function (ic, k) {
+    var marcas = [];
+    if (ic.i) marcas.push("info");
+    if (ic.a) marcas.push(ic.a);
+    if (ic.r) marcas.push(Math.round(ic.r) + "°");
     return '<button class="icono'
          + (sel && sel.tipo === "icono" && sel.i === k ? " sel" : "")
+         + (multi.indexOf(k) >= 0 ? " multi" : "")
          + (mal.iconos[k].length ? " mal" : "")
-         + '" data-icono="' + k + '"><svg viewBox="-13 -13 26 26">' + figuraDe(ic[0])
-         + '</svg><span class="nom">' + escapa(ic[3] || nombreDe(ic[0]))
-         + '</span><span class="coor">' + ic[1] + "," + ic[2] + " · " + Math.round(tamDe(ic))
+         + '" data-icono="' + k + '"><svg viewBox="-13 -13 26 26"><g class="'
+         + (ic.a ? "an " + ic.a : "an") + '">' + figuraDe(ic.t) + "</g></svg>"
+         + '<span class="nom">' + escapa(ic.n || nombreDe(ic.t))
+         + '</span><span class="coor">' + marcas.join(" · ")
          + "</span></button>";
   }).join("");
   document.getElementById("sinIconos").style.display = E.iconos.length ? "none" : "";
   pintaPropios();
+  pintaBiblioteca();
 
   var todos = [];
   E.zonas.forEach(function (z, k) {
@@ -569,7 +702,7 @@ function pintaPanel(mal) {
   });
   E.iconos.forEach(function (ic, k) {
     mal.iconos[k].forEach(function (p) {
-      todos.push("Icono " + (k + 1) + " (" + escapa(ic[3] || nombreDe(ic[0])) + "): " + escapa(p));
+      todos.push("Icono " + (k + 1) + " (" + escapa(ic.n || nombreDe(ic.t)) + "): " + escapa(p));
     });
   });
   if (E.avisos && E.avisos.length) todos.push.apply(todos, E.avisos.map(escapa));
@@ -595,13 +728,38 @@ function pintaPanel(mal) {
   var hayIcono = sel && sel.tipo === "icono" && E.iconos[sel.i];
   document.getElementById("bloqueIcono").style.display = hayIcono ? "" : "none";
   if (hayIcono) {
-    var ic = E.iconos[sel.i], t = Math.round(tamDe(ic));
+    var ic = E.iconos[sel.i], t = Math.round(tamDe(ic)), rot = Math.round(ic.r || 0);
     if (document.activeElement !== fTam) fTam.value = t;
     document.getElementById("vTam").textContent = t;
-    var fEtiqueta = document.getElementById("fEtiqueta");
-    if (document.activeElement !== fEtiqueta) fEtiqueta.value = ic[3] || "";
+    if (document.activeElement !== fRot) fRot.value = rot;
+    document.getElementById("vRot").textContent = rot + "°";
+    if (document.activeElement !== fAnim) fAnim.value = ic.a || "";
+    if (document.activeElement !== fEtiqueta) fEtiqueta.value = ic.n || "";
+    if (document.activeElement !== fInfoTitulo) fInfoTitulo.value = ic.i ? ic.i[0] : "";
+    if (document.activeElement !== fInfoTexto) fInfoTexto.value = ic.i ? ic.i[1] : "";
+    actualizaPistaInfo(ic);
+  }
+  // El bloque de alineado solo sale cuando hay algo que alinear, para no
+  // llenar el panel de botones que no hacen nada.
+  document.getElementById("bloqueAlinear").style.display =
+    multi.length >= 2 ? "" : "none";
+  if (multi.length >= 2) {
+    document.getElementById("resumenSel").textContent =
+      multi.length + " iconos marcados. Elige cómo colocarlos.";
   }
   document.getElementById("btnVertice").classList.toggle("principal", modoVertice);
+}
+
+// Le dice a quien edita qué va a pasar al tocar el icono en el mapa, que es
+// la duda más razonable al rellenar estos dos campos.
+function actualizaPistaInfo(ic) {
+  var pista = document.getElementById("pistaInfo");
+  if (ic.i) {
+    pista.textContent = "En el mapa: «" + ic.i[0] + "» con "
+      + ic.i[1].length + " caracteres. Al pulsarlo sale la ventana.";
+  } else {
+    pista.textContent = "Sin información: el icono se ve pero no se puede pulsar.";
+  }
 }
 
 // La lista de los iconos propios: lo que ocupan y como quitarlos. Se dice
@@ -612,21 +770,56 @@ function pintaPropios() {
   var total = 0;
   nombres.forEach(function (n) { total += (E.propios[n] || "").length });
   listaPropios.innerHTML =
-    '<div class="rotuloPequeno"><span>Mis iconos · ' + nombres.length + "</span>"
+    '<div class="rotuloPequeno"><span>En el croquis · ' + nombres.length + "</span>"
     + "<b>" + Math.round(total / 1024) + " KB</b></div>"
     + nombres.map(function (n) {
-      var usos = E.iconos.filter(function (ic) { return ic[0] === n }).length;
+      var usos = E.iconos.filter(function (ic) { return ic.t === n }).length;
       return '<button class="icono" data-propio="' + escapa(n) + '" title="Quitar '
-           + escapa(n) + '"><svg viewBox="-13 -13 26 26">' + figuraDe(n) + "</svg>"
+           + escapa(n) + ' del croquis"><svg viewBox="-13 -13 26 26">'
+           + figuraDe(n) + "</svg>"
            + '<span class="nom">' + escapa(n) + "</span>"
            + '<span class="coor">' + (usos ? usos + " en el mapa" : "sin usar")
            + " · quitar</span></button>";
     }).join("");
 }
 
-function elige(tipo, i) {
+// La biblioteca: los PNG que se subieron alguna vez y que ahora NO estan en
+// el croquis. Estan en editor/iconos/, asi que se pueden volver a poner sin
+// tener que buscar la imagen original.
+function pintaBiblioteca() {
+  if (!E.biblioteca.length) { listaBiblioteca.innerHTML = ""; return }
+  listaBiblioteca.innerHTML =
+    '<div class="rotuloPequeno"><span>Guardados · ' + E.biblioteca.length + "</span>"
+    + "<b>" + Math.round(E.biblioteca.reduce(function (a, b) { return a + b.bytes }, 0) / 1024)
+    + " KB</b></div>"
+    + E.biblioteca.map(function (b) {
+      return '<button class="icono" data-recupera="' + escapa(b.nombre)
+           + '" title="Volver a poner ' + escapa(b.nombre) + ' en el croquis">'
+           + '<span class="nom">' + escapa(b.nombre) + "</span>"
+           + '<span class="coor">' + Math.round(b.bytes / 1024) + " KB · añadir</span></button>";
+    }).join("");
+}
+
+function elige(tipo, i, sumar) {
+  var antes = sel;
   sel = (i === undefined ? null : {tipo: tipo, i: i});
   modoVertice = modoVertice && tipo === "zona";
+  // Con Mayús el clic suma o quita de la selección múltiple, sin cambiar el
+  // que está elegido. Es lo de siempre en cualquier editor: Mayús para
+  // agrupar, clic normal para empezar de cero.
+  if (tipo === "icono" && i !== undefined && sumar) {
+    var pos = multi.indexOf(i);
+    if (pos >= 0) multi.splice(pos, 1);
+    else multi.push(i);
+  } else if (!(tipo === "icono" && antes && antes.tipo === "icono"
+               && multi.indexOf(antes.i) >= 0 && multi.indexOf(i) >= 0)) {
+    // Al cambiar de icono sin Mayús se limpia la marca, salvo que el nuevo ya
+    // estuviera marcado: en ese caso se está trabajando con el grupo.
+    multi = [];
+  }
+  // Las marcas se guardan por indice, asi que al borrar un icono quedan
+  // corridas y marcan al vecino. Se limpian y se vuelven a poner.
+  multi = multi.filter(function (k) { return E.iconos[k] });
   dibuja();
   if (tipo === "icono" && i !== undefined)
     listaIconos.querySelector('.icono[data-icono="' + i + '"]')
@@ -637,6 +830,68 @@ function hayCambios() {
   dibuja();
 }
 
+// --- alineacion -----------------------------------------------------------
+// Coloca los iconos marcados en fila, columna o rejilla. Se parte de donde
+// estan, asi que el resultado es el que uno espera: los iconos se ordenan
+// segun su posicion actual y se reparten parejo.
+//
+// El paso entre uno y otro es el mayor entre el reparto exacto y lo que mide
+// el icono mas grande. Con eso casi nunca se tocan; si el hueco es mas chico
+// que los iconos, se quedan pegados, que es mejor que meterlos donde no van.
+function alinea(modo) {
+  if (multi.length < 2) return;
+  var idx = multi.slice().sort(function (a, b) { return a - b });
+  var ics = idx.map(function (k) { return E.iconos[k] });
+  var grande = Math.max.apply(null, ics.map(tamDe));
+
+  if (modo === "columna") {
+    // Ordenados de arriba abajo y repartidos en vertical.
+    ics.sort(function (a, b) { return a.y - b.y });
+    var ys = ics.map(function (ic) { return ic.y });
+    var alto = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+    var paso = Math.max(alto / (ics.length - 1), grande);
+    var y0 = Math.min.apply(null, ys);
+    var x = Math.round(ics.reduce(function (a, ic) { return a + ic.x }, 0) / ics.length);
+    ics.forEach(function (ic, n) { ic.x = x; ic.y = Math.round(y0 + paso * n) });
+  } else if (modo === "rejilla") {
+    // Una cuadricula lo mas cuadrada posible, empezando por arriba a la
+    // izquierda de donde estaban.
+    var cols = Math.ceil(Math.sqrt(ics.length));
+    var filas = Math.ceil(ics.length / cols);
+    ics.sort(function (a, b) { return (a.y - b.y) || (a.x - b.x) });
+    var x0 = Math.min.apply(null, ics.map(function (ic) { return ic.x }));
+    var y0r = Math.min.apply(null, ics.map(function (ic) { return ic.y }));
+    ics.forEach(function (ic, n) {
+      ic.x = Math.round(x0 + grande * 1.25 * (n % cols));
+      ic.y = Math.round(y0r + grande * 1.25 * Math.floor(n / cols));
+    });
+  } else {
+    // Fila: todos a la misma altura, repartidos en horizontal.
+    ics.sort(function (a, b) { return a.x - b.x });
+    var xs = ics.map(function (ic) { return ic.x });
+    var ancho = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+    var pasox = Math.max(ancho / (ics.length - 1), grande);
+    var x0f = Math.min.apply(null, xs);
+    var y = Math.round(ics.reduce(function (a, ic) { return a + ic.y }, 0) / ics.length);
+    ics.forEach(function (ic, n) { ic.y = y; ic.x = Math.round(x0f + pasox * n) });
+  }
+
+  // Al repartir pueden salirse del mapa. Se mete el grupo entero hacia dentro
+  // en vez de recortar uno por uno: asi no se deforma la alineacion.
+  var xs2 = ics.map(function (ic) { return ic.x });
+  var ys2 = ics.map(function (ic) { return ic.y });
+  var arregloX = Math.max(0, Math.ceil(12 - Math.min.apply(null, xs2)),
+                          Math.ceil(Math.max.apply(null, xs2) - (E.ancho - 12)));
+  var arregloY = Math.max(0, Math.ceil(12 - Math.min.apply(null, ys2)),
+                          Math.ceil(Math.max.apply(null, ys2) - (E.alto - 12)));
+  if (arregloX || arregloY) {
+    ics.forEach(function (ic) { ic.x -= arregloX; ic.y -= arregloY });
+  }
+
+  hayCambios();
+  aviso("Colocados " + ics.length + " iconos en " + modo + ".", "ok");
+}
+
 // --- arrastre -------------------------------------------------------------
 var arrastre = null;
 s.addEventListener("pointerdown", function (ev) {
@@ -645,8 +900,8 @@ s.addEventListener("pointerdown", function (ev) {
 
   // 1. Colocar un icono de la paleta: el clic sobre el mapa lo pone.
   if (tipoPalo) {
-    var etiqueta = nombreDe(tipoPalo);
-    E.iconos.push([tipoPalo, p[0], p[1], etiqueta, +fTamNuevo.value]);
+    E.iconos.push({t: tipoPalo, x: p[0], y: p[1], n: nombreDe(tipoPalo),
+                   s: +fTamNuevo.value});
     tipoPalo = null;
     pintaPaleta();
     elige("icono", E.iconos.length - 1);
@@ -680,9 +935,15 @@ s.addEventListener("pointerdown", function (ev) {
     arrastre = {que: "zona", k: +zona.dataset.zona, desde: p,
                 original: E.zonas[+zona.dataset.zona][2].map(function (q) { return q.slice() })};
   } else if (icono) {
-    elige("icono", +icono.dataset.icono);
-    arrastre = {que: "icono", k: +icono.dataset.icono, desde: p,
-                original: [E.iconos[+icono.dataset.icono][1], E.iconos[+icono.dataset.icono][2]]};
+    var k = +icono.dataset.icono;
+    elige("icono", k, ev.shiftKey);
+    // Arrastrar uno marcado mueve todo el grupo: es lo util de marcarlos.
+    var grupo = multi.indexOf(k) >= 0 ? multi.slice() : [k];
+    grupo = grupo.filter(function (n) { return E.iconos[n] });
+    arrastre = {que: "icono", k: k, desde: p, grupo: grupo,
+                original: grupo.map(function (n) {
+                  return [E.iconos[n].x, E.iconos[n].y];
+                })};
   } else {
     elige(null);
     return;
@@ -700,8 +961,10 @@ s.addEventListener("pointermove", function (ev) {
   } else if (arrastre.que === "zona") {
     E.zonas[arrastre.k][2] = arrastre.original.map(function (q) { return [q[0] + dx, q[1] + dy] });
   } else {
-    E.iconos[arrastre.k][1] = arrastre.original[0] + dx;
-    E.iconos[arrastre.k][2] = arrastre.original[1] + dy;
+    arrastre.grupo.forEach(function (n, j) {
+      E.iconos[n].x = arrastre.original[j][0] + dx;
+      E.iconos[n].y = arrastre.original[j][1] + dy;
+    });
   }
   hayCambios();
 });
@@ -782,9 +1045,17 @@ addEventListener("keydown", function (ev) {
   ev.preventDefault();
   if (sel.tipo === "zona") {
     E.zonas[sel.i][2] = E.zonas[sel.i][2].map(function (q) { return [q[0] + d[0], q[1] + d[1]] });
+  } else if (multi.length >= 2) {
+    // Con varios marcados, las flechas mueven el grupo entero. Es la forma de
+    // cuadrar un grupo al milímetro sin pelearse con el ratón.
+    multi.forEach(function (k) {
+      if (!E.iconos[k]) return;
+      E.iconos[k].x += d[0];
+      E.iconos[k].y += d[1];
+    });
   } else {
-    E.iconos[sel.i][1] += d[0];
-    E.iconos[sel.i][2] += d[1];
+    E.iconos[sel.i].x += d[0];
+    E.iconos[sel.i].y += d[1];
   }
   hayCambios();
 });
@@ -882,16 +1153,50 @@ listaPropios.addEventListener("click", function (ev) {
   var b = ev.target.closest("[data-propio]");
   if (!b) return;
   var n = b.dataset.propio;
-  var usos = E.iconos.filter(function (ic) { return ic[0] === n }).length;
+  var usos = E.iconos.filter(function (ic) { return ic.t === n }).length;
   // Se va tambien de los iconos que lo usaban: dejarlos con un tipo que ya no
   // existe los volveria invisibles, y eso es peor que quitarlos y decirlo.
-  if (usos) E.iconos = E.iconos.filter(function (ic) { return ic[0] !== n });
+  if (usos) E.iconos = E.iconos.filter(function (ic) { return ic.t !== n });
   delete E.propios[n];
   if (sel && sel.tipo === "icono") sel = null;
+  multi = [];
   hayCambios();
   pintaPaleta();
   aviso("Quitado «" + n + "»" + (usos ? " y " + usos + " icono(s) del mapa" : "")
-        + ". Vuelve a subir la imagen si te arrepientes.", "ok");
+        + ". Sigue guardado abajo, en Guardados, por si lo quieres volver a poner.", "ok");
+  // Y vuelve a la lista de guardados, que sigue en editor/iconos/. Asi quitarlo
+  // no es perderlo: se vuelve a poner con un clic. La lista la manda el
+  // servidor, que es quien sabe que PNG hay en el disco.
+  recargaBiblioteca();
+});
+
+function recargaBiblioteca() {
+  fetch("/api/biblioteca")
+    .then(function (r) { return r.json() })
+    .then(function (d) { if (d && d.biblioteca) { E.biblioteca = d.biblioteca; dibuja() } })
+    .catch(function () {});
+}
+
+listaBiblioteca.addEventListener("click", function (ev) {
+  var b = ev.target.closest("[data-recupera]");
+  if (!b) return;
+  var n = b.dataset.recupera;
+  aviso("Recuperando «" + n + "»…", "");
+  fetch("/api/biblioteca", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nombre: n})
+  }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
+    .then(function (par) {
+      var ok = par[0], d = par[1];
+      if (!ok) { aviso(d.mensaje || "No se pudo recuperar.", "mal"); return }
+      E.propios[d.nombre] = d.datos;
+      E.biblioteca = E.biblioteca.filter(function (x) { return x.nombre !== d.nombre });
+      hayCambios();
+      pintaPaleta();
+      aviso("«" + d.nombre + "» vuelve a estar en la paleta. Arrástralo al mapa "
+            + "y pulsa Guardar.", "ok");
+    })
+    .catch(function (e) { aviso("No se pudo recuperar: " + e.message, "mal") });
 });
 
 // --- panel ----------------------------------------------------------------
@@ -901,7 +1206,7 @@ listaZonas.addEventListener("click", function (ev) {
 });
 listaIconos.addEventListener("click", function (ev) {
   var b = ev.target.closest(".icono");
-  if (b) elige("icono", +b.dataset.icono);
+  if (b) elige("icono", +b.dataset.icono, ev.shiftKey);
 });
 
 [fNombre, fCorto, fDesc].forEach(function (campo, j) {
@@ -922,29 +1227,80 @@ document.getElementById("btnBorrarZona").addEventListener("click", borrar);
 document.getElementById("btnBorrarIcono").addEventListener("click", function () {
   if (!sel || sel.tipo !== "icono") return;
   E.iconos.splice(sel.i, 1);
+  multi = [];
   elige(null);
   hayCambios();
 });
 
-// El tamano del icono elegido. Se mueve el mapa mientras se arrastra el
-// deslizador, para ver cuanto tapa antes de dejarlo puesto.
+// Los controles del icono elegido. Todos escriben en el icono y repintan: el
+// mapa se mueve mientras se arrastra el deslizador, para ver el resultado
+// antes de dejarlo puesto.
+function tocaIcono(cambio) {
+  if (!sel || sel.tipo !== "icono" || !E.iconos[sel.i]) return;
+  cambio(E.iconos[sel.i]);
+  sucio = true;
+  dibuja();
+}
+
 fTam.addEventListener("input", function () {
   document.getElementById("vTam").textContent = fTam.value;
-  if (!sel || sel.tipo !== "icono") return;
-  E.iconos[sel.i][4] = +fTam.value;
-  hayCambios();
+  tocaIcono(function (ic) { ic.s = +fTam.value });
 });
-fTamNuevo.addEventListener("input", function () {
-  document.getElementById("vTamNuevo").textContent = fTamNuevo.value;
+fRot.addEventListener("input", function () {
+  document.getElementById("vRot").textContent = fRot.value + "°";
+  tocaIcono(function (ic) { ic.r = +fRot.value });
+});
+fAnim.addEventListener("change", function () {
+  tocaIcono(function (ic) {
+    if (fAnim.value) ic.a = fAnim.value;
+    else delete ic.a;
+  });
+});
+fEtiqueta.addEventListener("input", function () {
+  tocaIcono(function (ic) { ic.n = fEtiqueta.value });
+});
+// La información es lo que hace que el icono se pueda pulsar en el mapa. Se
+// guarda como [título, texto] y solo si hay las dos cosas: con solo el título
+// la ventana saldría vacía.
+function guardaInfo() {
+  tocaIcono(function (ic) {
+    var titulo = fInfoTitulo.value.trim(), texto = fInfoTexto.value.trim();
+    if (titulo && texto) ic.i = [titulo, texto];
+    else delete ic.i;
+  });
+  actualizaPistaInfo(E.iconos[sel.i] || {});
+}
+fInfoTitulo.addEventListener("input", guardaInfo);
+fInfoTexto.addEventListener("input", guardaInfo);
+
+// Los botones de giro rápido. Van en pasos porque a ojo es difícil dejar un
+// icono recto: 90° para tumbarlo, 15° para corregir una perspectiva.
+document.querySelectorAll("[data-giro]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    if (!sel || sel.tipo !== "icono") return;
+    // Se envuelve el ángulo para que no se acumulen vueltas sin fin: -90 y
+    // 270 son el mismo giro y el archivo se lee mejor con el número corto.
+    var r = Math.round((E.iconos[sel.i].r || 0) + (+b.dataset.giro));
+    r = ((r + 180) % 360 + 360) % 360 - 180;
+    fRot.value = r;
+    document.getElementById("vRot").textContent = r + "°";
+    tocaIcono(function (ic) { if (r) ic.r = r; else delete ic.r });
+  });
+});
+document.getElementById("btnRot0").addEventListener("click", function () {
+  fRot.value = 0;
+  document.getElementById("vRot").textContent = "0°";
+  tocaIcono(function (ic) { delete ic.r });
 });
 
-// La etiqueta es lo que leen los lectores de pantalla y lo que se ve en la
-// lista del editor; en el mapa no sale.
-document.getElementById("fEtiqueta").addEventListener("input", function (ev) {
-  if (!sel || sel.tipo !== "icono") return;
-  E.iconos[sel.i][3] = ev.target.value;
-  sucio = true;
-  pintaPanel(problemas());
+// --- alineacion -----------------------------------------------------------
+document.getElementById("btnFila").addEventListener("click", function () { alinea("fila") });
+document.getElementById("btnColumna").addEventListener("click", function () { alinea("columna") });
+document.getElementById("btnRejilla").addEventListener("click", function () { alinea("rejilla") });
+document.getElementById("btnLimpiarSel").addEventListener("click", function () {
+  multi = [];
+  dibuja();
+  aviso("", "");
 });
 document.getElementById("btnNueva").addEventListener("click", function () {
   // Un cuadrado en medio del mapa, para moverlo desde ahi. Nace con nombre
@@ -1054,6 +1410,16 @@ fetch("/api/estado").then(function (r) {
   var t = (E.topes && E.topes.tam) || [16, 160];
   TAM_MIN = t[0]; TAM_MAX = t[1];
   [fTam, fTamNuevo].forEach(function (c) { c.min = t[0]; c.max = t[1] });
+  var r = (E.topes && E.topes.rot) || [-180, 180];
+  ROT_MIN = r[0]; ROT_MAX = r[1];
+  fRot.min = r[0]; fRot.max = r[1];
+  if (E.topes) { TIT_MAX = E.topes.titulo || 60; TEX_MAX = E.topes.texto || 600 }
+  fInfoTitulo.maxLength = TIT_MAX;
+  // Las animaciones las manda el servidor, que es quien las valida: si la
+  // lista de aqui se moviera aparte, se podria elegir una que luego rechaza.
+  fAnim.innerHTML = Object.keys(E.animaciones).map(function (k) {
+    return '<option value="' + escapa(k) + '">' + escapa(E.animaciones[k]) + "</option>";
+  }).join("");
   document.getElementById("commit").value = "Croquis: ";
   pintaGit(d.git);
   pintaPaleta();
