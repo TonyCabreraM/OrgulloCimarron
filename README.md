@@ -468,6 +468,7 @@ var ICONOS = [
 | `m` | La intensidad del movimiento, de 0.2 a 2.5 | No, 1 |
 | `c` | `0` para quitarle el círculo de fondo | No, lo lleva |
 | `i` | `[título, texto]`: la ventana que sale al pulsarlo | No, y sin esto no se puede pulsar |
+| `u` | `[texto, dirección]`: un botón con enlace dentro de esa ventana | No, y necesita `i` |
 
 **Antes era una tupla posicional** y creció hasta siete campos, que es donde uno
 empieza a contar comas con la vista. Con nombres, cada dato se lee solo, se
@@ -577,6 +578,38 @@ El toque sobre un icono **corta la propagación** en el `pointerdown`. Si no, el
 `<svg>` lo recibiría también y además de abrir la ventana desharía el zoom por
 detrás.
 
+**El icono de la ventana se dibuja con el mismo círculo que tiene en el mapa.**
+Estaba puesto con el círculo forzado, y un icono que en el mapa se ve suelto
+aparecía ahí metido en una caja: parece que el toque abrió otro icono. Media
+medida entre los dos sitios es peor que no hacerla.
+
+### El botón con enlace
+
+Un icono puede llevar un botón que abre una dirección, y sale **dentro de la
+ventana**, debajo del texto. Se configura en el editor con la casilla **Añadir
+un botón con enlace**, que abre los dos campos: el texto del botón y la
+dirección. Va como `u: [texto, dirección]`, igual que la información va como
+`i: [título, texto]`.
+
+**Necesita la información.** El botón vive dentro de la ventana, así que un
+icono con enlace y sin `i` no tiene dónde ponerlo. El servidor lo rechaza en vez
+de guardarlo ignorándolo: un campo que se escribe y no se ve es la peor forma de
+fallar.
+
+**La dirección solo puede ser `http://` o `https://`, y se comprueba en tres
+sitios:** en el editor al escribirla (avisa en la pista), en el servidor al
+guardar y **en el croquis antes de pintarla**. Los tres por el mismo motivo: la
+dirección acaba en un `href`, y un `javascript:` ahí sería una forma de ejecutar
+código en la página de quien mira el mapa. Una dirección sin esquema, como
+`owncloud.rec.uabc.mx`, el navegador la toma por una ruta relativa a esta página
+y no lleva a ninguna parte — sin dar ningún error.
+
+El `<a>` **lo arma el script con `createElement`**, no está escrito en el
+marcado ni se construye con `innerHTML`: la dirección viene del archivo, y así
+el navegador la trata como dirección y no como HTML. Lleva `target="_blank"` y
+`rel="noopener noreferrer"`, porque el destino es ajeno y sin `noopener` esa
+página puede manipular esta desde `window.opener`.
+
 ### Las animaciones
 
 Hay siete, y todas se mueven con `transform` y `opacidad`, que el navegador
@@ -590,7 +623,7 @@ compone sin repintar. Son suaves a propósito: esto es un mapa, no un anuncio.
 | `brilla` | Aparece y desaparece | Sí |
 | `ondas` | Un anillo que se expande y se desvanece, como un radar | Sí |
 | `vibra` | Tiembla, en diagonal y muy rápido | Sí |
-| `viento` | Se inclina hacia un lado y vuelve, con una racha más fuerte después | Sí |
+| `viento` | Se dobla hacia un lado y vuelve, como un árbol con aire | Sí |
 
 **Se aplican a un `<g>` interior, nunca al que lleva la posición.** En SVG el
 `transform` de CSS pisa al atributo `transform`, así que animar el grupo de
@@ -603,6 +636,34 @@ apilarían en la esquina. Ese grupo interior lleva `transform-box: fill-box` y
 reconocen: un temblor lento se lee como un fallo de dibujo y un viento lento
 como un balanceo. El viento, además, tiene los tiempos desiguales —18 %, 42 %,
 66 %, 84 %— porque una racha pareja se lee como un mecanismo.
+
+### El viento pivota en la base
+
+Todas las animaciones giran sobre el centro del icono, **menos el viento, que
+pivota en su base**:
+
+```css
+#iconos .an.viento{animation:icViento 3.4s ease-in-out infinite;
+                   transform-origin:50% 100%}
+```
+
+Es la diferencia entre un árbol y un columpio. Con el pivote en el centro el
+icono se balancea sobre su propio eje, que es lo que hace algo que flota; con
+el pivote abajo, la base se queda clavada y lo que se dobla es la copa.
+
+Son **dos movimientos a la vez**: el `rotate` inclina el icono sobre su base y
+el `skewX` lo dobla por arriba. Con solo el giro queda un palo rígido; con solo
+el sesgo la base también se mueve. Medido con marcadores en el icono: la base
+se desplaza **0**, la mitad **1,9** y la copa **3,9** unidades, o sea el 16 %
+del tamaño del icono. Esa progresión —nada abajo, el doble arriba— es lo que
+se lee como un árbol.
+
+**El `skewX` va en negativo, y eso no es una errata.** Los dos movimientos
+empujan a la copa, pero un `rotate` positivo la manda a la derecha y un
+`skewX` positivo a la izquierda: **se cancelan**. Con los dos positivos la copa
+se movía 0,8 de los 3,9 que le tocaban y el icono se quedaba casi quieto. Los
+grados son más altos que los de las otras animaciones por el mismo motivo: con
+el pivote abajo, el mismo ángulo mueve mucho menos la punta.
 
 Si el sistema pide menos movimiento (`prefers-reduced-motion`), se quedan
 quietos.
@@ -842,6 +903,7 @@ interfaz es un HTML suelto.
 | Animarlo | El desplegable **Animación** y, si la que se elige la usa, **Intensidad del movimiento** |
 | Quitarle el círculo | La casilla **Con círculo de fondo** |
 | Ponerle información | Los campos de **Información que sale al pulsarlo**; si se dejan vacíos, el icono no se puede pulsar |
+| Abrir un enlace desde el icono | La casilla **Añadir un botón con enlace**. Sale dentro de la ventana, así que el icono necesita información |
 | Guardar el icono entero | **Guardar como modelo** |
 | Poner varios iguales | Pulsar el modelo en **Modelos** y hacer clic en el mapa todas las veces que haga falta |
 | Crear un icono propio | **Subir una imagen…**: se abre el menú donde se elige tamaño, animación, intensidad y círculo. Vale PNG, JPG, WebP, GIF, BMP o **SVG** |
@@ -1025,6 +1087,37 @@ croquis o la página base:
   errores juntos dejaban los iconos sin aro del croquis **sin poder pulsarse**,
   y como el mapa deshace el zoom al tocarlo, el síntoma era «el icono no hace
   nada» en vez de un error.
+- **`rotate` y `skewX` con el mismo signo se cancelan.** En el viento del
+  croquis, un `rotate` positivo manda la copa a la derecha y un `skewX` positivo
+  a la izquierda: el icono se quedaba casi quieto (medido: 0,8 de los 3,9 que le
+  tocaban) sin ningún error. Para que sumen hay que ponerlos con signos
+  distintos. Cuando dos transformaciones «van en la misma dirección» por su
+  nombre, hay que medirlo: la matriz del navegador dice la verdad y la
+  intuición no.
+- **Para medir un `transform` con `getComputedStyle` hay que resolver el
+  origen a mano.** La matriz que devuelve el navegador NO incluye el
+  `transform-origin`: el navegador aplica
+  `translate(o) · M · translate(-o)`. Y para `transform-box: fill-box` el
+  origen viene en píxeles del propio recuadro del elemento, así que el punto
+  `(ox, oy)` del origen es el que se queda quieto. Medir posiciones en pantalla
+  no sirve: el zoom y el paneo del mapa las mueven y el ruido tapa la señal
+  (una medición dio 54 px de «movimiento» que era el mapa reencuadrándose).
+- **Un salto de línea de más en un comentario rompe el archivo entero.** En
+  `editor.html`, un texto de ayuda quedó partido en dos líneas en medio de un
+  `//`, así que la segunda mitad quedó como código suelto: error de sintaxis, el
+  script no se ejecuta y **el editor sale con todos los paneles vacíos**. No hay
+  error visible en la página. Se detecta mirando la consola del navegador, o
+  comprobando que existan las funciones nuevas (`typeof window.miFuncion`).
+- **Una casilla que no guarda nada por sí sola se desmarca sola.** Los campos
+  del botón con enlace necesitan texto Y dirección antes de guardar nada, así
+  que en cuanto el foco salía de la casilla para escribir en los campos, el
+  repintado del panel la devolvía a lo que decía el icono y la apagaba. Hay que
+  mirar si el foco está en **cualquiera** de los campos del bloque, no en la
+  casilla: `[casilla, texto, url].indexOf(document.activeElement) >= 0`.
+- **Un mensaje partido en varias líneas no se encuentra con `find`.** Los
+  mensajes del validador están concatenados para no pasar de ancho, así que la
+  frase completa no aparece en el archivo. Al comprobar texto hay que buscar un
+  trozo corto que quepa en una línea, o unir las líneas antes.
 - **Una variable CSS sí funciona dentro de un `@keyframes`.** Lo natural es
   pensar que no, porque en un keyframe no hay cascada que valga; pero el
   `calc()` se resuelve con el valor que la variable tiene **en ese elemento**,

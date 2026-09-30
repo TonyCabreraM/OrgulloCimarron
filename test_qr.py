@@ -268,6 +268,7 @@ def leer_objeto(texto: str, nombre: str):
 
 CROQUIS = Path("plantilla/croquis.html")
 EDITOR_HTML = Path("editor/editor.html")
+VALIDAR = Path("editor/validar.py")
 
 
 def _cuerpo_de_keyframe(css: str, nombre: str) -> str | None:
@@ -513,6 +514,50 @@ def test_animaciones_e_intensidad() -> bool:
             "en editor.html «fuerzaDe» no se usa en los tres sitios donde se "
             "dibuja un icono: el mapa y las miniaturas")
 
+    # --- 2 bis. Que el viento pivote en la base, como un arbol --------------
+    # No basta con que la animación exista: tiene que girar sobre la BASE. Con
+    # el pivote en el centro (que es el de todas las demás) el icono se
+    # balancea sobre su eje y se lee como algo que flota, no como algo que
+    # aguanta el aire desde abajo. Es una diferencia de una línea de CSS y de
+    # nada en el HTML, así que sin esta comprobación se pierde sin que nadie se
+    # entere hasta verlo en el móvil.
+    sitios_viento = [("mapa publicado", CROQUIS, "#iconos"),
+                     ("mapa del editor", EDITOR_HTML, "#gIconos"),
+                     ("vista previa del menú", EDITOR_HTML, "#previoDialogo"),
+                     ("miniaturas", EDITOR_HTML, ".palo svg")]
+    for nombre, ruta, cual in sitios_viento:
+        css = ruta.read_text(encoding="utf-8")
+        # El selector de cada sitio, con su transform-origin al lado. Se busca
+        # el bloque entero y no una linea suelta: el de las miniaturas lleva
+        # tres selectores juntos separados por comas.
+        patron = (re.escape(cual) + r"[^{}]*\.an\.viento\{[^}]*"
+                  r"transform-origin:\s*50%\s+100%")
+        if not re.search(patron, css):
+            problemas.append(
+                f"en {nombre} el viento no pivota en su base: falta "
+                f"`transform-origin: 50% 100%` en su regla")
+
+    # Y que el sesgo del keyframe vaya en el sentido que suma con el giro.
+    # Con los dos en positivo se cancelan y la copa se queda casi quieta: se
+    # midió, se movia 0.8 de los 3.9 que deberia. Un `skewX` positivo ahi
+    # parece lo natural y arruina el efecto sin que se vea ningún error.
+    cuerpo_viento = _cuerpo_de_keyframe(css_croquis, "icViento")
+    if cuerpo_viento is None:
+        problemas.append("no está definido el keyframe `icViento`")
+    else:
+        sesgos = re.findall(r"skewX\(calc\((-?[\d.]+)deg", cuerpo_viento)
+        if not sesgos:
+            problemas.append(
+                "el keyframe del viento no usa `skewX`: sin él el icono es un "
+                "palo rígido que gira, no un árbol que se dobla")
+        elif all(s.startswith("-") for s in sesgos) is False:
+            problemas.append(
+                f"el `skewX` del viento tiene que ir en negativo para sumar con "
+                f"el giro; viene {sesgos}. Con los dos en el mismo signo se "
+                f"cancelan y la copa se queda casi quieta")
+        if "rotate" not in cuerpo_viento:
+            problemas.append("el keyframe del viento no gira: solo se dobla")
+
     # --- 3. Los ajustes: lo que se guarda y lo que se tira ------------------
     limpios = [
         ({"s": 46, "a": "late", "m": 1.0, "c": 1}, {"s": 46, "a": "late"},
@@ -725,6 +770,203 @@ def test_el_toque_y_el_encabezado() -> bool:
         return False
     print("    los iconos con informacion tienen su superficie de toque y el "
           "encabezado empieza donde termina el panel")
+    return True
+
+
+def test_el_sello_y_el_boton_de_la_ventana() -> bool:
+    """La ventana ensena el mismo icono que se toco, y su boton es seguro.
+
+    Dos cosas que solo se ven al abrirla y que se rompen calladas.
+
+    **El sello.** La ventana tiene un icono al lado del titulo, dibujado con la
+    misma figura que el del mapa. Estaba puesto con el circulo forzado, asi que
+    un icono que en el mapa se ve suelto aparecia ahi metido en una caja: parece
+    que el toque abrio otro icono. Ahora el circulo lo decide el propio icono,
+    igual que en el mapa.
+
+    **El boton.** Es un `<a href>` cuya direccion sale del archivo, y el archivo
+    lo puede editar cualquiera a mano. Un `javascript:` ahi es una forma de
+    ejecutar codigo en la pagina de quien mira el mapa, y una direccion sin
+    esquema se toma por una ruta de esta misma pagina, con lo que el boton no
+    lleva a ninguna parte sin dar ningun error.
+
+    Por eso se comprueba en los tres sitios donde vive el enlace: la regla que
+    lo valida en el croquis, la que lo valida en el servidor, y que el croquis
+    de verdad la use antes de asignar el `href` (de nada sirve tener la regla
+    escrita si no se llama).
+    """
+    problemas = []
+    texto = CROQUIS.read_text(encoding="utf-8")
+    val = VALIDAR.read_text(encoding="utf-8")
+    edit = EDITOR_HTML.read_text(encoding="utf-8")
+
+    # --- 1. El sello, con el circulo del icono y no forzado -----------------
+    ini = texto.find("function abreVentana(")
+    fin = texto.find("\n}", ini)
+    if ini < 0 or fin < 0:
+        problemas.append("(no se encuentra abreVentana en el croquis)")
+        ventana = ""
+    else:
+        ventana = texto[ini:fin]
+        if "conAroDe(ic)" not in ventana:
+            problemas.append(
+                "la ventana no mira si el icono lleva circulo: el sello saldria "
+                "siempre con marco, aunque en el mapa el icono vaya suelto")
+        if "figuraDe(ic.t, true)" in ventana:
+            problemas.append(
+                "la ventana sigue pasando `true` a figuraDe: se ignora el "
+                "circulo del icono")
+        if '"sinAro"' not in ventana:
+            problemas.append(
+                "la ventana no le pone la clase «sinAro» al sello, que es la "
+                "que quita el marco en el CSS")
+    # Y que el CSS tenga esa clase, o la marca no sirve de nada.
+    for ruta in (CROQUIS,):
+        css = ruta.read_text(encoding="utf-8")
+        if "#selloVentana.sinAro" not in css:
+            problemas.append(
+                "el CSS no tiene reglas para `#selloVentana.sinAro`: el sello "
+                "seguiria con su marco aunque lleve la clase")
+
+    # --- 2. La regla que valida el enlace, en los tres sitios ---------------
+    # En el croquis y en el editor la funcion se llama enlaceSeguro y
+    # enlaceValido; en el servidor, enlace_seguro. Son nombres distintos porque
+    # cada uno sigue la convencion de su lenguaje.
+    for nombre, donde in (("el croquis", texto), ("el servidor", val),
+                          ("el editor", edit)):
+        if not any(n in donde for n in ("enlaceSeguro", "enlaceValido",
+                                        "enlace_seguro")):
+            problemas.append(f"en {nombre} no hay ninguna función que valide el "
+                             f"enlace antes de usarlo")
+    # Las tres tienen que exigir http o https y nada mas. Si alguna aflojara el
+    # patrón, por ahí entraría el `javascript:`.
+    for nombre, patron in (("el croquis", r"function enlaceSeguro"),
+                           ("el editor", r"function enlaceValido")):
+        i = texto.find(patron) if nombre == "el croquis" else edit.find(patron)
+        if i < 0:
+            continue
+        cuerpo = (texto if nombre == "el croquis" else edit)[i:i + 260]
+        if not re.search(r"\^https\?:\\/\\/", cuerpo):
+            problemas.append(
+                f"la comprobación del enlace en {nombre} no exige «https?://»: "
+                f"{' '.join(cuerpo.split())[:90]}")
+    # En el servidor se hace con una tupla de esquemas.
+    if 'ESQUEMAS = ("http://", "https://")' not in val:
+        problemas.append(
+            "en el servidor la lista de esquemas permitidos no es "
+            "exactamente http:// y https://")
+    if "enlace_seguro" not in val:
+        problemas.append("en el servidor no se usa `enlace_seguro` al revisar")
+
+    # --- 3. Que el croquis la use ANTES de poner el href --------------------
+    # Es la comprobación que de verdad importa: la función puede estar escrita
+    # y no llamarse, y entonces no valida nada.
+    i = texto.find("function pintaBoton(")
+    if i < 0:
+        problemas.append("(no se encuentra pintaBoton en el croquis)")
+    else:
+        cuerpo = texto[i:texto.find("\n}", i)]
+        if "enlaceSeguro" not in cuerpo:
+            problemas.append(
+                "pintaBoton no comprueba el enlace antes de pintarlo")
+        elif cuerpo.find("enlaceSeguro") > cuerpo.find("href"):
+            problemas.append(
+                "pintaBoton pone el `href` antes de comprobar el enlace: la "
+                "comprobación no sirve de nada ahí")
+        if 'rel = "noopener' not in cuerpo and "rel =" not in cuerpo:
+            problemas.append(
+                "el botón abre en pestaña nueva y no lleva `rel` con `noopener`: "
+                "la página de destino podría manipular esta desde window.opener")
+        # Se arma con createElement y no con innerHTML, para que la dirección
+        # se trate como dirección y no como HTML.
+        if "createElement" not in cuerpo:
+            problemas.append(
+                "el botón no se arma con `createElement`: con `innerHTML` habría "
+                "que escapar la dirección a mano y un despiste la convertiría en "
+                "una etiqueta")
+
+    # --- 4. Que el croquis no lleve el `<a>` escrito en el marcado ----------
+    # Si estuviera escrito, la prueba `el croquis publicado no edita nada` lo
+    # vería como un enlace sin href y no sabría que lo rellena el script.
+    if re.search(r"<a\b[^>]*enlaceVentana", texto):
+        problemas.append(
+            "el `<a>` del botón está escrito en el marcado: lo tiene que armar "
+            "el script, porque la dirección sale del archivo")
+
+    # --- 5. El servidor tiene que exigir que haya informacion ---------------
+    # Se busca un trozo corto y de una sola linea: los mensajes del servidor
+    # estan partidos en varias lineas para no pasar de ancho, y la frase
+    # completa no aparece entera en el archivo.
+    if "título ni texto no hay dónde ponerlo" not in val:
+        problemas.append(
+            "el servidor no avisa de un botón con enlace en un icono sin "
+            "información: el botón saldría en una ventana que no existe")
+
+    # --- 6. Y la clave `u`, declarada en los tres sitios ---------------------
+    if '"u"' not in val.split("CLAVES_ICONO")[1][:200]:
+        problemas.append("`u` no está en CLAVES_ICONO de validar.py")
+    if '"u": [' not in editor._campos_icono.__doc__ + "".join(
+            editor._campos_icono({"t": "bano", "x": 1, "y": 1,
+                                  "u": ["Ver", "https://ejemplo.mx"]})):
+        problemas.append("el serializador del servidor no escribe la clave `u`")
+    # El orden: `u` va al final, despues de `i`, porque sin la informacion no
+    # sirve de nada.
+    campos = [p.split(":", 1)[0].strip('"') for p in editor._campos_icono(
+        {"t": "bano", "x": 1, "y": 1, "a": "late", "m": 2, "c": 0,
+         "i": ["Título", "Texto"], "u": ["Ver", "https://ejemplo.mx"]})]
+    if campos != ["t", "x", "y", "a", "m", "c", "i", "u"]:
+        problemas.append(f"los campos del botón salen en otro orden: {campos}")
+
+    # --- 7. Lo que se rechaza, llamando a las reglas de verdad --------------
+    base = {"t": "bano", "x": 300, "y": 250}
+    info = ["Baños", "Los baños están junto al escenario."]
+    malos = [
+        ({"u": "https://ejemplo.mx"}, "un botón que no es [texto, dirección]"),
+        ({"u": ["Ver", "https://ejemplo.mx", "extra"]}, "un botón de tres cosas"),
+        ({"u": ["", "https://ejemplo.mx"]}, "un botón sin texto"),
+        ({"i": info, "u": ["Ver", "javascript:alert(1)"]}, "un javascript:"),
+        ({"i": info, "u": ["Ver", "owncloud.rec.uabc.mx"]}, "un enlace sin esquema"),
+        ({"i": info, "u": ["Ver", "data:text/html,<b>x</b>"]}, "un data:"),
+        ({"u": ["Ver", "https://ejemplo.mx"]}, "un botón sin información"),
+        ({"i": info, "u": ["V" * 41, "https://ejemplo.mx"]}, "un texto muy largo"),
+    ]
+    for extra, nota in malos:
+        salida = v.revisar_iconos([dict(base, **extra)])
+        if not salida:
+            problemas.append(f"aceptó {nota}")
+        elif "icono 1" not in " ".join(salida):
+            problemas.append(
+                f"{nota} se rechazó, pero no por el icono: {salida}")
+    buenos = [
+        ({"i": info, "u": ["Ver el programa", "https://owncloud.rec.uabc.mx/x"]},
+         "un botón con https"),
+        ({"i": info, "u": ["Ver", "http://ejemplo.mx"]}, "un botón con http"),
+        ({"i": info}, "un icono con información y sin botón"),
+    ]
+    for extra, nota in buenos:
+        salida = v.revisar_iconos([dict(base, **extra)])
+        if salida:
+            problemas.append(f"rechazó {nota}: {salida}")
+
+    # Y la función del servidor, directamente, sin pasar por el servidor. Es lo
+    # mismo que ya se aprendió una vez: si solo se prueba a través del
+    # guardado, un rechazo por otro motivo pasa por bueno.
+    for url, esperado in (("https://x.mx", True), ("http://x.mx/a?b=1", True),
+                          ("HTTPS://X.MX", True), ("javascript:alert(1)", False),
+                          ("data:text/html,x", False), ("x.mx", False),
+                          ("//x.mx", False), ("", False), (None, False),
+                          (5, False), ("https://x.mx/a b", False)):
+        if v.enlace_seguro(url) != esperado:
+            problemas.append(
+                f"enlace_seguro({url!r}) da {v.enlace_seguro(url)} y debería dar "
+                f"{esperado}")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el sello del icono respeta el círculo del mapa, y el enlace del "
+          "botón se valida en el croquis, en el editor y en el servidor")
     return True
 
 
@@ -1725,6 +1967,7 @@ def main() -> int:
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
         ("animaciones e intensidad", test_animaciones_e_intensidad),
         ("el toque y el encabezado", test_el_toque_y_el_encabezado),
+        ("el sello y el boton de la ventana", test_el_sello_y_el_boton_de_la_ventana),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),

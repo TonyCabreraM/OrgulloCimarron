@@ -74,6 +74,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     ANIMACIONES,
     ANIMACIONES_SIN_INTENSIDAD,
     INTENSIDAD,
+    MAX_BOTON,
     MAX_ICONO,
     MAX_ICONOS_PROPIOS,
     MAX_INTENSIDAD,
@@ -83,6 +84,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     MAX_TAM_ICONO,
     MAX_TEXTO,
     MAX_TITULO,
+    MAX_URL,
     MAX_VECTOR,
     MIN_INTENSIDAD,
     MIN_ROT,
@@ -257,7 +259,7 @@ def _texto_zonas(zonas: list) -> str:
 def _campos_icono(ic: dict) -> list[str]:
     """Los campos de un icono, en orden y solo los que hacen falta.
 
-    El orden es t, x, y, n, s, r, a, m, c, i: de lo que mas se usa a lo que
+    El orden es t, x, y, n, s, r, a, m, c, i, u: de lo que mas se usa a lo que
     menos. Con nombres en vez de posiciones, el dia que haga falta un campo
     nuevo se añade al final y ningun icono guardado se entera.
 
@@ -290,6 +292,12 @@ def _campos_icono(ic: dict) -> list[str]:
         titulo, texto = ic["i"]
         partes.append('"i": [' + json.dumps(titulo, ensure_ascii=False)
                       + ", " + json.dumps(texto, ensure_ascii=False) + "]")
+    # El boton con enlace, como [texto, direccion]. Va despues de `i` porque
+    # sin la informacion no sirve de nada: el boton sale dentro de esa ventana.
+    if ic.get("u"):
+        texto, url = ic["u"]
+        partes.append('"u": [' + json.dumps(texto, ensure_ascii=False)
+                      + ", " + json.dumps(url, ensure_ascii=False) + "]")
     return partes
 
 
@@ -828,7 +836,8 @@ class Manejador(BaseHTTPRequestHandler):
                 datos["topes"] = {"tam": [MIN_TAM_ICONO, MAX_TAM_ICONO],
                                   "rot": [MIN_ROT, MAX_ROT],
                                   "inte": [MIN_INTENSIDAD, MAX_INTENSIDAD],
-                                  "lado": LADO_ICONO,
+                                  "lado": LADO_ICONO, "boton": MAX_BOTON,
+                                  "url": MAX_URL,
                                   "titulo": MAX_TITULO, "texto": MAX_TEXTO,
                                   "totalPropios": MAX_ICONOS_PROPIOS}
                 datos["animaciones"] = ANIMACIONES

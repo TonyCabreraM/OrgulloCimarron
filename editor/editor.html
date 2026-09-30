@@ -240,7 +240,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 #previoDialogo .an.brilla{animation:icBrilla 2.6s ease-in-out infinite}
 #previoDialogo .an.ondas{animation:icOndas 2.6s ease-out infinite}
 #previoDialogo .an.vibra{animation:icVibra .22s linear infinite}
-#previoDialogo .an.viento{animation:icViento 3.4s ease-in-out infinite}
+#previoDialogo .an.viento{animation:icViento 3.4s ease-in-out infinite;
+                          transform-origin:50% 100%}
 #previoDialogo .onda{fill:none;stroke:var(--verde);stroke-width:1.6;
                      stroke-opacity:.9}
 #nombreDialogo{font-size:10.5px;color:var(--tenue);text-align:center;
@@ -333,7 +334,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 #gIconos .an.brilla{animation:icBrilla 2.6s ease-in-out infinite}
 #gIconos .an.ondas{animation:icOndas 2.6s ease-out infinite}
 #gIconos .an.vibra{animation:icVibra .22s linear infinite}
-#gIconos .an.viento{animation:icViento 3.4s ease-in-out infinite}
+#gIconos .an.viento{animation:icViento 3.4s ease-in-out infinite;
+                    transform-origin:50% 100%}
 #gIconos .onda{fill:none;stroke:var(--verde);stroke-width:1.6;stroke-opacity:.9;
                vector-effect:non-scaling-stroke}
 /* Igual que en el croquis publicado: sin circulo, el trazo lleva un halo
@@ -368,7 +370,7 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 .palo svg .an.vibra,.modelo svg .an.vibra,.icono svg .an.vibra{
   animation:icVibra .22s linear infinite}
 .palo svg .an.viento,.modelo svg .an.viento,.icono svg .an.viento{
-  animation:icViento 3.4s ease-in-out infinite}
+  animation:icViento 3.4s ease-in-out infinite;transform-origin:50% 100%}
 
 /* --- Las animaciones -------------------------------------------------------
    Las mismas que las del croquis publicado, y a proposito: son globales, asi
@@ -385,7 +387,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 @keyframes icFlota{
   0%,100%{transform:translateY(0)}
   50%{transform:translateY(calc(-1.6px * var(--m, 1)))}}
-/* Da una vuelta completa: no tiene intensidad, no hay nada que ampliar. */
+/* Una vuelta completa. No tiene intensidad: no hay nada que ampliar, asi que
+   el editor no ofrece el control para esta. */
 @keyframes icGira{to{transform:rotate(360deg)}}
 /* La opacidad la recorta el navegador al rango 0..1, asi que de mas de 1.7
    hacia arriba ya no cambia nada. */
@@ -413,19 +416,23 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
      rotate(calc(.6deg * var(--m, 1)))}
   87%{transform:translate(calc(-.45px * var(--m, 1)),calc(.15px * var(--m, 1)))
      rotate(calc(-1.1deg * var(--m, 1)))}}
-/* Viento: se inclina hacia un lado y vuelve, con una racha mas fuerte despues.
-   Los tiempos no son simetricos a proposito; una racha pareja se lee como un
-   mecanismo y no como aire. */
+/* Viento: se dobla hacia un lado y vuelve, con una racha mas fuerte despues.
+   Son dos movimientos a la vez: el `rotate` inclina el icono sobre su base y
+   el `skewX` lo dobla por arriba, que es lo que hace un arbol. El sesgo va en
+   negativo para que sume con el giro: con el signo puesto, los dos empujan a
+   la copa en sentidos opuestos, se cancelan y el icono se queda casi quieto.
+
+   El pivote lo pone la regla de arriba, en la base y no en el centro. */
 @keyframes icViento{
-  0%,100%{transform:rotate(0) translateX(0)}
-  18%{transform:rotate(calc(3.5deg * var(--m, 1)))
-     translateX(calc(.7px * var(--m, 1)))}
-  42%{transform:rotate(calc(1.2deg * var(--m, 1)))
-     translateX(calc(.25px * var(--m, 1)))}
-  66%{transform:rotate(calc(5deg * var(--m, 1)))
-     translateX(calc(1px * var(--m, 1)))}
+  0%,100%{transform:rotate(0) skewX(0)}
+  20%{transform:rotate(calc(3.2deg * var(--m, 1)))
+     skewX(calc(-2.2deg * var(--m, 1)))}
+  40%{transform:rotate(calc(1.2deg * var(--m, 1)))
+     skewX(calc(-0.8deg * var(--m, 1)))}
+  62%{transform:rotate(calc(5.5deg * var(--m, 1)))
+     skewX(calc(-3.6deg * var(--m, 1)))}
   84%{transform:rotate(calc(2deg * var(--m, 1)))
-     translateX(calc(.4px * var(--m, 1)))}}
+     skewX(calc(-1.3deg * var(--m, 1)))}}
 /* Aqui no se quitan las animaciones al reducir el movimiento: en el editor son
    la vista previa, y sin ellas no habria forma de elegir cual queda mejor. */
 #gAyudas{pointer-events:none}
@@ -587,6 +594,19 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
                   placeholder="El texto que sale en la ventana. Con saltos de línea se ve tal cual."></textarea>
         <div class="pista" id="pistaInfo"></div>
       </div>
+      <div class="campo">
+        <label class="marca" for="fBoton">
+          <input type="checkbox" id="fBoton">
+          <span>Añadir un botón con enlace</span>
+        </label>
+        <div id="camposBoton" hidden>
+          <input type="text" id="fBotonTexto" maxlength="40"
+                 placeholder="Texto del botón · Programa del evento">
+          <input type="text" id="fBotonUrl" maxlength="300"
+                 placeholder="https://…" style="margin-top:6px">
+          <div class="pista" id="pistaBoton"></div>
+        </div>
+      </div>
       <div class="fila" style="margin-top:11px">
         <button class="boton peligro" id="btnBorrarIcono">Borrar icono</button>
       </div>
@@ -736,6 +756,10 @@ var s = document.getElementById("s"),
     fEtiqueta = document.getElementById("fEtiqueta"),
     fInfoTitulo = document.getElementById("fInfoTitulo"),
     fInfoTexto = document.getElementById("fInfoTexto"),
+    fBoton = document.getElementById("fBoton"),
+    camposBoton = document.getElementById("camposBoton"),
+    fBotonTexto = document.getElementById("fBotonTexto"),
+    fBotonUrl = document.getElementById("fBotonUrl"),
     fAro = document.getElementById("fAro"),
     fNombreModelo = document.getElementById("fNombreModelo"),
     listaPropios = document.getElementById("listaPropios"),
@@ -929,6 +953,8 @@ function sePisan(a, b) {
 // mientras se edita y no al pulsar Guardar; el que decide es el servidor.
 var TAM_MIN = 16, TAM_MAX = 160, ROT_MIN = -180, ROT_MAX = 180;
 var TIT_MAX = 60, TEX_MAX = 600;
+// Los topes del boton con enlace de la ventana.
+var BOT_MAX = 40, URL_MAX = 300;
 
 function problemas() {
   var mal = E.zonas.map(function () { return [] });
@@ -974,6 +1000,8 @@ function problemasDeIconos() {
       mal.push("El giro " + Math.round(ic.r) + "° se sale de " + ROT_MIN + " a " + ROT_MAX + ".");
     if (ic.a && !E.animaciones[ic.a])
       mal.push("La animación «" + ic.a + "» no existe.");
+    if (ic.m !== undefined && sinIntensidad(ic.a))
+      mal.push("La animación «" + ic.a + "» no tiene intensidad que ajustar.");
     if (ic.i) {
       if (!ic.i[0].trim()) mal.push("La información no tiene título.");
       else if (ic.i[0].length > TIT_MAX)
@@ -981,6 +1009,22 @@ function problemasDeIconos() {
       if (!ic.i[1].trim()) mal.push("La información no tiene texto.");
       else if (ic.i[1].length > TEX_MAX)
         mal.push("El texto de la información pasa de " + TEX_MAX + " caracteres.");
+    }
+    // El boton con enlace. Se avisa aqui ademas de en la pista del campo
+    // porque estos avisos son los que apagan el boton de Guardar: sin esto, el
+    // editor dejaba guardar y era el servidor el que rebotaba el guardado
+    // entero con un mensaje que no dice en cual de los 28 iconos esta el
+    // problema.
+    if (ic.u) {
+      if (!ic.u[0].trim()) mal.push("El botón no tiene texto.");
+      else if (ic.u[0].length > BOT_MAX)
+        mal.push("El texto del botón pasa de " + BOT_MAX + " caracteres.");
+      if (!enlaceValido(ic.u[1]))
+        mal.push("La dirección del botón tiene que empezar por https:// o "
+               + "http://; un enlace sin esquema se toma por una ruta de esta "
+               + "página.");
+      if (!ic.i) mal.push("Tiene un botón con enlace pero no información, y el "
+                        + "botón sale dentro de esa ventana.");
     }
     return mal;
   });
@@ -1163,7 +1207,24 @@ function pintaPanel(mal) {
     fAro.checked = conAroDe(ic);
     if (document.activeElement !== fInfoTitulo) fInfoTitulo.value = ic.i ? ic.i[0] : "";
     if (document.activeElement !== fInfoTexto) fInfoTexto.value = ic.i ? ic.i[1] : "";
+    // Los campos del boton se sincronizan con el icono de una vez y solo si
+    // el foco no esta en ninguno de los tres.
+    //
+    // Hace falta mirar los tres juntos y no cada uno por su cuenta: la casilla
+    // no guarda nada por si sola (el boton necesita texto Y direccion), asi
+    // que en cuanto el foco salia de ella para escribir en el texto, el
+    // repintado la devolvia a lo que decia el icono, la desmarcaba y cerraba
+    // los campos. Parecia que el boton no se podia activar.
+    var usandoBoton = [fBoton, fBotonTexto, fBotonUrl]
+      .indexOf(document.activeElement) >= 0;
+    if (!usandoBoton) {
+      fBoton.checked = !!ic.u;
+      fBotonTexto.value = ic.u ? ic.u[0] : "";
+      fBotonUrl.value = ic.u ? ic.u[1] : "";
+    }
+    camposBoton.hidden = !fBoton.checked;
     actualizaPistaInfo(ic);
+    actualizaPistaBoton(ic);
     // El nombre del modelo se propone con el del icono: casi siempre se guarda
     // el que se acaba de configurar y se llama como él.
     if (!fNombreModelo.value && document.activeElement !== fNombreModelo) {
@@ -1191,6 +1252,40 @@ function actualizaPistaInfo(ic) {
   } else {
     pista.textContent = "Sin información: el icono se ve pero no se puede pulsar.";
   }
+}
+
+// La pista del boton. Ademas de decir si esta bien, avisa del caso que no se
+// ve venir: el boton sale DENTRO de la ventana de informacion, asi que un
+// icono con enlace y sin titulo no ensena nada, porque no hay ventana donde
+// ponerlo. Sin este aviso, el boton parecia configurado y no salia.
+function actualizaPistaBoton(ic) {
+  var pista = document.getElementById("pistaBoton");
+  var u = ic.u;
+  if (!u) {
+    pista.textContent = "Rellena el texto y la dirección para que salga.";
+    return;
+  }
+  var avisos = [];
+  if (!u[0].trim()) avisos.push("le falta el texto del botón");
+  if (!enlaceValido(u[1])) {
+    avisos.push("la dirección tiene que empezar por https:// o http://");
+  }
+  if (!ic.i) {
+    avisos.push("el icono no tiene información, así que no hay ventana donde "
+                + "poner el botón");
+  }
+  pista.textContent = avisos.length
+    ? "No va a salir: " + avisos.join("; ") + "."
+    : "Saldrá dentro de la ventana, con el texto «" + u[0] + "».";
+}
+
+// Lo mismo que comprueba el croquis antes de pintar el enlace, y por el mismo
+// motivo: la dirección acaba en un `href`, y una `javascript:` seria una forma
+// de ejecutar codigo en la pagina de quien mira el mapa. Aqui se avisa al
+// escribirla; alli se vuelve a mirar, porque el archivo lo puede editar
+// cualquiera a mano.
+function enlaceValido(u) {
+  return /^https?:\/\/[^\s]+$/i.test(String(u || ""));
 }
 
 // La lista de los iconos propios: lo que ocupan y como quitarlos. Se dice
@@ -2109,9 +2204,38 @@ function guardaInfo() {
     else delete ic.i;
   });
   actualizaPistaInfo(E.iconos[sel.i] || {});
+  actualizaPistaBoton(E.iconos[sel.i] || {});
 }
 fInfoTitulo.addEventListener("input", guardaInfo);
 fInfoTexto.addEventListener("input", guardaInfo);
+
+// El boton con enlace. Se guarda como `u: [texto, direccion]`, igual que la
+// informacion se guarda como `i: [titulo, texto]`: dos datos que van juntos y
+// que sin el otro no sirven de nada.
+//
+// La casilla no guarda nada por si sola: solo enseña los dos campos. El `u`
+// aparece cuando hay texto y direccion, y desaparece al desmarcar, para que no
+// se quede un enlace a medias en el archivo.
+function guardaBoton() {
+  tocaIcono(function (ic) {
+    var texto = fBotonTexto.value.trim(), url = fBotonUrl.value.trim();
+    if (fBoton.checked && texto && url) ic.u = [texto, url];
+    else delete ic.u;
+  });
+  actualizaPistaBoton(E.iconos[sel.i] || {});
+}
+fBoton.addEventListener("change", function () {
+  camposBoton.hidden = !fBoton.checked;
+  if (!fBoton.checked) {
+    // Al desmarcar se vacian los campos: si se quedaran puestos, volver a
+    // marcarla recuperaria un enlace que ya se habia borrado del icono.
+    fBotonTexto.value = "";
+    fBotonUrl.value = "";
+  }
+  guardaBoton();
+});
+fBotonTexto.addEventListener("input", guardaBoton);
+fBotonUrl.addEventListener("input", guardaBoton);
 
 // El círculo de fondo. Se guarda solo cuando se quita, como `"c": 0`: así los
 // iconos que lo llevan —que son la mayoría— no llenan el archivo de repetir
@@ -2270,6 +2394,12 @@ fetch("/api/estado").then(function (r) {
   [fInt, dInt].forEach(function (c) { c.min = in_[0]; c.max = in_[1] });
   if (E.topes) { TIT_MAX = E.topes.titulo || 60; TEX_MAX = E.topes.texto || 600 }
   fInfoTitulo.maxLength = TIT_MAX;
+  if (E.topes && E.topes.boton) {
+    BOT_MAX = E.topes.boton;
+    URL_MAX = E.topes.url || 300;
+  }
+  fBotonTexto.maxLength = BOT_MAX;
+  fBotonUrl.maxLength = URL_MAX;
   // Las animaciones las manda el servidor, que es quien las valida: si la
   // lista de aqui se moviera aparte, se podria elegir una que luego rechaza.
   // Son las mismas opciones en el panel y en el menú de subir, que se llenan

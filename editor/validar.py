@@ -122,13 +122,39 @@ MAX_NOMBRE_MODELO = 40
 # Las claves de un icono. Se rechaza cualquier otra: un nombre mal escrito
 # (`X` por `x`) dejaria el icono sin ese dato y no se notaria hasta verlo en
 # el mapa, que es la peor forma de enterarse.
-CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "c", "m", "i"}
+CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "c", "m", "i", "u"}
 
 # El texto que sale en la ventana al tocar un icono. Va dentro del croquis,
 # asi que se limita: una parrafada convertiria la pagina del movil en algo
 # que tarda en abrir, y en una ventana tampoco se lee.
 MAX_TITULO = 60
 MAX_TEXTO = 600
+
+# El boton con enlace que puede llevar la ventana. Es [texto, direccion].
+#
+# La direccion solo puede ser http o https, y se comprueba aqui ademas de en
+# el croquis: aqui se avisa al escribirla, y alli se vuelve a mirar antes de
+# pintarla. En el archivo publicado acaba en un `href`, y una `javascript:`
+# ahi seria una forma de ejecutar codigo en la pagina de quien mira el mapa.
+# Dos comprobaciones para lo mismo porque el editor escribe el archivo y el
+# croquis lo lee, y cualquiera de los dos se puede cambiar sin el otro.
+MAX_BOTON = 40
+MAX_URL = 300
+ESQUEMAS = ("http://", "https://")
+
+
+def enlace_seguro(url) -> bool:
+    """Si una direccion se puede poner en un `href` sin riesgo.
+
+    Se exige el dominio entero. Una direccion sin esquema, como
+    `owncloud.rec.uabc.mx`, el navegador la toma por una ruta relativa a la
+    pagina y no lleva a ninguna parte; y un esquema raro (`javascript:`) es
+    codigo disfrazado de direccion.
+    """
+    if not isinstance(url, str):
+        return False
+    limpia = url.strip().lower()
+    return limpia.startswith(ESQUEMAS) and " " not in url.strip()
 
 # Los tipos de imagen que se admiten como icono propio.
 #
@@ -294,7 +320,8 @@ def _revisar_icono(ic, sitio: str, conocidos: set, con_posicion: bool) -> list[s
         return [f"{sitio}: no conozco {' ni '.join(raros)}. "
                 f"Las claves son {', '.join(sorted(CLAVES_ICONO))} "
                 f"(t=tipo, x, y, n=etiqueta, s=tamaño, r=rotación, "
-                f"a=animación, c=círculo, i=información)"]
+                f"a=animación, c=círculo, m=intensidad, i=información, "
+                f"u=botón con enlace)"]
 
     tipo = ic.get("t")
     if tipo not in conocidos:
@@ -375,6 +402,35 @@ def _revisar_icono(ic, sitio: str, conocidos: set, con_posicion: bool) -> list[s
                 problemas.append(
                     f"{sitio}: el texto de la información pasa de "
                     f"{MAX_TEXTO} caracteres y no se lee en una ventana")
+
+    if "u" in ic:
+        boton = ic["u"]
+        if (not isinstance(boton, (list, tuple)) or len(boton) != 2
+                or not all(isinstance(t, str) for t in boton)):
+            problemas.append(f"{sitio}: el botón tiene que ser [texto, dirección]")
+        else:
+            texto, url = boton
+            if not texto.strip():
+                problemas.append(f"{sitio}: el botón no tiene texto")
+            elif len(texto) > MAX_BOTON:
+                problemas.append(
+                    f"{sitio}: el texto del botón pasa de {MAX_BOTON} caracteres "
+                    f"y no cabe en el botón")
+            if len(url) > MAX_URL:
+                problemas.append(
+                    f"{sitio}: la dirección pasa de {MAX_URL} caracteres")
+            elif not enlace_seguro(url):
+                problemas.append(
+                    f"{sitio}: la dirección del botón tiene que empezar por "
+                    f"https:// o http://, y viene «{url[:40]}». Un enlace sin "
+                    f"esquema se toma por una ruta de esta misma página, y uno "
+                    f"con otro esquema (javascript:) es código disfrazado de "
+                    f"dirección")
+            if not ic.get("i"):
+                problemas.append(
+                    f"{sitio}: tiene un botón con enlace pero no tiene "
+                    f"información, y el botón sale dentro de esa ventana: sin "
+                    f"título ni texto no hay dónde ponerlo")
 
     return problemas
 

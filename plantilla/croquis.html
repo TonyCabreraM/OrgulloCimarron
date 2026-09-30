@@ -137,7 +137,12 @@ body{
 /* Vibra y viento van mas rapido que las otras a proposito: son las dos que
    imitan algo que se mueve solo, y a camara lenta no se reconocen. */
 #iconos .an.vibra{animation:icVibra .22s linear infinite}
-#iconos .an.viento{animation:icViento 3.4s ease-in-out infinite}
+/* El viento pivota en su BASE, no en el centro como las demas. Un arbol no se
+   mueve entero: la raiz se queda quieta y la copa se dobla. Con el pivote en
+   el centro el icono se balancea sobre su propio eje y eso se lee como algo
+   que flota, no como algo que aguanta el aire desde abajo. */
+#iconos .an.viento{animation:icViento 3.4s ease-in-out infinite;
+                   transform-origin:50% 100%}
 
 /* Un latido: crece y vuelve. */
 @keyframes icLate{
@@ -179,19 +184,40 @@ body{
      rotate(calc(.6deg * var(--m, 1)))}
   87%{transform:translate(calc(-.45px * var(--m, 1)),calc(.15px * var(--m, 1)))
      rotate(calc(-1.1deg * var(--m, 1)))}}
-/* Viento: se inclina hacia un lado y vuelve, con una racha mas fuerte despues.
+/* Viento: se dobla hacia un lado y vuelve, con una racha mas fuerte despues.
    Los tiempos no son simetricos a proposito; una racha pareja se lee como un
-   mecanismo y no como aire. */
+   mecanismo y no como aire.
+
+   Son dos movimientos a la vez: el `rotate` inclina el icono entero sobre su
+   base, y el `skewX` lo dobla por arriba, que es lo que hace un arbol. Con
+   solo el giro queda un palo rigido; con solo el sesgo la base tambien se
+   mueve. Juntos, la base se queda clavada y la copa va y viene.
+
+   Con el `skewX`, cada punto se desplaza en X segun lo lejos que este del
+   origen, y el origen es la base: por eso lo de abajo no se mueve y lo de
+   arriba si.
+
+   **El sesgo va con el signo contrario al del nombre y eso no es un error.**
+   Los dos empujan a la copa, pero en sentidos opuestos: el `rotate` positivo
+   la manda a la derecha y un `skewX` positivo la manda a la izquierda, con lo
+   que se cancelan y el icono se queda casi quieto (medido: 0.8 de los 3.9
+   que deberia moverse). Con el `skewX` en negativo los dos suman y el doblez
+   se ve.
+
+   Los grados son mas altos que los de las otras animaciones porque el pivote
+   esta abajo: el mismo angulo mueve mucho menos la punta que si girara sobre
+   el centro. Con los 5 grados que tenia antes, la copa se movia menos de un
+   pixel y no se veia nada. */
 @keyframes icViento{
-  0%,100%{transform:rotate(0) translateX(0)}
-  18%{transform:rotate(calc(3.5deg * var(--m, 1)))
-     translateX(calc(.7px * var(--m, 1)))}
-  42%{transform:rotate(calc(1.2deg * var(--m, 1)))
-     translateX(calc(.25px * var(--m, 1)))}
-  66%{transform:rotate(calc(5deg * var(--m, 1)))
-     translateX(calc(1px * var(--m, 1)))}
+  0%,100%{transform:rotate(0) skewX(0)}
+  20%{transform:rotate(calc(3.2deg * var(--m, 1)))
+     skewX(calc(-2.2deg * var(--m, 1)))}
+  40%{transform:rotate(calc(1.2deg * var(--m, 1)))
+     skewX(calc(-0.8deg * var(--m, 1)))}
+  62%{transform:rotate(calc(5.5deg * var(--m, 1)))
+     skewX(calc(-3.6deg * var(--m, 1)))}
   84%{transform:rotate(calc(2deg * var(--m, 1)))
-     translateX(calc(.4px * var(--m, 1)))}}
+     skewX(calc(-1.3deg * var(--m, 1)))}}
 
 /* El anillo que se expande en las ondas. Va con el trazo del color de la
    tinta y sin relleno, para que se lea como una onda y no como un aro solido. */
@@ -239,10 +265,28 @@ body{
 #selloVentana svg .relleno{fill:var(--tinta);stroke:none}
 #selloVentana img{width:52px;height:52px;flex:none;border-radius:50%;
                   border:1px solid var(--borde);object-fit:cover}
+/* Si el icono va sin circulo en el mapa, aqui va sin marco. El icono de la
+   ventana es el mismo que se acaba de tocar, asi que tiene que verse igual:
+   con el marco puesto, un icono suelto en el mapa aparecia metido en una caja
+   al abrirlo, y parece que el toque abrio otro icono.
+
+   Al simbolo se le quita el cuadro crema y al hueco del relleno (el padding),
+   y a la imagen el redondeo y el filo. El `object-fit` se queda: sirve para
+   encajar la imagen en su caja, no para recortarla en circulo. */
+#selloVentana.sinAro svg{background:none;padding:0}
+#selloVentana.sinAro img{border-radius:0;border:0}
 #tVentana{font-size:19px;font-weight:780;letter-spacing:-.015em;line-height:1.25;
           color:var(--tinta)}
 #xVentana{font-size:14px;line-height:1.6;color:var(--texto);white-space:pre-line;
           margin:0}
+/* El boton de enlace, si el icono lleva uno. Va pegado al texto y con el aire
+   justo para que se lea como una salida y no como parte de la explicacion.
+
+   El `:empty` lo esconde: el hueco no existe cuando no hay enlace, en vez de
+   quedar un margen suelto al final de la ventana. */
+#botonVentana{margin-top:16px}
+#botonVentana:empty{display:none}
+#botonVentana .enlace{width:100%;justify-content:center}
 #pieVentana{margin-top:18px;padding-top:14px;border-top:1px solid var(--borde);
             font-size:11px;font-weight:650;letter-spacing:.1em;
             text-transform:uppercase;color:var(--tenue)}
@@ -400,6 +444,12 @@ body{
      una por icono. Con una sola no hay forma de que queden dos abiertas ni
      de que se acumulen en el DOM.
 
+     El boton de enlace NO esta aqui escrito: lo arma el script. La direccion
+     sale del archivo, y con `innerHTML` habria que escapar la URL a mano con
+     el riesgo de que un despiste convierta el texto en una etiqueta. Con
+     `createElement` y `href`, el navegador la trata como direccion y no como
+     codigo, aunque lleve comillas o parentesis.
+
      Empieza en `hidden`, que ademas de esconderla la saca del alcance del
      teclado: con solo opacidad, el boton de cerrar seguiria siendo tabulable
      y el foco se iria a un sitio invisible. -->
@@ -412,6 +462,7 @@ body{
     <div id="selloVentana" aria-hidden="true"></div>
     <strong id="tVentana"></strong>
     <p id="xVentana"></p>
+    <div id="botonVentana"></div>
     <div id="pieVentana">Día del Orgullo Cimarrón 2026</div>
   </div>
 </div>
@@ -656,6 +707,21 @@ CH.innerHTML = ZONAS.map(function (z, k) {
 K = CH.querySelectorAll(".chip");
 var G = ZON.querySelectorAll(".g");
 
+// Si un icono lleva el aro de fondo. Por defecto SI lo lleva, asi que lo que
+// se guarda es lo contrario: `"c": 0` para quitarselo.
+//
+// El cero se mira con `in` y nunca por lo que vale, porque 0 es un valor
+// legitimo y un `if (!ic.c)` lo tomaria por ausencia: el circulo seguiria
+// saliendo y no habria forma de quitarlo.
+//
+// Esta en su propia funcion porque la usan tres sitios (el mapa, la ventana y
+// el editor) y con la cuenta repetida en cada uno, el dia que se cambie una
+// las otras dos se quedan atras y el icono sale de una forma en el mapa y de
+// otra al abrirlo.
+function conAroDe(ic) {
+  return !("c" in ic) || !!ic.c;
+}
+
 // La forma de un icono: el dibujo del simbolo, o la imagen propia. Vacio si
 // el tipo no existe, que es lo que hace que un icono desconocido se salte en
 // vez de salir como un hueco.
@@ -689,9 +755,9 @@ function nombreDe(tipo) {
 // girar un icono. Si fuera antes del scale, giraria sobre un centro ya escalado
 // y se iria del sitio.
 ICN.innerHTML = ICONOS.map(function (ic, k) {
-  // `c` en 0 es "sin circulo". Se comprueba asi y no por lo que valga, porque
-  // 0 es un valor legitimo y un `if (!ic.c)` lo confundiria con la ausencia.
-  var conAro = !("c" in ic) || !!ic.c;
+  // `c` en 0 es "sin circulo". Se comprueba en `conAroDe`, que lo mira con
+  // `in` y no por lo que vale.
+  var conAro = conAroDe(ic);
   var dentro = figuraDe(ic.t, conAro);
   if (!dentro) return "";
 
@@ -801,7 +867,49 @@ var VENT = document.getElementById("ventana"),
     SELLO = document.getElementById("selloVentana"),
     TVENT = document.getElementById("tVentana"),
     XVENT = document.getElementById("xVentana"),
+    BOTON = document.getElementById("botonVentana"),
     CVENT = document.getElementById("cierraVentana");
+
+// Solo http y https. La direccion es texto que viene del archivo, y el archivo
+// lo puede editar cualquiera a mano: un `javascript:` ahi seria una forma de
+// ejecutar codigo en la pagina de quien mira el mapa. Se comprueba aqui
+// ademas de en el editor, porque el editor es el que lo escribe pero el que lo
+// lee es esto.
+//
+// Se exige el dominio entero (`https://` y algo detras). Una direccion sin
+// esquema, como `owncloud.rec.uabc.mx`, el navegador la toma por una ruta
+// relativa a esta pagina y no lleva a ninguna parte.
+function enlaceSeguro(u) {
+  return /^https?:\/\/[^\s]+$/i.test(String(u || ""));
+}
+
+// La flecha de salir fuera, la misma que la del boton del panel. Es una
+// constante y no un dato del archivo, asi que puede ir con innerHTML.
+var FLECHA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+           + ' stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"'
+           + ' aria-hidden="true">'
+           + '<path d="M14 3.5h6.5V10"/><path d="M20.5 3.5 11 13"/>'
+           + '<path d="M18 14.5v5A1.5 1.5 0 0 1 16.5 21h-12A1.5 1.5 0 0 1 3 19.5'
+           + 'v-12A1.5 1.5 0 0 1 4.5 6h5"/></svg>';
+
+// El boton que sale dentro de la ventana, si el icono lleva uno. Se vacia
+// siempre antes: la ventana es una sola para todos los iconos, asi que si no
+// se limpiara, el enlace del icono de antes seguiria ahi al abrir otro.
+function pintaBoton(ic) {
+  BOTON.textContent = "";
+  var u = ic.u;
+  if (!u || !enlaceSeguro(u[1])) return;
+  var a = document.createElement("a");
+  a.className = "enlace";
+  a.href = u[1];
+  // Fuera de la pagina y en pestana nueva, con `noopener` porque el destino es
+  // ajeno: sin el, esa pagina puede manipular esta desde `window.opener`.
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.innerHTML = FLECHA;
+  a.appendChild(document.createTextNode(u[0]));
+  BOTON.appendChild(a);
+}
 
 function abreVentana(k) {
   var ic = ICONOS[k];
@@ -813,14 +921,16 @@ function abreVentana(k) {
   // porque alli el icono lleva el transform de la posicion, y copiarlo tal
   // cual lo dejaria fuera de la caja.
   var esPropio = !SIMBOLOS[ic.t] && !!PROPIOS[ic.t];
-  // Se le pasa conAro = true siempre: en la ventana la imagen va dentro de un
-  // cuadro cuadrado y el recorte en circulo es lo que la hace encajar. Si se
-  // copiara el "sin circulo" del mapa, una foto saldria con las esquinas
-  // pegadas a un marco que no es el suyo.
+  // Y con el mismo circulo que tiene en el mapa, que puede no tenerlo. Ponerle
+  // el marco a la fuerza hacia que un icono suelto en el mapa apareciera
+  // metido en una caja al abrirlo, y parece que se abrio otro.
+  var conAro = conAroDe(ic);
+  SELLO.setAttribute("class", conAro ? "" : "sinAro");
   SELLO.innerHTML = esPropio
     ? '<img src="' + PROPIOS[ic.t] + '" alt="">'
-    : '<svg viewBox="-13 -13 26 26">' + figuraDe(ic.t, true) + "</svg>";
+    : '<svg viewBox="-13 -13 26 26">' + figuraDe(ic.t, conAro) + "</svg>";
   SELLO.setAttribute("aria-hidden", "true");
+  pintaBoton(ic);
   VENT.hidden = false;
   // Un fotograma con `hidden` ya quitado antes de poner la clase, o el
   // navegador no ve el cambio de estado y la ventana aparece de golpe sin
