@@ -119,12 +119,24 @@ input[type=text]:focus,textarea:focus{
 }
 .palo:hover{border-color:var(--verde);background:#f2f8f5}
 .palo.acto{border-color:var(--verde);background:#e6f2ec;box-shadow:inset 0 0 0 1px var(--verde)}
+/* Los iconos propios se distinguen de los de serie: si no, al ver la paleta no
+   se sabe cuales viajan dentro del croquis y cuales son solo un tipo. */
+.palo.propio{border-style:dashed}
 .palo svg{width:26px;height:26px;flex:none}
 .palo span{font-size:9.5px;color:var(--tenue);text-align:center;line-height:1.15;
            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .palo svg *{fill:none;stroke:var(--tinta);stroke-width:1.9;
             stroke-linecap:round;stroke-linejoin:round}
 .palo svg .relleno{fill:var(--tinta);stroke:none}
+
+/* El nombre de la seccion de iconos propios, con lo que ocupan. */
+.rotuloPequeno{display:flex;justify-content:space-between;align-items:baseline;
+               font-size:10.5px;font-weight:700;letter-spacing:.06em;
+               text-transform:uppercase;color:var(--tenue);margin:12px 0 6px}
+.rotuloPequeno b{font-weight:650;letter-spacing:0;text-transform:none;
+                 font-variant-numeric:tabular-nums}
+
+input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 
 /* lista de iconos colocados */
 #listaIconos{display:flex;flex-direction:column;gap:3px;max-height:170px;overflow-y:auto}
@@ -182,6 +194,14 @@ input[type=text]:focus,textarea:focus{
 </head>
 <body>
 
+<!-- El recorte de los iconos propios, para que se vean igual que en el mapa.
+     Va en un SVG oculto y se referencia desde los demas con url(#recorte),
+     que funciona porque todo esta en el mismo documento. Un id por cada SVG
+     seria el mismo id repetido, que el navegador resuelve como quiere. -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+  <defs><clipPath id="recorte"><circle cx="0" cy="0" r="12.2"/></clipPath></defs>
+</svg>
+
 <header id="barra">
   <h1>Editor del croquis<small>Orgullo Cimarrón 2026 · solo en este equipo</small></h1>
   <span id="marcaGit">…</span>
@@ -202,6 +222,8 @@ input[type=text]:focus,textarea:focus{
       <g id="gAyudas"></g>
     </svg>
     <div id="flotante">
+      <button class="boton" id="btnMenos" title="Alejar">−</button>
+      <button class="boton" id="btnMas" title="Acercar">+</button>
       <button class="boton" id="btnTodo">Ver todo</button>
       <button class="boton" id="btnVertice">Añadir vértice</button>
     </div>
@@ -221,7 +243,7 @@ input[type=text]:focus,textarea:focus{
       <div id="listaZonas"></div>
       <div class="fila" style="margin-top:9px">
         <button class="boton" id="btnNueva">Nueva zona</button>
-        <button class="boton peligro" id="btnBorrarZona">Borrar</button>
+        <button class="boton peligro" id="btnBorrarZona">Borrar zona</button>
       </div>
     </div>
 
@@ -244,11 +266,35 @@ input[type=text]:focus,textarea:focus{
     <div class="bloque">
       <h2>Iconos</h2>
       <div id="paleta"></div>
+      <div class="campo" style="margin-top:11px">
+        <label for="fTamNuevo">Tamaño de los nuevos · <b id="vTamNuevo">46</b></label>
+        <input type="range" id="fTamNuevo" min="16" max="160" step="1" value="46">
+      </div>
+      <div class="fila" style="margin-top:10px">
+        <button class="boton" id="btnImagen">Subir una imagen…</button>
+        <input type="file" id="archivo" accept="image/*" hidden>
+      </div>
+      <div id="listaPropios"></div>
       <div id="sinIconos" style="margin-top:10px">
-        Ninguno colocado. Arrastra uno de arriba al mapa, o púlsalo y luego
+        Ninguno colocado. Arrastra uno de la paleta al mapa, o púlsalo y luego
         haz clic en el sitio.
       </div>
       <div id="listaIconos"></div>
+    </div>
+
+    <div class="bloque" id="bloqueIcono">
+      <h2>Icono elegido</h2>
+      <div class="campo">
+        <label for="fEtiqueta">Nombre para lectores de pantalla</label>
+        <input type="text" id="fEtiqueta" maxlength="40">
+      </div>
+      <div class="campo">
+        <label for="fTam">Tamaño · <b id="vTam">46</b></label>
+        <input type="range" id="fTam" min="16" max="160" step="1" value="46">
+      </div>
+      <div class="fila" style="margin-top:11px">
+        <button class="boton peligro" id="btnBorrarIcono">Borrar icono</button>
+      </div>
     </div>
   </aside>
 </main>
@@ -261,13 +307,16 @@ input[type=text]:focus,textarea:focus{
 // averiguar que hay que actualizar, y no hay forma de que el dibujo y los
 // datos se desincronicen.
 // ---------------------------------------------------------------------------
-var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, avisos: [],
+var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [],
+         topes: {tam: [16, 160]},
          vista: [110, 100, 1005, 640], ancho: 1224, alto: 792, git: {}};
 var sel = null;          // {tipo:"zona"|"icono", i: n}
 var tipoPalo = null;     // icono elegido en la paleta, listo para colocar
 var modoVertice = false; // el siguiente clic mete una esquina nueva
 var sucio = false;       // hay cambios sin guardar
 var vb = {x: 0, y: 0, w: 1224, h: 792};
+// El zoom se junta aqui y se aplica una vez por fotograma.
+var zoomPend = null, zoomRaf = 0;
 
 var s = document.getElementById("s"),
     gZonas = document.getElementById("gZonas"),
@@ -283,13 +332,33 @@ var s = document.getElementById("s"),
     marcaGit = document.getElementById("marcaGit"),
     fNombre = document.getElementById("fNombre"),
     fCorto = document.getElementById("fCorto"),
-    fDesc = document.getElementById("fDesc");
+    fDesc = document.getElementById("fDesc"),
+    fTam = document.getElementById("fTam"),
+    fTamNuevo = document.getElementById("fTamNuevo"),
+    listaPropios = document.getElementById("listaPropios");
 
-var TAM_ICONO = 46;   // el mismo que croquis.html
+// Lo que mide un icono cuando no lleva tamano propio. Tiene que ser el mismo
+// que TAM_ICONO en croquis.html.
+var TAM_ICONO = 46;
 var VERTICE = 5.5;    // radio en unidades de mapa, se reajusta con el zoom
 
 function escapa(t) {
   return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function tamDe(ic) { return ic[4] || TAM_ICONO; }
+function nombreDe(tipo) { return E.simbolos[tipo] || tipo; }
+
+// El dibujo de un icono: o la forma del simbolo, o la imagen propia recortada
+// en circulo. Se usa en el mapa, en la paleta y en las listas, para que lo que
+// se elige sea exactamente lo que se va a ver.
+function figuraDe(tipo) {
+  if (E.formas[tipo]) return '<g class="lam">' + E.formas[tipo] + "</g>";
+  if (E.propios[tipo]) {
+    return '<image class="fig" href="' + E.propios[tipo] + '" x="-12.2" y="-12.2"'
+         + ' width="24.4" height="24.4" clip-path="url(#recorte)"/>';
+  }
+  return "";
 }
 function aviso(texto, tipo) {
   if (!texto) { mensaje.textContent = ""; mensaje.className = ""; return; }
@@ -331,8 +400,10 @@ function sePisan(a, b) {
   return true;
 }
 
-// Los mismos problemas que va a reportar el servidor, para avisar mientras se
-// edita y no al pulsar Guardar. El servidor sigue siendo el que decide.
+// Lo que dice el servidor (editor/validar.py). Aquí se adelanta para avisar
+// mientras se edita y no al pulsar Guardar; el que decide es el servidor.
+var TAM_MIN = 16, TAM_MAX = 160;
+
 function problemas() {
   var mal = E.zonas.map(function () { return [] });
   E.zonas.forEach(function (z, k) {
@@ -354,7 +425,28 @@ function problemas() {
         mal[a].push("Se solapa con «" + E.zonas[b][1] + "».");
         mal[b].push("Se solapa con «" + E.zonas[a][1] + "».");
       }
-  return mal;
+  return { zonas: mal, iconos: problemasDeIconos() };
+}
+
+// Los problemas de cada icono, en el mismo orden que la lista. Un tipo que no
+// exista o un tamaño fuera de rango dan un icono que no se dibuja o que tapa
+// media zona, y las dos cosas pasan sin ningun error en la consola.
+function problemasDeIconos() {
+  return E.iconos.map(function (ic) {
+    var mal = [];
+    if (!E.formas[ic[0]] && !E.propios[ic[0]]) {
+      mal.push("El tipo «" + ic[0] + "» no existe"
+             + (E.propios[ic[0]] === undefined && ic[0].indexOf("-") > 0
+                ? ". Puede que le hayas quitado la imagen que usaba." : "."));
+    }
+    var x = ic[1], y = ic[2];
+    if (x < 12 || y < 12 || x > E.ancho - 12 || y > E.alto - 12)
+      mal.push("Está pegado al borde del mapa.");
+    var t = tamDe(ic);
+    if (t < TAM_MIN || t > TAM_MAX)
+      mal.push("El tamaño " + Math.round(t) + " se sale de " + TAM_MIN + " a " + TAM_MAX + ".");
+    return mal;
+  });
 }
 
 // --- vista ----------------------------------------------------------------
@@ -362,27 +454,48 @@ function aplicaVista() {
   s.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h);
   VERTICE = vb.w * 0.0072;   // los tiradores no se achican al acercar
 }
+
+// Solo lo que depende de cuanto se ha acercado: el encuadre, el radio de los
+// tiradores y el tamano de las etiquetas.
+//
+// Esta separado de dibuja() por el zoom. La rueda dispara decenas de veces por
+// segundo, y dibuja() reconstruye el mapa entero Y el panel de la derecha: con
+// eso, cada muesca de la rueda costaba un monton de trabajo y el zoom se veia
+// a tirones. Aqui solo se tocan los atributos que cambian con la escala.
+function reencuadra() {
+  aplicaVista();
+  var nodos = gZonas.querySelectorAll("circle"), i;
+  for (i = 0; i < nodos.length; i++) nodos[i].setAttribute("r", VERTICE);
+  nodos = gAyudas.querySelectorAll("text");
+  var tam = vb.w * 0.0135;
+  for (i = 0; i < nodos.length; i++) nodos[i].setAttribute("font-size", tam);
+}
+
 function verTodo() {
   var v = E.vista;
   var margen = Math.min(E.ancho, E.alto) * 0.02;
   vb = {x: v[0] - margen, y: v[1] - margen, w: v[2] + margen * 2, h: v[3] + margen * 2};
-  aplicaVista(); dibuja();
+  dibuja();
 }
+
 function acerca(f, cx, cy) {
   var nw = Math.min(Math.max(vb.w * f, 40), E.ancho * 1.8);
   var nh = nw * (vb.h / vb.w);
   vb.x = cx - (cx - vb.x) * (nw / vb.w);
   vb.y = cy - (cy - vb.y) * (nh / vb.h);
   vb.w = nw; vb.h = nh;
-  aplicaVista(); dibuja();
+  reencuadra();
 }
+
+function zoomAlCentro(f) { acerca(f, vb.x + vb.w / 2, vb.y + vb.h / 2) }
 
 // De coordenadas de pantalla a coordenadas del mapa. La CTM del <svg> manda
 // sobre el transform del <g> (aqui no hay ninguno), asi que vale la inversa.
-function aMapa(ev) {
-  var p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(s.getScreenCTM().inverse());
+function aMapaCliente(cliente) {
+  var p = new DOMPoint(cliente.x, cliente.y).matrixTransform(s.getScreenCTM().inverse());
   return [Math.round(p.x), Math.round(p.y)];
 }
+function aMapa(ev) { return aMapaCliente({x: ev.clientX, y: ev.clientY}) }
 
 // --- dibujo ---------------------------------------------------------------
 function dibuja() {
@@ -390,12 +503,12 @@ function dibuja() {
 
   gZonas.innerHTML = E.zonas.map(function (z, k) {
     var clase = "z" + (sel && sel.tipo === "zona" && sel.i === k ? " sel" : "")
-              + (mal[k].length ? " mal" : "");
+              + (mal.zonas[k].length ? " mal" : "");
     var poli = '<polygon class="' + clase.trim() + '" data-zona="' + k + '" points="'
              + z[2].map(function (p) { return p[0] + "," + p[1] }).join(" ") + '"/>';
     if (sel && sel.tipo === "zona" && sel.i === k) {
       poli += z[2].map(function (p, v) {
-        return '<circle class="' + (mal[k].length ? "mal" : "") + '" data-zona="' + k
+        return '<circle class="' + (mal.zonas[k].length ? "mal" : "") + '" data-zona="' + k
              + '" data-vert="' + v + '" cx="' + p[0] + '" cy="' + p[1]
              + '" r="' + VERTICE + '"/>';
       }).join("");
@@ -404,20 +517,26 @@ function dibuja() {
   }).join("");
 
   gIconos.innerHTML = E.iconos.map(function (ic, k) {
-    var forma = E.formas[ic[0]];
-    if (!forma) return "";
+    var dentro = figuraDe(ic[0]);
+    if (!dentro) return "";
+    // Ojo con las comillas del transform: si se cuela el > sin cerrar el
+    // atributo, el navegador se traga la etiqueta entera y el icono no sale.
+    // Es justo el fallo que documenta el README del croquis.
     return '<g class="' + (sel && sel.tipo === "icono" && sel.i === k ? "sel" : "")
          + '" data-icono="' + k + '" transform="translate(' + ic[1] + "," + ic[2]
-         + ") scale(" + (TAM_ICONO / 24) + ')"><title>' + escapa(ic[3] || ic[0])
-         + '</title><circle class="aro" r="13.4"/><g class="lam">' + forma + "</g></g>";
+         + ") scale(" + (tamDe(ic) / 24) + ')"><title>' + escapa(ic[3] || ic[0])
+         + '</title><circle class="aro" r="13.4"/>' + dentro + "</g>";
   }).join("");
 
   var tam = vb.w * 0.0135;
   gAyudas.innerHTML = E.zonas.map(function (z, k) {
     var c = cajaDe(z[2]);
-    return '<text class="' + (mal[k].length ? "mal" : "") + '" data-zona="' + k
-         + '" x="' + (c[0] + c[2] / 2) + '" y="' + (c[1] + c[3] / 2 + tam * 0.35)
-         + '" font-size="' + tam + '" text-anchor="middle">' + escapa(z[1]) + "</text>";
+    // dy en em sigue al font-size, asi que el reencuadre del zoom solo tiene
+    // que tocar el tamano de letra y la etiqueta se recentra sola.
+    return '<text class="' + (mal.zonas[k].length ? "mal" : "") + '" data-zona="' + k
+         + '" x="' + (c[0] + c[2] / 2) + '" y="' + (c[1] + c[3] / 2)
+         + '" dy=".35em" font-size="' + tam + '" text-anchor="middle">'
+         + escapa(z[1]) + "</text>";
   }).join("");
 
   pintaPanel(mal);
@@ -426,31 +545,40 @@ function dibuja() {
 function pintaPanel(mal) {
   listaZonas.innerHTML = E.zonas.map(function (z, k) {
     return '<button class="zona' + (sel && sel.tipo === "zona" && sel.i === k ? " sel" : "")
-         + (mal[k].length ? " mal" : "") + '" data-zona="' + k + '">'
+         + (mal.zonas[k].length ? " mal" : "") + '" data-zona="' + k + '">'
          + '<span class="punto"></span><span class="nom">' + escapa(z[1]) + "</span>"
          + '<span class="npt">' + z[2].length + (z[2].length === 1 ? " esquina" : " esquinas")
          + "</span></button>";
   }).join("");
 
-  var hechos = E.iconos.map(function (ic, k) {
-    var forma = E.formas[ic[0]] || "";
-    return '<button class="icono' + (sel && sel.tipo === "icono" && sel.i === k ? " sel" : "")
-         + '" data-icono="' + k + '"><svg viewBox="-13 -13 26 26">' + forma + "</svg>"
-         + '<span class="nom">' + escapa(ic[3] || E.simbolos[ic[0]] || ic[0]) + "</span>"
-         + '<span class="coor">' + ic[1] + "," + ic[2] + "</span></button>";
+  listaIconos.innerHTML = E.iconos.map(function (ic, k) {
+    return '<button class="icono'
+         + (sel && sel.tipo === "icono" && sel.i === k ? " sel" : "")
+         + (mal.iconos[k].length ? " mal" : "")
+         + '" data-icono="' + k + '"><svg viewBox="-13 -13 26 26">' + figuraDe(ic[0])
+         + '</svg><span class="nom">' + escapa(ic[3] || nombreDe(ic[0]))
+         + '</span><span class="coor">' + ic[1] + "," + ic[2] + " · " + Math.round(tamDe(ic))
+         + "</span></button>";
   }).join("");
-  listaIconos.innerHTML = hechos;
   document.getElementById("sinIconos").style.display = E.iconos.length ? "none" : "";
+  pintaPropios();
 
   var todos = [];
   E.zonas.forEach(function (z, k) {
-    mal[k].forEach(function (p) { todos.push(escapa(z[1]) + ": " + escapa(p)) });
+    mal.zonas[k].forEach(function (p) { todos.push(escapa(z[1]) + ": " + escapa(p)) });
+  });
+  E.iconos.forEach(function (ic, k) {
+    mal.iconos[k].forEach(function (p) {
+      todos.push("Icono " + (k + 1) + " (" + escapa(ic[3] || nombreDe(ic[0])) + "): " + escapa(p));
+    });
   });
   if (E.avisos && E.avisos.length) todos.push.apply(todos, E.avisos.map(escapa));
   avisos.innerHTML = todos.map(function (t) {
     return '<div class="aviso"><b>●</b><span>' + t + "</span></div>";
   }).join("");
-  document.getElementById("btnGuardar").disabled = mal.some(function (l) { return l.length > 0 });
+  document.getElementById("btnGuardar").disabled =
+    mal.zonas.some(function (l) { return l.length > 0 }) ||
+    mal.iconos.some(function (l) { return l.length > 0 });
 
   // El formulario solo manda cuando hay una zona elegida.
   var hay = sel && sel.tipo === "zona" && E.zonas[sel.i];
@@ -461,14 +589,39 @@ function pintaPanel(mal) {
     if (document.activeElement !== fCorto) fCorto.value = z[1];
     if (document.activeElement !== fDesc) fDesc.value = z[3];
   }
-  // Borrar borra lo que este elegido, sea una zona o un icono. Antes solo
-  // miraba las zonas y con un icono seleccionado el boton quedaba apagado
-  // sin decir por que, que es la peor forma de desactivar algo.
+  document.getElementById("btnBorrarZona").disabled = !hay;
+
+  // Y el del icono cuando hay un icono elegido, que es donde esta el tamano.
   var hayIcono = sel && sel.tipo === "icono" && E.iconos[sel.i];
-  var btnBorrar = document.getElementById("btnBorrarZona");
-  btnBorrar.disabled = !hay && !hayIcono;
-  btnBorrar.textContent = hayIcono ? "Borrar icono" : "Borrar zona";
+  document.getElementById("bloqueIcono").style.display = hayIcono ? "" : "none";
+  if (hayIcono) {
+    var ic = E.iconos[sel.i], t = Math.round(tamDe(ic));
+    if (document.activeElement !== fTam) fTam.value = t;
+    document.getElementById("vTam").textContent = t;
+    var fEtiqueta = document.getElementById("fEtiqueta");
+    if (document.activeElement !== fEtiqueta) fEtiqueta.value = ic[3] || "";
+  }
   document.getElementById("btnVertice").classList.toggle("principal", modoVertice);
+}
+
+// La lista de los iconos propios: lo que ocupan y como quitarlos. Se dice
+// cuantos iconos del mapa usan cada uno, porque al quitarlo se van con el.
+function pintaPropios() {
+  var nombres = Object.keys(E.propios);
+  if (!nombres.length) { listaPropios.innerHTML = ""; return }
+  var total = 0;
+  nombres.forEach(function (n) { total += (E.propios[n] || "").length });
+  listaPropios.innerHTML =
+    '<div class="rotuloPequeno"><span>Mis iconos · ' + nombres.length + "</span>"
+    + "<b>" + Math.round(total / 1024) + " KB</b></div>"
+    + nombres.map(function (n) {
+      var usos = E.iconos.filter(function (ic) { return ic[0] === n }).length;
+      return '<button class="icono" data-propio="' + escapa(n) + '" title="Quitar '
+           + escapa(n) + '"><svg viewBox="-13 -13 26 26">' + figuraDe(n) + "</svg>"
+           + '<span class="nom">' + escapa(n) + "</span>"
+           + '<span class="coor">' + (usos ? usos + " en el mapa" : "sin usar")
+           + " · quitar</span></button>";
+    }).join("");
 }
 
 function elige(tipo, i) {
@@ -492,7 +645,8 @@ s.addEventListener("pointerdown", function (ev) {
 
   // 1. Colocar un icono de la paleta: el clic sobre el mapa lo pone.
   if (tipoPalo) {
-    E.iconos.push([tipoPalo, p[0], p[1], E.simbolos[tipoPalo] || tipoPalo]);
+    var etiqueta = nombreDe(tipoPalo);
+    E.iconos.push([tipoPalo, p[0], p[1], etiqueta, +fTamNuevo.value]);
     tipoPalo = null;
     pintaPaleta();
     elige("icono", E.iconos.length - 1);
@@ -571,9 +725,31 @@ s.addEventListener("dblclick", function (ev) {
 
 s.addEventListener("wheel", function (ev) {
   ev.preventDefault();
-  var p = aMapa(ev);
-  acerca(ev.deltaY < 0 ? 1 / 1.18 : 1.18, p[0], p[1]);
+  // deltaY viene en pixeles, en lineas o en paginas segun el navegador y el
+  // aparato; se pasa todo a pixeles para que la rueda del raton y el trackpad
+  // den un resultado parecido.
+  var d = ev.deltaY * (ev.deltaMode === 1 ? 33 : ev.deltaMode === 2 ? 400 : 1);
+  // El factor es continuo (exponencial) en vez de dar un salto fijo por
+  // muesca: asi el trackpad, que manda decenas de eventos muy pequenos,
+  // acerca de forma suave en vez de a pasos.
+  zoomPend = {
+    f: (zoomPend ? zoomPend.f : 1) * Math.exp(d * 0.0016),
+    cliente: {x: ev.clientX, y: ev.clientY},
+    origen: ev.target
+  };
+  if (!zoomRaf) zoomRaf = requestAnimationFrame(aplicaZoom);
 }, {passive: false});
+
+// El zoom se aplica una vez por fotograma como mucho, juntando todo lo que
+// haya llegado mientras tanto. Sin esto, un trackpad que manda 100 eventos
+// por segundo dispara 100 encuadres por segundo y el navegador no llega.
+function aplicaZoom() {
+  zoomRaf = 0;
+  if (!zoomPend) return;
+  var p = aMapaCliente(zoomPend.cliente);
+  acerca(zoomPend.f, p[0], p[1]);
+  zoomPend = null;
+}
 
 // Cuanto hay que moverse para caer del punto p al segmento ab, y a que altura.
 function distaSobreSegmento(p, a, b) {
@@ -615,12 +791,25 @@ addEventListener("keydown", function (ev) {
 
 // --- paleta ---------------------------------------------------------------
 function pintaPaleta() {
-  paleta.innerHTML = Object.keys(E.simbolos).map(function (t) {
-    return '<div class="palo' + (tipoPalo === t ? " acto" : "") + '" draggable="true" data-tipo="'
-         + t + '" title="' + escapa(E.simbolos[t]) + '"><svg viewBox="-13 -13 26 26">'
-         + (E.formas[t] || "") + "</svg><span>" + escapa(E.simbolos[t]) + "</span></div>";
-  }).join("");
+  var deSerie = Object.keys(E.simbolos).map(function (t) {
+    return paloHTML(t, E.simbolos[t], false);
+  });
+  // Los propios van al final, con el borde discontinuo: asi se ve de un
+  // vistazo cuales son de la casa y cuales los subio quien edita.
+  var mios = Object.keys(E.propios).map(function (t) {
+    return paloHTML(t, t, true);
+  });
+  paleta.innerHTML = deSerie.concat(mios).join("");
 }
+
+function paloHTML(tipo, etiqueta, propio) {
+  var corto = etiqueta.length > 11 ? etiqueta.slice(0, 10) + "…" : etiqueta;
+  return '<div class="palo' + (tipoPalo === tipo ? " acto" : "")
+       + (propio ? " propio" : "") + '" draggable="true" data-tipo="'
+       + escapa(tipo) + '" title="' + escapa(etiqueta) + '"><svg viewBox="-13 -13 26 26">'
+       + figuraDe(tipo) + "</svg><span>" + escapa(corto) + "</span></div>";
+}
+
 paleta.addEventListener("dragstart", function (ev) {
   var p = ev.target.closest(".palo");
   if (!p) return;
@@ -635,7 +824,7 @@ paleta.addEventListener("click", function (ev) {
   tipoPalo = (tipoPalo === p.dataset.tipo) ? null : p.dataset.tipo;
   modoVertice = false;
   pintaPaleta();
-  if (tipoPalo) aviso("Haz clic en el mapa para poner " + E.simbolos[tipoPalo].toLowerCase() + ".", "");
+  if (tipoPalo) aviso("Haz clic en el mapa para poner " + nombreDe(tipoPalo).toLowerCase() + ".", "");
 });
 // El arrastre HTML5 dispara pointerup en el destino; aqui se lee el tipo que
 // venia en el dataTransfer. Sin esto, el pointerdown del mapa colocaria el
@@ -644,13 +833,65 @@ s.addEventListener("dragover", function (ev) { ev.preventDefault(); ev.dataTrans
 s.addEventListener("drop", function (ev) {
   ev.preventDefault();
   var tipo = ev.dataTransfer.getData("text/plain") || tipoPalo;
-  if (!tipo || !E.simbolos[tipo]) return;
+  if (!tipo || !figuraDe(tipo)) return;
   var p = aMapa(ev);
-  E.iconos.push([tipo, p[0], p[1], E.simbolos[tipo]]);
+  E.iconos.push([tipo, p[0], p[1], nombreDe(tipo), +fTamNuevo.value]);
   tipoPalo = null;
   pintaPaleta();
   elige("icono", E.iconos.length - 1);
   hayCambios();
+});
+
+// --- iconos propios -------------------------------------------------------
+// La imagen no se guarda al subirla: se queda en memoria y se escribe al
+// pulsar Guardar, como todo lo demas. Asi no hay dos formas distintas de
+// dejar el croquis a medias.
+document.getElementById("btnImagen").addEventListener("click", function () {
+  document.getElementById("archivo").click();
+});
+
+document.getElementById("archivo").addEventListener("change", function (ev) {
+  var f = ev.target.files && ev.target.files[0];
+  ev.target.value = "";
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { aviso("Eso no es una imagen.", "mal"); return }
+  var lector = new FileReader();
+  lector.onload = function () {
+    aviso("Preparando «" + f.name + "»…", "");
+    fetch("/api/icono", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({nombre: f.name, datos: lector.result,
+                            existentes: Object.keys(E.propios)})
+    }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
+      .then(function (par) {
+        var ok = par[0], d = par[1];
+        if (!ok) { aviso(d.mensaje || "No se pudo preparar la imagen.", "mal"); return }
+        E.propios[d.nombre] = d.datos;
+        hayCambios();
+        pintaPaleta();
+        aviso("Añadido «" + d.nombre + "» (" + Math.round(d.bytes / 1024) + " KB). "
+              + "Ya está en la paleta; arrástralo al mapa donde haga falta. "
+              + "Pulsa Guardar para publicarlo.", "ok");
+      })
+      .catch(function (e) { aviso("No se pudo preparar la imagen: " + e.message, "mal") });
+  };
+  lector.readAsDataURL(f);
+});
+
+listaPropios.addEventListener("click", function (ev) {
+  var b = ev.target.closest("[data-propio]");
+  if (!b) return;
+  var n = b.dataset.propio;
+  var usos = E.iconos.filter(function (ic) { return ic[0] === n }).length;
+  // Se va tambien de los iconos que lo usaban: dejarlos con un tipo que ya no
+  // existe los volveria invisibles, y eso es peor que quitarlos y decirlo.
+  if (usos) E.iconos = E.iconos.filter(function (ic) { return ic[0] !== n });
+  delete E.propios[n];
+  if (sel && sel.tipo === "icono") sel = null;
+  hayCambios();
+  pintaPaleta();
+  aviso("Quitado «" + n + "»" + (usos ? " y " + usos + " icono(s) del mapa" : "")
+        + ". Vuelve a subir la imagen si te arrepientes.", "ok");
 });
 
 // --- panel ----------------------------------------------------------------
@@ -673,15 +914,38 @@ listaIconos.addEventListener("click", function (ev) {
 
 function borrar() {
   if (!sel) return;
-  if (sel.tipo === "zona") {
-    E.zonas.splice(sel.i, 1);
-  } else {
-    E.iconos.splice(sel.i, 1);
-  }
+  if (sel.tipo === "zona") E.zonas.splice(sel.i, 1);
   elige(null);
   hayCambios();
 }
 document.getElementById("btnBorrarZona").addEventListener("click", borrar);
+document.getElementById("btnBorrarIcono").addEventListener("click", function () {
+  if (!sel || sel.tipo !== "icono") return;
+  E.iconos.splice(sel.i, 1);
+  elige(null);
+  hayCambios();
+});
+
+// El tamano del icono elegido. Se mueve el mapa mientras se arrastra el
+// deslizador, para ver cuanto tapa antes de dejarlo puesto.
+fTam.addEventListener("input", function () {
+  document.getElementById("vTam").textContent = fTam.value;
+  if (!sel || sel.tipo !== "icono") return;
+  E.iconos[sel.i][4] = +fTam.value;
+  hayCambios();
+});
+fTamNuevo.addEventListener("input", function () {
+  document.getElementById("vTamNuevo").textContent = fTamNuevo.value;
+});
+
+// La etiqueta es lo que leen los lectores de pantalla y lo que se ve en la
+// lista del editor; en el mapa no sale.
+document.getElementById("fEtiqueta").addEventListener("input", function (ev) {
+  if (!sel || sel.tipo !== "icono") return;
+  E.iconos[sel.i][3] = ev.target.value;
+  sucio = true;
+  pintaPanel(problemas());
+});
 document.getElementById("btnNueva").addEventListener("click", function () {
   // Un cuadrado en medio del mapa, para moverlo desde ahi. Nace con nombre
   // provisional porque una zona sin nombre sale como un boton vacio.
@@ -705,23 +969,28 @@ document.getElementById("btnVertice").addEventListener("click", function () {
   else aviso("", "");
 });
 document.getElementById("btnTodo").addEventListener("click", verTodo);
+document.getElementById("btnMas").addEventListener("click", function () { zoomAlCentro(1 / 1.4) });
+document.getElementById("btnMenos").addEventListener("click", function () { zoomAlCentro(1.4) });
 
 // --- guardar y subir ------------------------------------------------------
 function guardar() {
-  if (problemas().some(function (lista) { return lista.length > 0 })) {
-    aviso("Hay zonas con problemas. Revisa la lista de la derecha.", "mal");
+  var mal = problemas();
+  if (mal.zonas.some(function (l) { return l.length > 0 })
+      || mal.iconos.some(function (l) { return l.length > 0 })) {
+    aviso("Hay zonas o iconos con problemas. Mira la lista de la derecha.", "mal");
     return Promise.resolve(false);
   }
   return fetch("/api/guardar", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({zonas: E.zonas, iconos: E.iconos})
+    body: JSON.stringify({zonas: E.zonas, iconos: E.iconos, propios: E.propios})
   }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
     .then(function (par) {
       var ok = par[0], d = par[1];
       if (!ok) { aviso(d.mensaje || "No se pudo guardar.", "mal"); return false }
       sucio = false;
-      aviso("Guardado: " + d.guardado.zonas + " zonas y " + d.guardado.iconos
-            + " iconos. Ya se puede subir.", "ok");
+      aviso("Guardado: " + d.guardado.zonas + " zonas, " + d.guardado.iconos
+            + " iconos y " + d.guardado.propios + " iconos propios. "
+            + "Ya se puede subir.", "ok");
       pintaGit(d.git);
       return true;
     })
@@ -779,6 +1048,12 @@ fetch("/api/estado").then(function (r) {
   fondo.setAttribute("x", 0); fondo.setAttribute("y", 0);
   fondo.setAttribute("width", E.ancho); fondo.setAttribute("height", E.alto);
   fondo.setAttribute("href", "/mapa");
+  // Los topes del tamano vienen del servidor, que es quien los comprueba: si
+  // los deslizadores se movieran a otra cosa, dejarian pasar lo que luego
+  // rechazaria el guardado.
+  var t = (E.topes && E.topes.tam) || [16, 160];
+  TAM_MIN = t[0]; TAM_MAX = t[1];
+  [fTam, fTamNuevo].forEach(function (c) { c.min = t[0]; c.max = t[1] });
   document.getElementById("commit").value = "Croquis: ";
   pintaGit(d.git);
   pintaPaleta();

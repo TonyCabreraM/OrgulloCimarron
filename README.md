@@ -412,7 +412,14 @@ reescribir. Se explican más abajo.
   hacía que el mapa quedara pequeño y que el panel tapara las zonas del borde.
 - **El zoom es un `transform` CSS** sobre el `<g>` interior con una
   `transition`, no un bucle que anima el `viewBox`: el navegador lo interpola
-  solo y no hay JavaScript por fotograma.
+  solo y no hay JavaScript por fotograma. El `<g>` lleva `will-change:
+  transform` para que el navegador lo tenga en su propia capa y no repinte el
+  mapa entero en cada fotograma.
+- **El panel no lleva desenfoque de fondo.** Tenía un `backdrop-filter` de
+  14 px que se quitó: con el fondo al 97% de opacidad no se veía nada de lo de
+  detrás, y en cambio obligaba a recalcular el desenfoque en *cada* fotograma
+  del zoom, porque debajo hay un mapa moviéndose. Pagaba un precio alto por un
+efecto invisible.
 - **El panel es barra inferior en vertical y lateral en apaisado**
   (`@media (min-width:760px) and (orientation:landscape)`). En pantalla ancha
   una barra inferior desperdicia el ancho y deja el mapa chico y centrado.
@@ -433,16 +440,22 @@ array aparte, con el mismo formato de siempre:
 
 ```javascript
 var ICONOS = [
-  ["bano", 499, 470, "Baños junto al escenario"],
-  ["primeros", 620, 300, "Módulo de primeros auxilios"],
+  ["bano", 499, 470, "Baños junto al escenario", 46],
+  ["primeros", 620, 300, "Módulo de primeros auxilios", 60],
 ];
 ```
 
-Cada icono es `[tipo, x, y, etiqueta]`. El tipo elige la forma entre las de
-`SIMBOLOS`, que están dibujadas a mano en el propio archivo y en una caja de
-24×24 centrada en el origen: colocar una es solo un `translate` más un
-`scale`. La etiqueta no se ve en el mapa (a 46 unidades de ancho saldría de
-6 px) y está para los lectores de pantalla y para el editor.
+Cada icono es `[tipo, x, y, etiqueta, tamaño]`. El **tamaño es opcional** (si
+falta se usan 46 unidades, que es lo que medían todos antes de que se pudieran
+ajustar) y va **en unidades del mapa, no en píxeles**: los iconos son parte del
+plano y crecen con el zoom igual que las calles. El mínimo son 16 y el máximo
+160; con más, un icono tapa media zona.
+
+El tipo elige la forma entre las de `SIMBOLOS`, que están dibujadas a mano en
+el propio archivo y en una caja de 24×24 centrada en el origen: colocar una es
+solo un `translate` más un `scale`. La etiqueta no se ve en el mapa (a 46
+unidades de ancho saldría de 6 px) y está para los lectores de pantalla y para
+el editor.
 
 Los iconos **forman parte del plano y crecen con el zoom**, igual que las
 calles. El grosor del trazo va con `vector-effect: non-scaling-stroke` para
@@ -455,9 +468,38 @@ que una pulsación sobre un icono sigue llegando a la zona que hay debajo. Si
 no, un icono plantado en medio de un estacionamiento se comería esa parte del
 estacionamiento y la zona quedaría con un hueco.
 
-Los tipos están validados contra `SIMBOLOS` y hay una prueba que compara esa
-lista con la de `editor/validar.py`. Un tipo inventado saldría como un hueco
-vacío y sin ningún error en consola, que es la peor forma de fallar.
+Los tipos están validados contra `SIMBOLOS` más los iconos propios, y hay una
+prueba que compara esa lista con la de `editor/validar.py`. Un tipo inventado
+saldría como un hueco vacío y sin ningún error en consola, que es la peor forma
+de fallar.
+
+### Los iconos propios
+
+Además de los símbolos de serie se pueden usar imágenes propias. Van en otro
+bloque, un diccionario de nombre a imagen:
+
+```javascript
+var PROPIOS = {
+  "logo-facultad": "data:image/png;base64,iVBORw0KGgo…"
+};
+```
+
+**Van incrustadas como data URL y no en un archivo aparte** porque el croquis
+tiene que abrirse solo, sin pedirle nada a nadie: es lo que abre un QR escaneado
+en la calle, y hay una prueba que vigila que no cargue nada de fuera. El precio
+es que cada byte pesa dos veces, los datos y el texto base64, así que el editor
+las guarda pequeñas: **160 px de lado** y en PNG.
+
+Se dibujan recortadas en círculo, con un `clipPath` que vive en `<defs>`, para
+que se lean como iconos del mapa y no como fotos pegadas encima. Ese recorte se
+aplica en el espacio del propio icono, así que el mismo sirve para todos aunque
+cada uno tenga su tamaño y su sitio. Como el aro ya es redondo, una imagen
+cuadrada pierde un poco de las esquinas; el editor enseña la vista previa con el
+recorte puesto para que se vea antes de guardar.
+
+Los topes de peso están en `editor/validar.py`: 64 KB por imagen y 800 KB entre
+todas. Con 160 px de lado no se llega ni de lejos, y los topes están para que un
+descuido no convierta la página del móvil en algo que tarda en abrir.
 
 ### Al reemplazar el mapa por una versión nueva
 
@@ -498,12 +540,31 @@ interfaz es un HTML suelto.
 | Añadir una esquina | Botón **Añadir vértice**, luego clic en el borde |
 | Quitar una esquina | Doble clic sobre el punto, o `Supr` |
 | Poner un icono | Arrastrarlo de la paleta al mapa, o pulsarlo y hacer clic |
+| Ajustar su tamaño | El deslizador **Tamaño** del icono elegido; los nuevos salen con el que diga **Tamaño de los nuevos** |
+| Crear un icono propio | **Subir una imagen…**; queda en la paleta con el borde discontinuo |
+| Quitar un icono propio | Pulsarlo en **Mis iconos** |
 | Editar el texto | El formulario del panel, mientras la zona está elegida |
-| Acercar | Rueda del ratón |
+| Acercar | Rueda del ratón, o los botones **+** y **−** |
 
 Abajo a la izquierda del mapa están las mismas instrucciones.
 
-### Por qué el croquis público no puede editar nada
+### El zoom del editor
+
+La rueda da un paso **continuo**, no un salto fijo por muesca: el factor sale
+de `Math.exp(deltaY × 0.0016)`. Con un ratón, una muesca acerca un 17%; con un
+trackpad, que manda decenas de eventos diminutos, acerca de forma suave. Antes
+cada muesca multiplicaba por 1.18 y el resultado se veía a pasos.
+
+Además, el zoom **no vuelve a dibujar el panel**: la rueda dispara decenas de
+eventos por segundo y `dibuja()` reconstruye el mapa entero *y* las tres listas
+de la derecha. Ahora el zoom solo toca lo que depende de la escala, que es el
+`viewBox`, el radio de los tiradores y el tamaño de las etiquetas
+(`reencuadra()`), y todo lo demás espera a que haya un cambio de verdad. Medido:
+40 eventos de rueda pasaron de 40 redibujados completos a **un solo reencuadre**.
+
+Los eventos se juntan y se aplican **una vez por fotograma**
+(`requestAnimationFrame`), para que un trackpad que manda 100 eventos por
+segundo no dispare 100 encuadres.\n\n### Por qué el croquis público no puede editar nada
 
 Es la razón de que esto sea un programa aparte y no un botón dentro del mapa.
 
@@ -600,6 +661,15 @@ croquis o la página base:
   cierra y se traga todo el dibujo: el mapa sale negro y **sin ningún error en
   la consola**. Hay que dejar un espacio: `fill=#16241c />`. La prueba
   `atributos sin comillas no se tragan` lo vigila.
+- **Y su hermano: cerrar la etiqueta sin cerrar antes la comilla del
+  atributo.** Al escribir el `transform` de los iconos quedó
+  `')><title>'` en vez de `')"><title>'`. Falta la comilla, así que el
+  navegador se traga media etiqueta, el atributo se queda con basura dentro y
+  el elemento no se dibuja. En el croquis eso deja el mapa sin iconos y solo
+  se ve un error en la consola, que nadie mira. Lo pasé por alto al escribirlo
+  y lo cazó la consola del navegador; ahora hay una prueba
+  (`etiqueta sin comilla de cierre`) que busca el rastro que deja, un `>`
+  pegado a un `)` dentro de un texto de JavaScript.
 - **`.split()` aplicado a un texto concatenado con `+` solo afecta al último
   trozo.** `var Z="a"+"b".split(";")` deja `Z` como texto, no como array:
   `Z.length` da el número de caracteres, el bucle dibuja un grupo por carácter

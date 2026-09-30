@@ -11,6 +11,8 @@ tamano de pagina del archivo de Illustrator y el viewBox del SVG.
 """
 from __future__ import annotations
 
+import re
+
 ANCHO, ALTO = 1224, 792
 
 # Los simbolos que el croquis sabe dibujar. La clave es lo que se guarda en
@@ -34,6 +36,28 @@ SIMBOLOS = {
 # Un icono no pegado a la orilla: si cae justo en el filo, la mitad se sale
 # de la hoja y no se entiende que senala.
 MARGEN_ICONO = 12
+
+# Lo que mide un icono, en unidades del mapa. El de por defecto es el que
+# tenian todos antes de que se pudieran ajustar; el minimo se sigue leyendo
+# en la vista general y el maximo no llega a tapar una zona entera.
+TAM_ICONO = 46
+MIN_TAM_ICONO = 16
+MAX_TAM_ICONO = 160
+
+# Los iconos propios son imagenes guardadas DENTRO del propio croquis, en
+# base64. El archivo publicado no puede pedir nada de fuera (hay una prueba
+# que lo vigila), asi que la imagen tiene que viajar con el. Eso significa
+# que cada byte pesa dos veces: una en los datos y otra en el texto base64.
+# Con 160 px de lado ninguna imagen decente pasa de 64 KB, y el tope del
+# total esta para que un descuido no convierta la pagina del movil en algo
+# que tarda en abrir.
+MAX_ICONO = 64_000
+MAX_ICONOS_PROPIOS = 800_000
+
+# Los nombres de los iconos propios van tal cual dentro del HTML, asi que se
+# limitan a minusculas, numeros y guiones. Es lo mismo que hace el editor al
+# preparar la imagen, y evita que un nombre raro rompa el archivo.
+NOMBRE_PROPIO = re.compile(r"[a-z0-9][a-z0-9-]{0,23}")
 
 MIN_LADOS = 3  # un poligono de verdad
 MIN_LADO_PT = 20  # mas chico que esto no se puede tocar con el dedo
@@ -172,27 +196,37 @@ def revisar_zonas(zonas: list) -> list[str]:
     return problemas
 
 
-def revisar_iconos(iconos: list) -> list[str]:
+def revisar_iconos(iconos: list, propios=None) -> list[str]:
     """Devuelve la lista de problemas de los iconos. Vacia es que todo bien.
 
-    Cada icono es [tipo, x, y, etiqueta]. El tipo tiene que estar en SIMBOLOS,
-    porque el croquis solo sabe dibujar esos; uno desconocido saldria como un
-    hueco sin nada y sin ningun error en consola.
+    Cada icono es [tipo, x, y, etiqueta] o [tipo, x, y, etiqueta, tamano].
+    El tamano es opcional a proposito: los iconos guardados antes de que
+    existiera el control no lo llevan y tienen que seguir valiendo, con el
+    tamano de siempre.
+
+    El tipo puede ser uno de los simbolos de SIMBOLOS o un icono propio, que
+    son los que vienen en `propios`. Uno que no este en ninguna de las dos
+    listas saldria como un hueco sin nada y sin ningun error en consola.
     """
     problemas: list[str] = []
     if not isinstance(iconos, (list, tuple)):
         return ["los iconos tienen que ser una lista"]
 
+    conocidos = set(SIMBOLOS) | set(propios or {})
     for k, ic in enumerate(iconos):
         sitio = f"icono {k + 1}"
-        if not isinstance(ic, (list, tuple)) or len(ic) != 4:
-            problemas.append(f"{sitio}: tiene que ser [tipo, x, y, etiqueta]")
-            continue
-        tipo, x, y, etiqueta = ic
-        if tipo not in SIMBOLOS:
+        if not isinstance(ic, (list, tuple)) or len(ic) not in (4, 5):
             problemas.append(
-                f"{sitio}: «{tipo}» no es un simbolo conocido. "
-                f"Los que hay: {', '.join(sorted(SIMBOLOS))}")
+                f"{sitio}: tiene que ser [tipo, x, y, etiqueta] o "
+                f"[tipo, x, y, etiqueta, tamano]")
+            continue
+        tipo, x, y, etiqueta = ic[0], ic[1], ic[2], ic[3]
+        tam = ic[4] if len(ic) == 5 else TAM_ICONO
+
+        if tipo not in conocidos:
+            problemas.append(
+                f"{sitio}: «{tipo}» no es un simbolo conocido ni un icono tuyo. "
+                f"Los que hay: {', '.join(sorted(conocidos))}")
             continue
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (x, y)):
             problemas.append(f"{sitio}: las coordenadas tienen que ser numeros")
@@ -200,14 +234,85 @@ def revisar_iconos(iconos: list) -> list[str]:
         if not (MARGEN_ICONO <= x <= ANCHO - MARGEN_ICONO and
                 MARGEN_ICONO <= y <= ALTO - MARGEN_ICONO):
             problemas.append(
-                f"{sitio} ({SIMBOLOS[tipo]}): esta pegado al borde del mapa "
-                f"({x:.0f}, {y:.0f}); el centro tiene que caer dentro")
+                f"{sitio} ({titulo_de(tipo, propios)}): esta pegado al borde del "
+                f"mapa ({x:.0f}, {y:.0f}); el centro tiene que caer dentro")
         if not isinstance(etiqueta, str):
             problemas.append(f"{sitio}: la etiqueta tiene que ser texto")
+        if not isinstance(tam, (int, float)) or isinstance(tam, bool):
+            problemas.append(f"{sitio}: el tamano tiene que ser un numero")
+        elif not MIN_TAM_ICONO <= tam <= MAX_TAM_ICONO:
+            problemas.append(
+                f"{sitio}: el tamano {tam:.0f} se sale del rango de "
+                f"{MIN_TAM_ICONO} a {MAX_TAM_ICONO}")
 
     return problemas
 
 
-def revisar(zonas: list, iconos: list) -> list[str]:
-    """Todos los problemas juntos: los de las zonas y los de los iconos."""
-    return revisar_zonas(zonas) + revisar_iconos(iconos)
+def titulo_de(tipo: str, propios=None) -> str:
+    """Como se llama un icono para ensenarlo en un mensaje de error."""
+    if tipo in SIMBOLOS:
+        return SIMBOLOS[tipo]
+    return f"icono propio «{tipo}»"
+
+
+def revisar_propios(propios) -> list[str]:
+    """Devuelve la lista de problemas de los iconos propios.
+
+    Cada uno es un nombre y una imagen metida en el propio HTML como data
+    URL. Aqui se comprueba que sea de verdad una imagen, que el nombre se
+    pueda escribir sin comillas raras y que el total no engorde el archivo
+    mas de la cuenta.
+    """
+    problemas: list[str] = []
+    if propios is None:
+        return []
+    if not isinstance(propios, dict):
+        return ["los iconos propios tienen que ser un diccionario de nombre a imagen"]
+
+    total = 0
+    for nombre, datos in propios.items():
+        if not NOMBRE_PROPIO.fullmatch(nombre or ""):
+            problemas.append(
+                f"«{nombre}» no sirve como nombre de icono: solo minusculas, "
+                f"numeros y guiones, y hasta 24 caracteres")
+            continue
+        if nombre in SIMBOLOS:
+            problemas.append(
+                f"«{nombre}» ya es el nombre de un icono de los de siempre; "
+                f"ponle otro para no confundirlos")
+            continue
+        if not isinstance(datos, str):
+            problemas.append(f"«{nombre}»: la imagen tiene que ser texto")
+            continue
+        if not datos.startswith("data:image/"):
+            lugares = [n for n, d in propios.items()
+                       if isinstance(d, str) and d.startswith("data:image/")]
+            pista = ""
+            if not lugares:
+                pista = ("\nSi lo has editado a mano: la imagen tiene que ser "
+                         "una data URL que empiece por data:image/")
+            problemas.append(f"«{nombre}»: eso no es una imagen incrustada{pista}")
+            continue
+        if ";base64," not in datos:
+            problemas.append(f"«{nombre}»: la imagen tiene que venir en base64")
+            continue
+        if len(datos) > MAX_ICONO:
+            problemas.append(
+                f"«{nombre}»: la imagen pesa {len(datos) // 1024} KB y el tope "
+                f"son {MAX_ICONO // 1024} KB. Súbela más pequeña")
+            continue
+        total += len(datos)
+
+    if total > MAX_ICONOS_PROPIOS:
+        problemas.append(
+            f"Entre todos los iconos propios suman {total // 1024} KB y el tope "
+            f"son {MAX_ICONOS_PROPIOS // 1024} KB: el croquis tardaría en abrir. "
+            f"Quita alguno o sube las imágenes más pequeñas")
+
+    return problemas
+
+
+def revisar(zonas: list, iconos: list, propios=None) -> list[str]:
+    """Todos los problemas juntos: zonas, iconos y iconos propios."""
+    return (revisar_zonas(zonas) + revisar_propios(propios)
+            + revisar_iconos(iconos, propios))

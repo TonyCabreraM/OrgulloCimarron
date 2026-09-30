@@ -243,6 +243,27 @@ def leer_bloque(texto: str, nombre: str):
         return None
 
 
+def leer_objeto(texto: str, nombre: str):
+    """El objeto de dentro de un bloque /* === INICIO X === */. Para PROPIOS.
+
+    Misma idea que leer_bloque: los iconos propios son un diccionario de
+    nombre a data URL, y eso es JSON valido si las comillas son dobles.
+    """
+    ini = f"/* === INICIO {nombre} === */"
+    fin = f"/* === FIN {nombre} === */"
+    a, b = texto.find(ini), texto.find(fin)
+    if a < 0 or b < 0:
+        return None
+    cuerpo = texto[a + len(ini):b]
+    i, j = cuerpo.find("{"), cuerpo.rfind("}")
+    if i < 0 or j < i:
+        return None
+    try:
+        return json.loads(cuerpo[i:j + 1])
+    except json.JSONDecodeError:
+        return None
+
+
 CROQUIS = Path("plantilla/croquis.html")
 
 
@@ -266,13 +287,14 @@ def test_croquis_zonas_coherentes() -> bool:
 
     zonas = leer_bloque(texto, "ZONAS")
     iconos = leer_bloque(texto, "ICONOS")
-    if zonas is None or iconos is None:
-        print("    (no se pueden leer los bloques ZONAS o ICONOS de croquis.html).")
+    propios = leer_objeto(texto, "PROPIOS")
+    if zonas is None or iconos is None or propios is None:
+        print("    (no se pueden leer los bloques ZONAS, ICONOS o PROPIOS)")
         print("    Los marcadores /* === INICIO X === */ no se pueden borrar:")
         print("    sin ellos el editor no sabe qué trozo reescribir.")
         return False
 
-    problemas = v.revisar(zonas, iconos)
+    problemas = v.revisar(zonas, iconos, propios)
     for p in problemas:
         print(f"    {p}")
     if problemas:
@@ -288,8 +310,8 @@ def test_croquis_zonas_coherentes() -> bool:
     if not ruta_mapa.is_file():
         print(f"    (el mapa {ruta_mapa} no existe junto al HTML)")
         return False
-    print(f"    {len(zonas)} zonas y {len(iconos)} iconos, "
-          f"mapa de {ruta_mapa.stat().st_size // 1024} KB")
+    print(f"    {len(zonas)} zonas y {len(iconos)} iconos "
+          f"({len(propios)} propios), mapa de {ruta_mapa.stat().st_size // 1024} KB")
     return True
 
 
@@ -496,6 +518,51 @@ def test_el_editor_rechaza_lo_ajeno() -> bool:
     return True
 
 
+def test_ningun_literal_cierra_una_etiqueta_sin_comilla() -> bool:
+    """Ningun trozo de HTML armado en JavaScript cierra una etiqueta con el
+    atributo sin cerrar.
+
+    Es el hermano del fallo de los atributos sin comillas, y se coló de
+    verdad: al escribir el transform de los iconos quedo
+
+        + ')><title>' + ...
+
+    cuando tenia que ser
+
+        + ')"><title>' + ...
+
+    Falta la comilla del atributo, asi que el navegador se traga media
+    etiqueta: el transform se queda con basura dentro y el icono no se dibuja.
+    En el croquis eso deja el mapa sin iconos y solo se ve un error en la
+    consola del navegador, que nadie mira.
+
+    El rastro que deja es inconfundible: un '>' pegado a un ')' dentro de un
+    texto de JavaScript. Cerrar una llamada y despues cerrar la etiqueta sin
+    comilla en medio no tiene ningun uso legitimo, y en estos dos archivos no
+    hay ni un caso.
+    """
+    problemas = []
+    for archivo in (CROQUIS, Path("editor/editor.html")):
+        if not archivo.is_file():
+            print(f"    (no existe {archivo})")
+            return False
+        texto = archivo.read_text(encoding="utf-8")
+        # Solo los textos entrecomillados: fuera de ellos, ') >' seria codigo.
+        literales = re.findall(r"'[^'\n]*'|\"[^\"\n]*\"", texto)
+        for k, literal in enumerate(literales):
+            if ")>" in literal:
+                problemas.append(f"{archivo.name}: {literal.strip()[:60]}")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        print("    Falta la comilla que cierra el atributo antes del '>'.")
+        print("    El navegador se traga media etiqueta y el elemento no se dibuja.")
+        return False
+    print("    ningun atributo se queda sin cerrar antes del '>'")
+    return True
+
+
 def test_atributos_sin_comillas_no_se_tragan() -> bool:
     """Ningun valor de atributo sin comillas puede terminar en '/>'.
 
@@ -676,6 +743,8 @@ def main() -> int:
     pruebas = [
         ("minificado conserva estructura", test_minificado_conserva_estructura),
         ("atributos sin comillas no se tragan", test_atributos_sin_comillas_no_se_tragan),
+        ("etiqueta sin comilla de cierre",
+         test_ningun_literal_cierra_una_etiqueta_sin_comilla),
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),

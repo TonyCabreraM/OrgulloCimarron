@@ -34,7 +34,10 @@ body{
   touch-action:none;-webkit-tap-highlight-color:transparent;
 }
 #s{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
-#m{transform-box:view-box;transform-origin:0 0;
+/* will-change avisa al navegador de que este <g> se va a transformar, para
+   que lo prepare en su propia capa y la animacion no tenga que repintar el
+   mapa entero en cada fotograma. Sin esto, en un movil el zoom va a tirones. */
+#m{transform-box:view-box;transform-origin:0 0;will-change:transform;
    transition:transform .65s cubic-bezier(.22,1,.36,1)}
 /* El mapa es una hoja: un filo tenue y una sombra lo despegan del fondo. */
 #hoja{filter:drop-shadow(0 10px 26px #0a484233)}
@@ -55,6 +58,10 @@ body{
                vector-effect:non-scaling-stroke}
 #iconos .lam .relleno{fill:var(--tinta);stroke:none}
 
+/* Las imagenes propias ya vienen recortadas en circulo por el clipPath, asi
+   que aqui no hay nada que hacer salvo que no se salgan del aro. */
+#iconos .fig{pointer-events:none}
+
 /* Al tocar, solo se hace zoom. Las zonas no se resaltan ni se oscurece el
    resto del mapa: el diseno de Illustrator ya se lee solo y cualquier
    adorno encima lo ensucia. */
@@ -67,11 +74,16 @@ body{
        color:var(--tenue)}
 
 /* El panel lleva los accesos rapidos: en el movil acertarle a una banda
-   diagonal es dificil, asi que ademas de informar sirve para navegar. */
+   diagonal es dificil, asi que ademas de informar sirve para navegar.
+
+   Llevaba un backdrop-filter con desenfoque de 14 px que se quito: con el
+   fondo al 97% de opacidad (#f3f9eef7) no se veia nada de lo de detras, y
+   en cambio obligaba a recalcular el desenfoque en CADA fotograma del zoom,
+   porque debajo hay un mapa que se esta moviendo. Pagaba un precio alto por
+   un efecto invisible. */
 #ficha{position:fixed;z-index:2;display:flex;flex-direction:column;gap:12px;
        padding:14px 16px;border:1px solid var(--borde);border-radius:18px;
        background:#f3f9eef7;
-       -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
        box-shadow:0 16px 40px #0a484226;pointer-events:none;
        left:14px;right:14px;bottom:14px;
        transition:box-shadow .35s ease,border-color .35s ease}
@@ -144,6 +156,9 @@ body{
 </head>
 <body>
 <svg id="s" viewBox="0 0 1224 792" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <clipPath id="recorte"><circle cx="0" cy="0" r="12.2"/></clipPath>
+  </defs>
   <g id="m">
     <g id="hoja">
       <rect x="0" y="0" width="1224" height="792" fill="#f3f9ee"/>
@@ -257,19 +272,37 @@ var VISTA = [110, 100, 1005, 640];
 // ===========================================================================
 // Iconos: los simbolos de punto del mapa (banos, primeros auxilios, comida).
 //
-// Cada icono es [tipo, x, y, etiqueta]. El tipo elige la forma en SIMBOLOS y
-// la etiqueta es para lectores de pantalla y para el editor; en el mapa solo
-// se ve el simbolo, porque a 46 unidades de mapa el texto saldria de 6 px y
-// no lo leeria nadie.
+// Cada icono es [tipo, x, y, etiqueta, tamano]. El tamano es opcional: si
+// falta se usa TAM_ICONO, que es lo que median todos antes de que se pudiera
+// ajustar. El tipo elige la forma en SIMBOLOS, o una imagen de PROPIOS, y la
+// etiqueta es para lectores de pantalla y para el editor; en el mapa solo se
+// ve el simbolo, porque a 46 unidades de mapa el texto saldria de 6 px y no
+// lo leeria nadie.
 //
-// El tipo se valida contra SIMBOLOS: uno desconocido saldria como un hueco
-// vacio y sin ningun error en la consola, que es la peor forma de fallar.
+// El tipo se valida contra las dos listas: uno desconocido saldria como un
+// hueco vacio y sin ningun error en la consola, que es la peor forma de
+// fallar.
 //
 // Lo de abajo lo reescribe editor/editor.py, igual que las zonas.
 // ===========================================================================
 /* === INICIO ICONOS === */
 var ICONOS = [];
 /* === FIN ICONOS === */
+
+// Los iconos propios: imagenes que se suben desde el editor, guardadas aqui
+// dentro como data URL.
+//
+// Van incrustadas y no en un archivo aparte porque el croquis tiene que
+// abrirse solo, sin pedirle nada a nadie: es lo que abre un QR escaneado en
+// la calle. El precio es que cada byte pesa dos veces (los datos y el texto
+// base64), asi que las imagenes se guardan pequenas, a 160 px de lado.
+//
+// Se dibujan recortadas en circulo, igual que los simbolos van dentro del
+// aro, para que todas se lean como iconos del mapa y no como fotos pegadas
+// encima.
+/* === INICIO PROPIOS === */
+var PROPIOS = {};
+/* === FIN PROPIOS === */
 
 // Las formas de los iconos, dibujadas a mano en una caja de 24x24 centrada en
 // (0,0), para que colocar una sea solo translate + scale. Solo el contenido:
@@ -317,8 +350,10 @@ var SIMBOLOS = {
 };
 /* === FIN SIMBOLOS === */
 
-// Cuanto mide un icono, en unidades del mapa y no en pixeles: los iconos son
-// parte del plano y crecen con el zoom igual que las calles.
+// Cuanto mide un icono por defecto, en unidades del mapa y no en pixeles:
+// los iconos son parte del plano y crecen con el zoom igual que las calles.
+// Cada icono puede llevar su propio tamano; este es el que se usa cuando no
+// lo lleva.
 var TAM_ICONO = 46;
 
 var s = document.getElementById("s"), M = document.getElementById("m"),
@@ -350,13 +385,25 @@ var G = ZON.querySelectorAll(".g");
 // Los iconos, encima del mapa pero fuera del alcance del toque. Uno con un
 // tipo que no exista se salta en vez de dibujar un hueco: mejor un icono de
 // menos que un circulo vacio que nadie sabe de donde sale.
+//
+// Las imagenes propias van recortadas con el circulo de <defs>. El recorte se
+// aplica en el espacio del propio icono, asi que el mismo sirve para todos
+// aunque cada uno tenga su tamano y su sitio.
 ICN.innerHTML = ICONOS.map(function (ic) {
-  var forma = SIMBOLOS[ic[0]];
-  if (!forma) return "";
+  var dentro;
+  if (SIMBOLOS[ic[0]]) {
+    dentro = '<g class="lam">' + SIMBOLOS[ic[0]] + "</g>";
+  } else if (PROPIOS[ic[0]]) {
+    dentro = '<image class="fig" href="' + PROPIOS[ic[0]]
+           + '" x="-12.2" y="-12.2" width="24.4" height="24.4"'
+           + ' clip-path="url(#recorte)"/>';
+  } else {
+    return "";
+  }
   return '<g class="ic" transform="translate(' + ic[1] + "," + ic[2]
-       + ") scale(" + (TAM_ICONO / 24) + ')"><title>'
+       + ") scale(" + ((ic[4] || TAM_ICONO) / 24) + ')"><title>'
        + escapa(ic[3] || ic[0]) + '</title>'
-       + '<circle class="aro" r="13.4"/><g class="lam">' + forma + "</g></g>";
+       + '<circle class="aro" r="13.4"/>' + dentro + "</g>";
 }).join("");
 
 // La caja de una zona, sacada de su poligono: [x, y, ancho, alto].

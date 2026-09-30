@@ -32,6 +32,8 @@ USO
 from __future__ import annotations
 
 import argparse
+import base64
+import io
 import json
 import re
 import shutil
@@ -56,11 +58,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     ALTO,
     ANCHO,
+    MAX_ICONO,
+    MAX_ICONOS_PROPIOS,
+    MIN_TAM_ICONO,
+    MAX_TAM_ICONO,
+    NOMBRE_PROPIO,
     SIMBOLOS,
     revisar,
 )
 
 HOSTS_LOCALES = {"127.0.0.1", "localhost", "::1", "[::1]"}
+
+# Lo que mide un icono propio, en pixeles de lado. Con 160 px sobra para la
+# pantalla de un movil, incluso acercando, y mantiene la imagen en unos pocos
+# KB: cada byte acaba dos veces en el croquis, una en los datos y otra en el
+# texto base64.
+LADO_ICONO = 160
 
 
 class ErrorEditor(Exception):
@@ -104,8 +117,20 @@ def _valor(cuerpo: str, nombre: str):
     a, b = cuerpo.find("["), cuerpo.rfind("]")
     if a < 0 or b < a:
         raise ErrorEditor(f"El bloque de {nombre} no tiene ningun array dentro.")
+    return _json(cuerpo[a:b + 1], nombre)
+
+
+def _objeto(cuerpo: str, nombre: str):
+    """El objeto de dentro del bloque, leido como JSON. Para PROPIOS."""
+    a, b = cuerpo.find("{"), cuerpo.rfind("}")
+    if a < 0 or b < a:
+        raise ErrorEditor(f"El bloque de {nombre} no tiene ningun objeto dentro.")
+    return _json(cuerpo[a:b + 1], nombre)
+
+
+def _json(trozo: str, nombre: str):
     try:
-        return json.loads(cuerpo[a:b + 1])
+        return json.loads(trozo)
     except json.JSONDecodeError as e:
         raise ErrorEditor(
             f"El bloque de {nombre} no se puede leer como JSON: {e}.\n"
@@ -119,11 +144,13 @@ def leer_croquis() -> dict:
     texto = CROQUIS.read_text(encoding="utf-8")
     _, _, cuerpo_zonas = _tramos(texto, "ZONAS")
     _, _, cuerpo_iconos = _tramos(texto, "ICONOS")
+    _, _, cuerpo_propios = _tramos(texto, "PROPIOS")
     vista = re.search(r"var VISTA = \[([-\d,\s]+)\]", texto)
     mapa = re.search(r'<image[^>]+href="([^"]+)"', texto)
     return {
         "zonas": _valor(cuerpo_zonas, "ZONAS"),
         "iconos": _valor(cuerpo_iconos, "ICONOS"),
+        "propios": _objeto(cuerpo_propios, "PROPIOS"),
         "vista": [int(v) for v in vista.group(1).split(",")] if vista else [0, 0, ANCHO, ALTO],
         "mapa": mapa.group(1) if mapa else "rectoria.webp",
     }
@@ -199,23 +226,126 @@ def _texto_zonas(zonas: list) -> str:
 
 
 def _texto_iconos(iconos: list) -> str:
+    """El array de iconos. El tamano se escribe solo si no es el de siempre,
+    para que la linea de un icono normal no cambie al guardar sin tocarlo."""
     if not iconos:
         return "var ICONOS = [];"
-    trozos = [
-        f"  [{json.dumps(t, ensure_ascii=False)}, {_n(x)}, {_n(y)}, "
-        f"{json.dumps(e, ensure_ascii=False)}]"
-        for t, x, y, e in iconos]
+    trozos = []
+    for ic in iconos:
+        campos = [json.dumps(ic[0], ensure_ascii=False), _n(ic[1]), _n(ic[2]),
+                  json.dumps(ic[3], ensure_ascii=False)]
+        if len(ic) > 4:
+            campos.append(_n(ic[4]))
+        trozos.append("  [" + ", ".join(campos) + "]")
     return "var ICONOS = [\n" + ",\n".join(trozos) + "\n];"
 
 
-def guardar_croquis(zonas: list, iconos: list) -> dict:
-    """Valida y escribe las zonas y los iconos. Deja una copia de seguridad.
+def _texto_propios(propios: dict) -> str:
+    """El objeto de iconos propios, con un nombre por linea.
 
-    Si algo no cuadra no se escribe NADA: ni las zonas, ni los iconos. A
-    medias seria peor que no escribir, porque el croquis quedaria publicado
-    con la mitad del cambio y sin forma de saber cual falta.
+    Cada imagen es una data URL larguisima que va en una sola linea, porque
+    JSON no deja partir un texto. Se ordenan por nombre para que al guardar
+    dos veces lo mismo el archivo salga igual.
     """
-    problemas = revisar(zonas, iconos)
+    if not propios:
+        return "var PROPIOS = {};"
+    lineas = [f"  {json.dumps(k, ensure_ascii=False)}: {json.dumps(v)}"
+              for k, v in sorted(propios.items())]
+    return "var PROPIOS = {\n" + ",\n".join(lineas) + "\n};"
+
+
+def preparar_icono(datos_url: str, nombre: str, ocupados: set,
+                   lado: int = LADO_ICONO) -> tuple[str, str]:
+    """Convierte una imagen subida en un icono listo para el croquis.
+
+    Se queda con lo que importa: la recorta a lo que no es transparente, la
+    encaja en un cuadro de lado x lado sin deformarla, la reduce a 160 px y la
+    guarda en PNG. Con el cuadro y el recorte, una imagen con margenes de
+    sobra ocupa el icono entero, y una foto alargada no sale aplastada.
+    """
+    if not isinstance(datos_url, str):
+        raise ErrorEditor("Falta la imagen.")
+    trozo = re.match(r"data:image/[a-z0-9.+-]+;base64,(.+)$",
+                     datos_url, re.S | re.I)
+    if not trozo:
+        raise ErrorEditor(
+            "Eso no es una imagen. Sirven PNG, JPG, WebP, GIF y BMP "
+            "(los SVG no: al incrustarlos habria que confiar en su contenido).")
+    try:
+        crudo = base64.b64decode(trozo.group(1), validate=False)
+    except (ValueError, TypeError):
+        raise ErrorEditor("La imagen viene mal codificada.") from None
+    if len(crudo) > 12_000_000:
+        raise ErrorEditor("La imagen pasa de 12 MB. Súbela más pequeña.")
+
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        raise ErrorEditor(
+            "Hace falta Pillow para preparar las imagenes.\n"
+            "En el equipo del proyecto ya esta: usa .venv\\Scripts\\python.exe") from None
+
+    try:
+        with Image.open(io.BytesIO(crudo)) as original:
+            original.load()
+            # Los moviles guardan la orientacion en los metadatos, no en los
+            # pixeles: sin esto, una foto vertical sale tumbada.
+            imagen = ImageOps.exif_transpose(original).convert("RGBA")
+    except Exception:
+        raise ErrorEditor(
+            "No se pudo abrir la imagen. Prueba a guardarla como PNG o JPG.") from None
+
+    # Fuera los margenes vacios: una imagen con mucho aire alrededor saldria
+    # diminuta dentro del circulo.
+    caja = imagen.getbbox()
+    if caja:
+        imagen = imagen.crop(caja)
+
+    imagen.thumbnail((lado, lado), Image.LANCZOS)
+    lienzo = Image.new("RGBA", (lado, lado), (0, 0, 0, 0))
+    lienzo.paste(imagen, ((lado - imagen.width) // 2, (lado - imagen.height) // 2),
+                 imagen)
+
+    guardado = io.BytesIO()
+    lienzo.save(guardado, "PNG", optimize=True)
+    salida = "data:image/png;base64," + base64.b64encode(guardado.getvalue()).decode("ascii")
+    if len(salida) > MAX_ICONO:
+        raise ErrorEditor(
+            f"La imagen queda en {len(salida) // 1024} KB y el tope son "
+            f"{MAX_ICONO // 1024} KB. Prueba con una más sencilla o más pequeña.")
+
+    return _nombre_libre(nombre, ocupados), salida
+
+
+def _nombre_libre(nombre: str, ocupados: set) -> str:
+    """Un nombre de icono utilizable: minusculas, numeros y guiones.
+
+    Si ya esta cogido se le anade un numero, en vez de pisar el que hubiera:
+    el usuario puede subir dos veces el mismo archivo sin darse cuenta, y
+    perder el primero seria una sorpresa desagradable.
+    """
+    base = re.sub(r"[^a-z0-9]+", "-", (nombre or "").lower()).strip("-")
+    # Sin extension: "logo-uabc.png" -> "logo-uabc".
+    base = base[:24].strip("-") or "icono"
+    if not NOMBRE_PROPIO.fullmatch(base):
+        base = (base + "-icono")[:24]
+    candidato, n = base, 1
+    while candidato in ocupados or not NOMBRE_PROPIO.fullmatch(candidato):
+        n += 1
+        sufijo = f"-{n}"
+        candidato = base[:24 - len(sufijo)] + sufijo
+    return candidato
+
+
+def guardar_croquis(zonas: list, iconos: list, propios: dict) -> dict:
+    """Valida y escribe las zonas, los iconos y los iconos propios.
+
+    Deja una copia de seguridad antes de tocar nada, y si algo no cuadra no
+    escribe NADA: ni las zonas, ni los iconos, ni las imagenes. A medias
+    seria peor que no escribir, porque el croquis quedaria publicado con la
+    mitad del cambio y sin forma de saber cual falta.
+    """
+    problemas = revisar(zonas, iconos, propios)
     if problemas:
         raise ErrorEditor("\n".join(problemas))
 
@@ -226,13 +356,16 @@ def guardar_croquis(zonas: list, iconos: list) -> dict:
     RESPALDO.mkdir(exist_ok=True)
     (RESPALDO / "croquis.html").write_text(texto, encoding="utf-8")
 
-    for nombre, cuerpo in (("ZONAS", _texto_zonas(zonas)), ("ICONOS", _texto_iconos(iconos))):
+    bloques = (("ZONAS", _texto_zonas(zonas)),
+               ("ICONOS", _texto_iconos(iconos)),
+               ("PROPIOS", _texto_propios(propios)))
+    for nombre, cuerpo in bloques:
         a, b, _ = _tramos(texto, nombre)
         ini, fin = _marcadores(nombre)
         texto = texto[:a] + ini + "\n" + cuerpo + "\n" + fin + texto[b + len(fin):]
 
     CROQUIS.write_text(texto, encoding="utf-8")
-    return {"zonas": len(zonas), "iconos": len(iconos)}
+    return {"zonas": len(zonas), "iconos": len(iconos), "propios": len(propios)}
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +452,13 @@ def subir(mensaje: str) -> dict:
 class Manejador(BaseHTTPRequestHandler):
     server_version = "EditorCroquis"
 
+    # Si una peticion se queda a medias (el navegador manda las cabeceras y se
+    # corta, o el cuerpo no llega entero), el hilo se quedaba esperando en
+    # read() para siempre. Con esto la conexion se corta sola y el hilo se
+    # libera. Paso de verdad: un dialogo del navegador congelo la pestana a
+    # mitad de un guardado y el hilo se quedo colgado.
+    timeout = 30
+
     def log_message(self, formato: str, *args) -> None:  # noqa: A003
         # El log por defecto llena la consola de cada imagen y cada sondeo.
         # Solo interesa lo que el usuario provoca.
@@ -365,7 +505,10 @@ class Manejador(BaseHTTPRequestHandler):
             largo = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             raise ErrorEditor("Content-Length ilegible.") from None
-        if largo <= 0 or largo > 4_000_000:
+        # El tope es alto porque subir un icono manda la imagen entera en
+        # base64, que engorda un tercio. Lo que se acepta de verdad lo decide
+        # preparar_icono, que ya mira el tamano de la imagen decodificada.
+        if largo <= 0 or largo > 18_000_000:
             raise ErrorEditor("El cuerpo de la peticion no tiene un tamano razonable.")
         crudo = self.rfile.read(largo)
         try:
@@ -394,6 +537,9 @@ class Manejador(BaseHTTPRequestHandler):
                 datos["formas"] = formas
                 datos["avisos"] = tipos_coinciden(formas)
                 datos["ancho"], datos["alto"] = ANCHO, ALTO
+                datos["topes"] = {"tam": [MIN_TAM_ICONO, MAX_TAM_ICONO],
+                                  "lado": LADO_ICONO,
+                                  "totalPropios": MAX_ICONOS_PROPIOS}
                 datos["git"] = estado_git()
                 datos["publicado"] = "https://tonycabreram.github.io/OrgulloCimarron/plantilla/croquis.html"
                 self._json(datos)
@@ -416,10 +562,22 @@ class Manejador(BaseHTTPRequestHandler):
             datos = self._cuerpo_json()
             if ruta == "/api/guardar":
                 zonas, iconos = datos.get("zonas"), datos.get("iconos")
+                propios = datos.get("propios")
                 if not isinstance(zonas, list) or not isinstance(iconos, list):
                     raise ErrorEditor("Faltan las zonas o los iconos.")
-                self._json({"ok": True, "guardado": guardar_croquis(zonas, iconos),
+                if propios is None:
+                    propios = {}
+                if not isinstance(propios, dict):
+                    raise ErrorEditor("Los iconos propios tienen que ser un diccionario.")
+                self._json({"ok": True,
+                            "guardado": guardar_croquis(zonas, iconos, propios),
                             "git": estado_git()})
+            elif ruta == "/api/icono":
+                nombre, imagen = preparar_icono(
+                    datos.get("datos"), str(datos.get("nombre") or ""),
+                    set(SIMBOLOS) | set(datos.get("existentes") or []))
+                self._json({"ok": True, "nombre": nombre, "datos": imagen,
+                            "bytes": len(imagen)})
             elif ruta == "/api/subir":
                 mensaje = str(datos.get("mensaje") or "").strip()
                 if not mensaje:
