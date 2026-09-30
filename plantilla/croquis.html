@@ -236,9 +236,18 @@ body{
    rastro, para que se vea que es algo que se abre encima del mapa y no una
    pantalla aparte.
 
-   En el movil se pega abajo y ocupa el ancho: una ventana centrada obliga a
-   acertarle con el dedo al boton de cerrar, y de paso asi se lee mejor. */
-#ventana{position:fixed;inset:0;z-index:9;display:grid;place-items:end center;
+   Sale CENTRADA, tambien en el movil. Antes se pegaba abajo y ocupaba el
+   ancho: la idea era no tener que acertarle al boton de cerrar, pero en un
+   telefono alto la ventana quedaba a media pantalla de distancia del icono
+   que se acababa de tocar, y parecia que no habia pasado nada.
+
+   El `safe center` de la segunda linea es por si la caja no cupiera de alto:
+   con un `center` a secas, lo que sobra se sale por ARRIBA y de ahi no se
+   puede bajar con el dedo. `safe` lo pega al borde en ese caso. Si el
+   navegador no lo entiende, se queda con el `center` de la linea anterior,
+   que es lo normal: la caja nunca pasa del 78% del alto de la pantalla. */
+#ventana{position:fixed;inset:0;z-index:9;display:grid;place-items:center;
+         align-items:safe center;
          padding:16px;background:#0a484233;opacity:0;
          transition:opacity .22s ease;pointer-events:none}
 #ventana.abierta{opacity:1;pointer-events:auto}
@@ -258,23 +267,22 @@ body{
 #cierraVentana:hover{background:var(--lima);border-color:#8fbf9a}
 #cierraVentana svg{width:15px;height:15px;display:block}
 #selloVentana{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+/* El sello mide siempre lo mismo, y el icono se coloca dentro con un margen
+   calculado. El hueco NO lo da un `padding`: lo da el `viewBox`, que el script
+   ajusta al dibujo de verdad. Con un padding fijo, un icono alargado se sale
+   de la caja o se queda diminuto segun su forma.
+
+   Aqui solo queda el fondo. */
 #selloVentana svg{width:52px;height:52px;flex:none;border-radius:14px;
-                  background:var(--crema);padding:9px}
+                  background:var(--crema)}
 #selloVentana svg *{fill:none;stroke:var(--tinta);stroke-width:1.9;
                     stroke-linecap:round;stroke-linejoin:round}
 #selloVentana svg .relleno{fill:var(--tinta);stroke:none}
-#selloVentana img{width:52px;height:52px;flex:none;border-radius:50%;
-                  border:1px solid var(--borde);object-fit:cover}
 /* Si el icono va sin circulo en el mapa, aqui va sin marco. El icono de la
    ventana es el mismo que se acaba de tocar, asi que tiene que verse igual:
    con el marco puesto, un icono suelto en el mapa aparecia metido en una caja
-   al abrirlo, y parece que el toque abrio otro icono.
-
-   Al simbolo se le quita el cuadro crema y al hueco del relleno (el padding),
-   y a la imagen el redondeo y el filo. El `object-fit` se queda: sirve para
-   encajar la imagen en su caja, no para recortarla en circulo. */
-#selloVentana.sinAro svg{background:none;padding:0}
-#selloVentana.sinAro img{border-radius:0;border:0}
+   al abrirlo, y parece que el toque abrio otro icono. */
+#selloVentana.sinAro svg{background:none}
 #tVentana{font-size:19px;font-weight:780;letter-spacing:-.015em;line-height:1.25;
           color:var(--tinta)}
 #xVentana{font-size:14px;line-height:1.6;color:var(--texto);white-space:pre-line;
@@ -292,7 +300,6 @@ body{
             text-transform:uppercase;color:var(--tenue)}
 
 @media (min-width:760px) and (orientation:landscape){
-  #ventana{place-items:center}
   #cajaVentana{transform:translateY(10px) scale(.97)}
 }
 
@@ -953,6 +960,44 @@ function pintaBoton(ic) {
   BOTON.appendChild(a);
 }
 
+// Cuanto mide el sello de la ventana y cuantos pixeles se dejan libres a cada
+// lado del dibujo. El lado tiene que ser el mismo que el `width` del sello en
+// el CSS; si no coincide, el margen sale mas grande o mas pequeno de lo pedido.
+var SELLO_LADO = 52, SELLO_LIBRES = 5;
+
+// Encaja el dibujo dentro del sello dejandole `SELLO_LIBRES` pixeles libres por
+// los cuatro lados.
+//
+// El hueco se hace moviendo el `viewBox`, no con un `padding`: un padding fijo
+// deja el mismo hueco en unidades del dibujo, y como cada icono ocupa su caja
+// lo que quiere, unos salen pegados al borde y otros diminutos. Midiendo el
+// dibujo de verdad, todos acaban del mismo tamano con el mismo aire.
+//
+// Se mide con `getBBox()`, que da la caja del DIBUJO y no la del elemento: en
+// un simbolo son sus trazos y en una imagen es su recuadro. Necesita el
+// elemento dentro del documento y con caja, asi que esto va despues de meter
+// el dibujo en el sello y con la ventana ya sin `hidden`.
+//
+// Si algo de esto falla, se deja el `viewBox` que traia el SVG: un icono algo
+// mas pequeno es mucho mejor que una ventana que no abre.
+function encajaSello(svg) {
+  if (!svg || !svg.getBBox) return;
+  var dibujo = svg.firstElementChild, caja;
+  if (!dibujo || !dibujo.getBBox) return;
+  try {
+    caja = dibujo.getBBox();
+  } catch (e) {
+    return;                       // el nodo no se puede medir todavia
+  }
+  if (!(caja.width > 0) || !(caja.height > 0)) return;
+  var ancho = svg.getBoundingClientRect().width || SELLO_LADO;
+  // El lado del viewBox para que el dibujo quepa en (ancho - 2 * libres).
+  var lado = Math.max(caja.width, caja.height) * ancho / (ancho - 2 * SELLO_LIBRES);
+  var cx = caja.x + caja.width / 2, cy = caja.y + caja.height / 2;
+  svg.setAttribute("viewBox", (cx - lado / 2) + " " + (cy - lado / 2)
+                              + " " + lado + " " + lado);
+}
+
 function abreVentana(k) {
   var ic = ICONOS[k];
   if (!ic || !ic.i) return;
@@ -962,18 +1007,26 @@ function abreVentana(k) {
   // que se vea de cual se trata. El SVG se arma aqui y no se copia del mapa
   // porque alli el icono lleva el transform de la posicion, y copiarlo tal
   // cual lo dejaria fuera de la caja.
-  var esPropio = !SIMBOLOS[ic.t] && !!PROPIOS[ic.t];
-  // Y con el mismo circulo que tiene en el mapa, que puede no tenerlo. Ponerle
-  // el marco a la fuerza hacia que un icono suelto en el mapa apareciera
-  // metido en una caja al abrirlo, y parece que se abrio otro.
+  //
+  // Los iconos propios van DENTRO del svg, como imagen, y no sueltos en un
+  // `<img>`: asi el encaje lo hace el propio SVG, que sabe mantener la
+  // proporcion, y el dibujo nunca se recorta. Un `<img>` con `object-fit:
+  // cover` escala la imagen hasta llenar la caja, y una gota alargada perdia
+  // la punta y la base.
+  //
+  // Se pide `figuraDe(..., false)`, sin el recorte en circulo: aqui el icono
+  // va suelto dentro del sello, y el circulo lo pone el fondo crema.
   var conAro = conAroDe(ic);
   SELLO.setAttribute("class", conAro ? "" : "sinAro");
-  SELLO.innerHTML = esPropio
-    ? '<img src="' + PROPIOS[ic.t] + '" alt="">'
-    : '<svg viewBox="-13 -13 26 26">' + figuraDe(ic.t, conAro) + "</svg>";
+  SELLO.innerHTML = '<svg viewBox="-13 -13 26 26">' + figuraDe(ic.t, false)
+                  + "</svg>";
   SELLO.setAttribute("aria-hidden", "true");
   pintaBoton(ic);
   VENT.hidden = false;
+  // El encaje va aqui: con la ventana en `display:none` no hay caja que medir.
+  // Y va antes del fotograma de la transicion, cuando el navegador todavia no
+  // ha pintado, asi que el ajuste no se llega a ver.
+  encajaSello(SELLO.firstElementChild);
   // Un fotograma con `hidden` ya quitado antes de poner la clase, o el
   // navegador no ve el cambio de estado y la ventana aparece de golpe sin
   // transicion.

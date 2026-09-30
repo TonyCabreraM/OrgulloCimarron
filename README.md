@@ -583,10 +583,20 @@ Al pulsar un icono con `i` sale una ventana con su título y su texto. Es la
 misma ventana para todos: se le cambia el contenido y se muestra, así que no
 hay forma de que queden dos abiertas ni de que se acumulen en el DOM.
 
-En el móvil se pega abajo y ocupa el ancho, en pantalla ancha sale centrada, y
-en los dos casos lleva el mismo fondo, el mismo filo y el mismo verde que el
-panel: se tiene que ver que es algo que se abre encima del mapa y no una
-pantalla aparte.
+Sale **centrada**, también en el móvil. Antes se pegaba abajo y ocupaba el
+ancho: la idea era no tener que acertarle al botón de cerrar, pero en un
+teléfono alto la ventana quedaba a media pantalla de distancia del icono que se
+acababa de tocar, y parecía que el toque no había hecho nada.
+
+Va con `place-items: center` y, en una segunda línea, `align-items: safe
+center`. Ese `safe` es por si la caja no cupiera de alto: con un `center` a
+secas, lo que sobra **se sale por arriba** y de ahí no se puede bajar con el
+dedo, porque el scroll solo llega hacia abajo. `safe` la pega al borde en ese
+caso. Si el navegador no lo entiende, se queda con el `center` de la línea
+anterior, que es lo normal: la caja nunca pasa del 78 % del alto de la pantalla.
+
+Lleva el mismo fondo, el mismo filo y el mismo verde que el panel: se tiene que
+ver que es algo que se abre encima del mapa y no una pantalla aparte.
 
 Se cierra con el botón, tocando el fondo o con `Escape`. Empieza en `hidden`,
 que además de esconderla la saca del alcance del teclado; y al cerrarse espera a
@@ -596,6 +606,34 @@ seguiría interceptando el toque y el mapa dejaría de responder.
 El toque sobre un icono **corta la propagación** en el `pointerdown`. Si no, el
 `<svg>` lo recibiría también y además de abrir la ventana desharía el zoom por
 detrás.
+
+### El sello: el icono con su margen
+
+La ventana lleva arriba el icono que se acaba de tocar, y se le dejan **5 px
+libres por los cuatro lados**.
+
+El hueco lo da el **`viewBox`, medido**, no un `padding`. El script dibuja el
+icono, mide su caja con `getBBox()` y recoloca el `viewBox` para que el dibujo
+quepa en el hueco con ese margen:
+
+```javascript
+var lado = Math.max(caja.width, caja.height) * ancho / (ancho - 2 * SELLO_LIBRES);
+```
+
+Con un `padding` fijo el hueco es el mismo en unidades del dibujo, y como cada
+icono llena su caja lo que quiere —unos son cuadrados, otros alargados— unos
+saldrían pegados al borde y otros diminutos. Medido: los 14 tipos de icono del
+mapa dan **5,0 px exactos** en los cuatro lados.
+
+**Los iconos propios van dentro del `<svg>`, no en un `<img>`.** Estaban en un
+`<img>` con `object-fit: cover`, que escala la imagen hasta llenar la caja y
+tira lo que sobra: una gota de 105 × 150 en una caja de 52 × 52 perdía la punta
+y la base. Sin ningún error, solo un dibujo al que le faltaban trozos. Dentro
+del SVG el encaje lo hace `preserveAspectRatio` (`xMidYMid meet` por defecto),
+que **nunca recorta**: encaja manteniendo la proporción.
+
+El margen también se respeta con los símbolos de serie, midiendo sus trazos, así
+que un icono estrecho y uno cuadrado acaban con el mismo aire alrededor.
 
 **El icono de la ventana se dibuja con el mismo círculo que tiene en el mapa.**
 Estaba puesto con el círculo forzado, y un icono que en el mapa se ve suelto
@@ -1127,6 +1165,25 @@ croquis o la página base:
   `(ox, oy)` del origen es el que se queda quieto. Medir posiciones en pantalla
   no sirve: el zoom y el paneo del mapa las mueven y el ruido tapa la señal
   (una medición dio 54 px de «movimiento» que era el mapa reencuadrándose).
+- **`object-fit: cover` recorta, y en un icono eso se nota.** Escala la imagen
+  hasta llenar la caja y tira lo que sobra. Una gota de 105 × 150 en una caja
+  de 52 × 52 perdía 22 px de alto: la punta y la base. Sin ningún error, solo un
+  dibujo al que le faltaban trozos. Para un icono se quiere `contain`, o mejor
+  meterlo en un `<svg>` y dejar que el `preserveAspectRatio` lo encaje, que
+  además permite medirlo.
+- **Un `padding` no sirve para dar aire a un dibujo de tamaño desconocido.** El
+  padding se mide en unidades propias del contenedor, así que deja el mismo
+  hueco a un icono cuadrado que a uno alargado: unos salen pegados y otros
+  diminutos. Lo que se quiere es medir el dibujo con `getBBox()` y recolocar el
+  `viewBox`, que se mide en unidades del dibujo.
+- **`getBBox()` no mide nada con el elemento en `display:none`.** Devuelve ceros
+  o lanza. Si el cálculo depende de esa medida, hay que quitar el `hidden`
+  antes de medir, no después.
+- **Centrar con `place-items: center` esconde lo que sobra por arriba.** En un
+  contenedor con scroll, el contenido más alto que la caja se sale por el borde
+  de arriba y **no se puede alcanzar con el dedo**, porque el scroll solo llega
+  hacia abajo. `align-items: safe center` lo pega al borde en ese caso, y si el
+  navegador no lo entiende se queda con el `center` de la línea anterior.
 - **Un recurso con la misma dirección y contenido nuevo no se ve.** GitHub
   Pages sirve las imágenes con `Cache-Control: max-age=600`, así que al cambiar
   `rectoria.webp` el navegador **y el CDN** siguen enseñando la copia vieja

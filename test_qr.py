@@ -854,6 +854,104 @@ def test_el_sello_y_el_boton_de_la_ventana() -> bool:
                 "el CSS no tiene reglas para `#selloVentana.sinAro`: el sello "
                 "seguiria con su marco aunque lleve la clase")
 
+    # --- 1 bis. El sello encaja el icono con margen, sin recortarlo ---------
+    # El icono del sello salia cortado: iba en un `<img>` con `object-fit:
+    # cover`, que escala la imagen hasta llenar la caja y tira lo que sobra.
+    # Una gota de 105 x 150 en una caja de 52 x 52 perdia la punta y la base,
+    # y no habia ningun error: solo un dibujo al que le faltaban trozos.
+    #
+    # Ahora el dibujo va DENTRO del `<svg>` y el hueco lo da el `viewBox`, que
+    # el script ajusta midiendo el dibujo de verdad. Tres cosas que tienen que
+    # cumplirse para que eso funcione, y las tres se comprueban aqui:
+    #
+    #  - Que la imagen no vuelva a ir en un `<img>` con `cover`.
+    #  - Que `encajaSello` exista Y se llame, y que respete el tope de pixeles
+    #    libres: una funcion que no se llama no encaja nada.
+    #  - Que el `<image>` deje la proporcion en manos del SVG (`meet`, que es
+    #    el valor por defecto) y no la estire ni la recorte.
+    if "object-fit:cover" in texto:
+        problemas.append(
+            "el sello vuelve a usar `object-fit:cover`: escala la imagen hasta "
+            "llenar la caja y recorta lo que sobra, que es justo el corte que "
+            "se arreglo")
+    if re.search(r"#selloVentana\s+img", texto):
+        problemas.append(
+            "el CSS del sello sigue teniendo reglas para un `<img>`: los iconos "
+            "propios ahora van como imagen dentro del svg")
+    if "encajaSello" not in texto:
+        problemas.append("no existe `encajaSello`: el icono no se encaja con "
+                         "margen y vuelve a salir pegado o cortado")
+    elif "encajaSello(SELLO" not in texto:
+        problemas.append(
+            "`encajaSello` esta definida pero no se llama al abrir la ventana: "
+            "no encaja nada")
+    else:
+        # El tope de pixeles libres tiene que estar declarado y usarse.
+        tope = re.search(r"SELLO_LIBRES\s*=\s*(\d+)", texto)
+        if not tope:
+            problemas.append("no esta declarado `SELLO_LIBRES`")
+        elif int(tope.group(1)) < 5:
+            problemas.append(
+                f"`SELLO_LIBRES` vale {tope.group(1)}: se pidieron 5 pixeles "
+                f"libres por lado")
+        lado = re.search(r"SELLO_LADO\s*=\s*(\d+)", texto)
+        css_sello = re.search(r"#selloVentana svg\{width:(\d+)px;height:(\d+)px",
+                              texto)
+        if not lado or not css_sello:
+            problemas.append(
+                "hacen falta `SELLO_LADO` y el `width` del sello en el CSS, para "
+                "poder comprobar que miden lo mismo")
+        elif int(lado.group(1)) != int(css_sello.group(1)):
+            problemas.append(
+                f"`SELLO_LADO` vale {lado.group(1)} y el sello mide "
+                f"{css_sello.group(1)} px: el margen calculado no seria el "
+                f"que se ve")
+        # El encaje tiene que usar el bbox medido y meterlo entero dentro del
+        # viewBox. Si calculara el viewBox solo del maximo, un dibujo mas ancho
+        # que alto se saldria por los lados.
+        ini_enc = texto.find("function encajaSello(")
+        cuerpo_enc = texto[ini_enc:texto.find("\n}", ini_enc)] if ini_enc >= 0 else ""
+        for pieza, nota in (("getBBox", "mida el dibujo de verdad"),
+                            ("caja.width", "cuente con lo ancho del dibujo"),
+                            ("caja.height", "cuente con lo alto del dibujo"),
+                            ("viewBox", "ajuste el viewBox")):
+            if pieza not in cuerpo_enc:
+                problemas.append(f"`encajaSello` no {nota} (le falta `{pieza}`)")
+        # Y que la imagen del sello no lleve `preserveAspectRatio="none"`, que
+        # estiraria el dibujo hasta deformarlo.
+        if 'preserveAspectRatio="none"' in texto.split("function abreVentana")[1][:900]:
+            problemas.append(
+                "el sello estira la imagen con `preserveAspectRatio=\"none\"`: "
+                "el icono saldria deformado")
+
+    # --- 1 ter. La ventana sale centrada ------------------------------------
+    # Estaba pegada al fondo (`place-items:end center`) y en un telefono alto
+    # quedaba a media pantalla de distancia del icono que se acababa de tocar.
+    #
+    # El `safe center` de la linea siguiente es por si la caja no cupiera de
+    # alto: con un `center` a secas lo que sobra se sale por ARRIBA y de ahi no
+    # se puede bajar con el dedo. Es una mejora y no un requisito, asi que lo
+    # que se exige es el `center`; el `safe` se acepta pero no se pide.
+    regla_ventana = re.search(r"#ventana\{([^}]*)\}", texto)
+    if not regla_ventana:
+        problemas.append("(no se encuentra la regla de `#ventana` en el CSS)")
+    else:
+        centrado = re.search(r"place-items:\s*(\w+)", regla_ventana.group(1))
+        if not centrado or centrado.group(1) != "center":
+            problemas.append(
+                f"`#ventana` no sale centrada: usa "
+                f"`place-items:{centrado.group(1) if centrado else '?'}`. Con "
+                f"`end` la ventana se pega al fondo de la pantalla")
+        # Y que no quede un `place-items:end` suelto en el bloque de pantalla
+        # ancha, que volveria a pegarla abajo en apaisado.
+        for bloque in re.findall(
+                r"@media \(min-width:760px\) and \(orientation:landscape\)\{(.*?)\n\}",
+                texto, flags=re.S):
+            if "#ventana{" in bloque and "place-items:end" in bloque:
+                problemas.append(
+                    "el bloque de pantalla ancha vuelve a pegar la ventana al "
+                    "fondo: en apaisado saldria abajo en vez de centrada")
+
     # --- 2. La regla que valida el enlace, en los tres sitios ---------------
     # En el croquis y en el editor la funcion se llama enlaceSeguro y
     # enlaceValido; en el servidor, enlace_seguro. Son nombres distintos porque
