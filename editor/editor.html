@@ -101,6 +101,13 @@ select{
   font:inherit;background:#fcfdfc;color:var(--texto);
 }
 .pista{font-size:11px;color:var(--tenue);line-height:1.45;margin-top:5px}
+
+/* Una casilla con su texto al lado. En el editor casi todo son deslizadores y
+   desplegables, asi que la unica casilla que hay se marca para que se vea que
+   se puede pulsar. */
+.marca{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;
+       color:var(--texto);margin:0;cursor:pointer}
+.marca input{width:16px;height:16px;accent-color:var(--verde);cursor:pointer;margin:0}
 .campo + .campo{margin-top:9px}
 
 /* lista de zonas */
@@ -134,6 +141,30 @@ select{
 .palo svg *{fill:none;stroke:var(--tinta);stroke-width:1.9;
             stroke-linecap:round;stroke-linejoin:round}
 .palo svg .relleno{fill:var(--tinta);stroke:none}
+
+/* Los modelos: iconos guardados enteros, para estampar varios iguales. Van en
+   una rejilla como la paleta, pero mas anchos, porque el nombre de un modelo
+   lo escribe una persona y suele ser mas largo que «Baños».
+
+   El borde es dorado para que no se confundan con los simbolos de serie: son
+   otra cosa y se comportan distinto (estos llevan tamano, giro y animacion). */
+#listaModelos{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.modelo{position:relative;padding:9px 5px 7px;cursor:pointer;text-align:center}
+.modelo:hover{border-color:#e0a800;background:#fffdf3}
+.modelo.acto{border-color:var(--oro);background:#fff8e1;box-shadow:inset 0 0 0 1px var(--oro)}
+.modelo svg{width:34px;height:34px;flex:none}
+.modelo .rotulo{font-size:10.5px;font-weight:650;color:var(--texto);line-height:1.2;
+                overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.modelo .nota{font-size:9.5px;color:var(--tenue);line-height:1.15;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+/* La x para quitarlo sale al pasar por encima, para no llenar la caja de
+   botones: quitar un modelo es raro y guardarlo es lo de todos los dias. */
+.modelo .quita{position:absolute;top:3px;right:3px;width:18px;height:18px;
+               display:none;place-content:center;border:0;border-radius:99px;
+               background:#0a484214;color:var(--tinta);font-size:11px;line-height:1;
+               cursor:pointer;padding:0}
+.modelo:hover .quita{display:grid}
+.modelo .quita:hover{background:var(--alerta);color:#fff}
 
 /* El nombre de la seccion de iconos propios, con lo que ocupan. */
 .rotuloPequeno{display:flex;justify-content:space-between;align-items:baseline;
@@ -211,6 +242,35 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 #gIconos .an.ondas{animation:icOndas 2.6s ease-out infinite}
 #gIconos .onda{fill:none;stroke:var(--verde);stroke-width:1.6;stroke-opacity:.9;
                vector-effect:non-scaling-stroke}
+/* Igual que en el croquis publicado: sin circulo, el trazo lleva un halo
+   blanco para que no se pierda sobre el mapa. Aqui el mapa tambien es una
+   textura cargada, asi que hace falta lo mismo. */
+#gIconos g.sinAro .lam{filter:drop-shadow(0 0 1.6px #fff) drop-shadow(0 0 1.6px #fff)}
+#gIconos g.sinAro .fig{clip-path:none}
+/* Y el aro de las miniaturas, que va en su propio <svg> y no hereda lo de
+   arriba. Sin estas lineas los iconos de la paleta y de los modelos saldrian
+   sin fondo ni filo. */
+.palo svg .aro,.modelo svg .aro,.icono svg .aro{
+  fill:#ffffffdd;stroke:#0a484266;stroke-width:1.2}
+.palo svg.sinAro .lam,.modelo svg.sinAro .lam,.icono svg.sinAro .lam{
+  filter:drop-shadow(0 0 1.6px #fff) drop-shadow(0 0 1.6px #fff)}
+.palo svg.sinAro .fig,.modelo svg.sinAro .fig,.icono svg.sinAro .fig{
+  clip-path:none}
+/* Las miniaturas tambien se animan: asi se ve como va a quedar el icono antes
+   de ponerlo, y de paso se distinguen los modelos con animacion. */
+.palo svg,.modelo svg,.icono svg{overflow:visible}
+.palo svg .an,.modelo svg .an,.icono svg .an{
+  transform-box:fill-box;transform-origin:center}
+.palo svg .an.late,.modelo svg .an.late,.icono svg .an.late{
+  animation:icLate 2.4s ease-in-out infinite}
+.palo svg .an.flota,.modelo svg .an.flota,.icono svg .an.flota{
+  animation:icFlota 3.2s ease-in-out infinite}
+.palo svg .an.gira,.modelo svg .an.gira,.icono svg .an.gira{
+  animation:icGira 14s linear infinite}
+.palo svg .an.brilla,.modelo svg .an.brilla,.icono svg .an.brilla{
+  animation:icBrilla 2.6s ease-in-out infinite}
+.palo svg .an.ondas,.modelo svg .an.ondas,.icono svg .an.ondas{
+  animation:icOndas 2.6s ease-out infinite}
 @keyframes icLate{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
 @keyframes icFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
 @keyframes icGira{to{transform:rotate(360deg)}}
@@ -345,6 +405,16 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <select id="fAnim"></select>
       </div>
       <div class="campo">
+        <label class="marca" for="fAro">
+          <input type="checkbox" id="fAro" checked>
+          <span>Con círculo de fondo</span>
+        </label>
+        <div class="pista">
+          Sin el círculo el icono se ve suelto. Los símbolos llevan un halo
+          blanco para que no se pierdan sobre el pasto.
+        </div>
+      </div>
+      <div class="campo">
         <label for="fInfoTitulo">
           Información que sale al pulsarlo
         </label>
@@ -357,6 +427,17 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <div class="fila" style="margin-top:11px">
         <button class="boton peligro" id="btnBorrarIcono">Borrar icono</button>
       </div>
+      <div class="fila" style="margin-top:7px">
+        <input type="text" id="fNombreModelo" maxlength="40"
+               placeholder="Nombre del modelo">
+        <button class="boton oro" id="btnModelo">Guardar como modelo</button>
+      </div>
+    </div>
+
+    <div class="bloque" id="bloqueModelos">
+      <h2>Modelos</h2>
+      <div class="pista" style="margin:-4px 0 9px" id="resumenModelos"></div>
+      <div id="listaModelos"></div>
     </div>
 
     <div class="bloque" id="bloqueAlinear">
@@ -387,15 +468,22 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 // datos se desincronicen.
 // ---------------------------------------------------------------------------
 var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [],
-         biblioteca: [], animaciones: {},
+         biblioteca: [], modelos: [], animaciones: {},
          topes: {tam: [16, 160], rot: [-180, 180]},
          vista: [110, 100, 1005, 640], ancho: 1224, alto: 792, git: {}};
 var sel = null;          // {tipo:"zona"|"icono", i: n}
 var multi = [];          // indices de iconos marcados para alinear
-var tipoPalo = null;     // icono elegido en la paleta, listo para colocar
-var modoVertice = false; // el siguiente clic mete una esquina nueva
-var sucio = false;       // hay cambios sin guardar
 var vb = {x: 0, y: 0, w: 1224, h: 792};
+var sucio = false;       // hay cambios sin guardar
+var modoVertice = false; // el siguiente clic mete una esquina nueva
+
+// Lo que se estampa al hacer clic en el mapa, o null si no se esta estampando
+// nada. Es un objeto con la configuracion COMPLETA del icono (tipo, tamano,
+// giro, animacion, circulo, informacion) menos la posicion, que la pone el
+// clic. Sale de pulsar un simbolo de la paleta o un modelo, y NO se limpia al
+// colocar: se queda puesto para poder poner varios seguidos. Se sale con
+// Escape o volviendo a pulsar lo mismo.
+var estampa = null;
 // El zoom se junta aqui y se aplica una vez por fotograma.
 var zoomPend = null, zoomRaf = 0;
 
@@ -421,8 +509,11 @@ var s = document.getElementById("s"),
     fEtiqueta = document.getElementById("fEtiqueta"),
     fInfoTitulo = document.getElementById("fInfoTitulo"),
     fInfoTexto = document.getElementById("fInfoTexto"),
+    fAro = document.getElementById("fAro"),
+    fNombreModelo = document.getElementById("fNombreModelo"),
     listaPropios = document.getElementById("listaPropios"),
-    listaBiblioteca = document.getElementById("listaBiblioteca");
+    listaBiblioteca = document.getElementById("listaBiblioteca"),
+    listaModelos = document.getElementById("listaModelos");
 
 // Lo que mide un icono cuando no lleva tamano propio. Tiene que ser el mismo
 // que TAM_ICONO en croquis.html.
@@ -435,15 +526,23 @@ function escapa(t) {
 
 function tamDe(ic) { return ic.s || TAM_ICONO; }
 function nombreDe(tipo) { return E.simbolos[tipo] || tipo; }
+// `c` en 0 es «sin círculo». Se comprueba con `in` y no por lo que valga,
+// porque 0 es un valor legítimo y un `if (!ic.c)` lo tomaría por ausencia.
+function conAroDe(ic) { return !("c" in ic) || !!ic.c; }
+function rotDe(ic) { return ic.r || 0; }
 
-// El dibujo de un icono: o la forma del simbolo, o la imagen propia recortada
-// en circulo. Se usa en el mapa, en la paleta y en las listas, para que lo que
-// se elige sea exactamente lo que se va a ver.
-function figuraDe(tipo) {
+// El dibujo de un icono: o la forma del simbolo, o la imagen propia. Se usa en
+// el mapa, en la paleta, en las listas y en los modelos, para que lo que se
+// elige sea exactamente lo que se va a ver.
+//
+// El recorte en circulo de las imagenes y el aro van juntos: sin circulo, la
+// imagen tambien pierde el recorte y sale como es.
+function figuraDe(tipo, conAro) {
   if (E.formas[tipo]) return '<g class="lam">' + E.formas[tipo] + "</g>";
   if (E.propios[tipo]) {
     return '<image class="fig" href="' + E.propios[tipo] + '" x="-12.2" y="-12.2"'
-         + ' width="24.4" height="24.4" clip-path="url(#recorte)"/>';
+         + ' width="24.4" height="24.4"'
+         + (conAro ? ' clip-path="url(#recorte)"' : "") + "/>";
   }
   return "";
 }
@@ -460,11 +559,31 @@ function transformDe(ic) {
 // es el que lleva la posicion y no se puede animar: en SVG el transform de CSS
 // pisa al atributo transform y el icono se iria a la esquina.
 function dentroConAnimacion(ic) {
-  var forma = figuraDe(ic.t);
+  var conAro = conAroDe(ic);
+  var forma = figuraDe(ic.t, conAro);
   if (!forma) return "";
   var clase = "an" + (ic.a ? " " + ic.a : "");
   var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
   return '<g class="' + clase + '">' + ondas + forma + "</g>";
+}
+
+// Un icono dibujado entero dentro de una caja de 32x32, para las miniaturas
+// (la paleta, los modelos y la lista). Se normaliza el tamano: un icono de 46
+// unidades —el de por defecto— sale a escala 1, uno mas pequeño se ve mas
+// pequeño y uno mas grande se corta en ese tope, porque en una caja de 32
+// pixeles un icono de 160 no cabria de ninguna forma.
+function miniaturaDe(ic) {
+  var conAro = conAroDe(ic);
+  var forma = figuraDe(ic.t, conAro);
+  if (!forma) return "";
+  var clase = "an" + (ic.a ? " " + ic.a : "");
+  var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
+  // El giro va en un grupo propio para no pisar el del tamano, igual que en el
+  // mapa: `scale` no lo usa la caja, pero el giro si tiene que ser el ultimo.
+  return '<svg viewBox="-16 -16 32 32"' + (conAro ? "" : ' class="sinAro"') + ">"
+       + "<g" + (ic.r ? ' transform="rotate(' + ic.r + ')"' : "") + ">"
+       + (conAro ? '<circle class="aro" r="13.4"/>' : "")
+       + '<g class="' + clase + '">' + ondas + forma + "</g></g></svg>";
 }
 function aviso(texto, tipo) {
   if (!texto) { mensaje.textContent = ""; mensaje.className = ""; return; }
@@ -637,6 +756,7 @@ function dibuja() {
   gIconos.innerHTML = E.iconos.map(function (ic, k) {
     var dentro = dentroConAnimacion(ic);
     if (!dentro) return "";
+    var conAro = conAroDe(ic);
     var clases = [];
     if (sel && sel.tipo === "icono" && sel.i === k) clases.push("sel");
     if (multi.indexOf(k) >= 0) clases.push("multi");
@@ -645,13 +765,14 @@ function dibuja() {
     // que ir abriendo uno por uno para saberlo.
     if (ic.i) clases.push("conInfo");
     if (ic.a) clases.push("animado");
+    if (!conAro) clases.push("sinAro");
     // Ojo con las comillas del transform: si se cuela el > sin cerrar el
     // atributo, el navegador se traga la etiqueta entera y el icono no sale.
     // Es justo el fallo que documenta el README del croquis.
     return '<g class="' + clases.join(" ") + '" data-icono="' + k
          + '" transform="' + transformDe(ic) + '"><title>'
          + escapa(ic.n || nombreDe(ic.t)) + "</title>"
-         + '<circle class="aro" r="13.4"/>' + dentro + "</g>";
+         + (conAro ? '<circle class="aro" r="13.4"/>' : "") + dentro + "</g>";
   }).join("");
 
   var tam = vb.w * 0.0135;
@@ -682,12 +803,12 @@ function pintaPanel(mal) {
     if (ic.i) marcas.push("info");
     if (ic.a) marcas.push(ic.a);
     if (ic.r) marcas.push(Math.round(ic.r) + "°");
+    if (!conAroDe(ic)) marcas.push("sin aro");
     return '<button class="icono'
          + (sel && sel.tipo === "icono" && sel.i === k ? " sel" : "")
          + (multi.indexOf(k) >= 0 ? " multi" : "")
          + (mal.iconos[k].length ? " mal" : "")
-         + '" data-icono="' + k + '"><svg viewBox="-13 -13 26 26"><g class="'
-         + (ic.a ? "an " + ic.a : "an") + '">' + figuraDe(ic.t) + "</g></svg>"
+         + '" data-icono="' + k + '">' + miniaturaDe(ic)
          + '<span class="nom">' + escapa(ic.n || nombreDe(ic.t))
          + '</span><span class="coor">' + marcas.join(" · ")
          + "</span></button>";
@@ -735,9 +856,15 @@ function pintaPanel(mal) {
     document.getElementById("vRot").textContent = rot + "°";
     if (document.activeElement !== fAnim) fAnim.value = ic.a || "";
     if (document.activeElement !== fEtiqueta) fEtiqueta.value = ic.n || "";
+    fAro.checked = conAroDe(ic);
     if (document.activeElement !== fInfoTitulo) fInfoTitulo.value = ic.i ? ic.i[0] : "";
     if (document.activeElement !== fInfoTexto) fInfoTexto.value = ic.i ? ic.i[1] : "";
     actualizaPistaInfo(ic);
+    // El nombre del modelo se propone con el del icono: casi siempre se guarda
+    // el que se acaba de configurar y se llama como él.
+    if (!fNombreModelo.value && document.activeElement !== fNombreModelo) {
+      fNombreModelo.placeholder = ic.n || nombreDe(ic.t);
+    }
   }
   // El bloque de alineado solo sale cuando hay algo que alinear, para no
   // llenar el panel de botones que no hacen nada.
@@ -775,8 +902,7 @@ function pintaPropios() {
     + nombres.map(function (n) {
       var usos = E.iconos.filter(function (ic) { return ic.t === n }).length;
       return '<button class="icono" data-propio="' + escapa(n) + '" title="Quitar '
-           + escapa(n) + ' del croquis"><svg viewBox="-13 -13 26 26">'
-           + figuraDe(n) + "</svg>"
+           + escapa(n) + ' del croquis">' + miniaturaDe({t: n})
            + '<span class="nom">' + escapa(n) + "</span>"
            + '<span class="coor">' + (usos ? usos + " en el mapa" : "sin usar")
            + " · quitar</span></button>";
@@ -898,12 +1024,18 @@ s.addEventListener("pointerdown", function (ev) {
   if (ev.button !== 0) return;
   var p = aMapa(ev);
 
-  // 1. Colocar un icono de la paleta: el clic sobre el mapa lo pone.
-  if (tipoPalo) {
-    E.iconos.push({t: tipoPalo, x: p[0], y: p[1], n: nombreDe(tipoPalo),
-                   s: +fTamNuevo.value});
-    tipoPalo = null;
-    pintaPaleta();
+  // 1. Estampar: el clic sobre el mapa pone un icono con la configuracion que
+  //    se eligio. NO se suelta al colocar, a proposito: asi se ponen varios
+  //    seguidos sin volver a elegir. Se sale con Escape o volviendo a pulsar
+  //    lo mismo en la paleta o en los modelos.
+  if (estampa) {
+    var nuevo = Object.assign({}, estampa, {x: p[0], y: p[1]});
+    // El indice del modelo es cosa de la lista, no del icono: si se colara,
+    // acabaria escrito en el croquis y el validador lo rechazaria.
+    delete nuevo.modelo;
+    E.iconos.push(nuevo);
+    // La seleccion apunta al recien puesto, para que el panel ensene su ficha
+    // y se pueda retocar en el sitio si algo no cuadra.
     elige("icono", E.iconos.length - 1);
     hayCambios();
     return;
@@ -1031,7 +1163,16 @@ addEventListener("keydown", function (ev) {
     return;
   }
   if (ev.key === "s" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); guardar(); return }
-  if (ev.key === "Escape") { tipoPalo = null; modoVertice = false; pintaPaleta(); elige(null); return }
+  if (ev.key === "Escape") {
+    // Escape suelta lo que haya puesto: primero el estampado, y si no habia
+    // nada que estampar, la seleccion. Es el orden que uno espera: lo ultimo
+    // que hiciste es lo primero que se deshace.
+    if (!sueltaEstampa()) {
+      modoVertice = false;
+      elige(null);
+    }
+    return;
+  }
   if (!sel) return;
   if (ev.key === "Delete" || ev.key === "Backspace") {
     ev.preventDefault(); borrar(); return;
@@ -1060,42 +1201,161 @@ addEventListener("keydown", function (ev) {
   hayCambios();
 });
 
-// --- paleta ---------------------------------------------------------------
+// --- paleta y modelos -----------------------------------------------------
+// La paleta son los simbolos de serie y los iconos propios; los modelos van
+// aparte, en su propia caja, porque no son tipos de icono sino iconos ya
+// hechos. Pulsar cualquiera de los dos deja el modo de estampado puesto.
 function pintaPaleta() {
   var deSerie = Object.keys(E.simbolos).map(function (t) {
-    return paloHTML(t, E.simbolos[t], false);
+    return paloHTML({t: t, n: E.simbolos[t], s: +fTamNuevo.value}, E.simbolos[t], false);
   });
   // Los propios van al final, con el borde discontinuo: asi se ve de un
   // vistazo cuales son de la casa y cuales los subio quien edita.
   var mios = Object.keys(E.propios).map(function (t) {
-    return paloHTML(t, t, true);
+    return paloHTML({t: t, n: t, s: +fTamNuevo.value}, t, true);
   });
   paleta.innerHTML = deSerie.concat(mios).join("");
+  pintaModelos();
 }
 
-function paloHTML(tipo, etiqueta, propio) {
+function paloHTML(ic, etiqueta, propio) {
   var corto = etiqueta.length > 11 ? etiqueta.slice(0, 10) + "…" : etiqueta;
-  return '<div class="palo' + (tipoPalo === tipo ? " acto" : "")
+  var puesto = estampa && estampa.t === ic.t && !estampa.modelo;
+  return '<div class="palo' + (puesto ? " acto" : "")
        + (propio ? " propio" : "") + '" draggable="true" data-tipo="'
-       + escapa(tipo) + '" title="' + escapa(etiqueta) + '"><svg viewBox="-13 -13 26 26">'
-       + figuraDe(tipo) + "</svg><span>" + escapa(corto) + "</span></div>";
+       + escapa(ic.t) + '" title="' + escapa(etiqueta) + '">'
+       + miniaturaDe(ic) + "<span>" + escapa(corto) + "</span></div>";
+}
+
+// Los modelos: un icono guardado entero. La miniatura se dibuja con su tamano,
+// su giro, su animacion y su circulo de verdad, para que se vea lo que se va a
+// estampar antes de estamparlo.
+function pintaModelos() {
+  if (!E.modelos.length) {
+    document.getElementById("resumenModelos").textContent =
+      "Ninguno. Configura un icono y pulsa «Guardar como modelo» para poder "
+      + "poner más iguales de un clic.";
+    listaModelos.innerHTML = "";
+    return;
+  }
+  document.getElementById("resumenModelos").textContent =
+    E.modelos.length + (E.modelos.length === 1 ? " modelo" : " modelos")
+    + ". Pulsa uno y luego el mapa: puedes poner varios seguidos.";
+  listaModelos.innerHTML = E.modelos.map(function (m, k) {
+    var ic = m.i || {};
+    var nota = [];
+    if (ic.a) nota.push(ic.a);
+    if (ic.r) nota.push(Math.round(ic.r) + "°");
+    if (ic.s) nota.push(Math.round(ic.s));
+    if (ic.i) nota.push("info");
+    if (conAroDe(ic) === false) nota.push("sin aro");
+    var puesto = estampa && estampa.modelo === k;
+    return '<div class="modelo' + (puesto ? " acto" : "") + '" data-modelo="' + k
+         + '" title="' + escapa(m.nombre) + '">'
+         + '<button class="quita" data-quita="' + k + '" title="Quitar el modelo">×</button>'
+         + miniaturaDe(ic)
+         + '<span class="rotulo">' + escapa(m.nombre) + "</span>"
+         + '<span class="nota">' + escapa(nota.join(" · ") || "como los demás") + "</span>"
+         + "</div>";
+  }).join("");
 }
 
 paleta.addEventListener("dragstart", function (ev) {
   var p = ev.target.closest(".palo");
   if (!p) return;
-  tipoPalo = p.dataset.tipo;
+  // El arrastre tambien estampa, y se lleva el tamano de los nuevos, que es lo
+  // que se ve en la miniatura de la paleta.
+  estampa = {t: p.dataset.tipo, n: nombreDe(p.dataset.tipo), s: +fTamNuevo.value};
   pintaPaleta();
-  ev.dataTransfer.setData("text/plain", tipoPalo);
+  ev.dataTransfer.setData("text/plain", p.dataset.tipo);
   ev.dataTransfer.effectAllowed = "copy";
 });
 paleta.addEventListener("click", function (ev) {
   var p = ev.target.closest(".palo");
   if (!p) return;
-  tipoPalo = (tipoPalo === p.dataset.tipo) ? null : p.dataset.tipo;
+  var t = p.dataset.tipo;
+  // Volver a pulsar el mismo lo suelta: es la forma de salir sin el teclado.
+  estampa = (estampa && estampa.t === t && !estampa.modelo)
+    ? null : {t: t, n: nombreDe(t), s: +fTamNuevo.value};
   modoVertice = false;
   pintaPaleta();
-  if (tipoPalo) aviso("Haz clic en el mapa para poner " + nombreDe(tipoPalo).toLowerCase() + ".", "");
+  avisaEstampa();
+});
+
+listaModelos.addEventListener("click", function (ev) {
+  var quita = ev.target.closest("[data-quita]");
+  if (quita) {
+    var m = E.modelos[+quita.dataset.quita];
+    if (!m) return;
+    fetch("/api/modelos", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({quitar: m.nombre})
+    }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
+      .then(function (par) {
+        if (!par[0]) { aviso(par[1].mensaje || "No se pudo quitar.", "mal"); return }
+        E.modelos = par[1].modelos;
+        estampa = null;
+        pintaModelos();
+        aviso("Modelo «" + m.nombre + "» quitado.", "ok");
+      }).catch(function (e) { aviso("No se pudo quitar: " + e.message, "mal") });
+    return;
+  }
+  var caja = ev.target.closest("[data-modelo]");
+  if (!caja) return;
+  var k = +caja.dataset.modelo;
+  if (estampa && estampa.modelo === k) {
+    estampa = null;
+  } else {
+    // El modelo se copia tal cual y se le marca de donde viene, para poder
+    // resaltarlo en la lista. La posicion la pondra el clic.
+    estampa = Object.assign({}, E.modelos[k].i, {modelo: k});
+  }
+  modoVertice = false;
+  pintaPaleta();
+  avisaEstampa();
+});
+
+// Dice que se esta estampando y como se sale, que es la duda que surge al ver
+// que el mapa sigue en modo colocar despues de poner un icono.
+function avisaEstampa() {
+  if (!estampa) { aviso("", ""); return }
+  var que = estampa.modelo !== undefined
+    ? "«" + E.modelos[estampa.modelo].nombre + "»"
+    : nombreDe(estampa.t).toLowerCase();
+  aviso("Pon " + que + ": cada clic en el mapa añade uno. Escape para terminar.", "");
+}
+
+// Deja el mapa limpio de estampado, sin tocar nada mas.
+function sueltaEstampa() {
+  if (!estampa) return false;
+  estampa = null;
+  pintaPaleta();
+  aviso("", "");
+  return true;
+}
+
+// Guarda el icono elegido entero —menos la posicion— como modelo.
+document.getElementById("btnModelo").addEventListener("click", function () {
+  if (!sel || sel.tipo !== "icono" || !E.iconos[sel.i]) {
+    aviso("Elige antes el icono que quieres guardar como modelo.", "aviso");
+    return;
+  }
+  var ic = E.iconos[sel.i];
+  var nombre = fNombreModelo.value.trim() || (ic.n || nombreDe(ic.t));
+  fetch("/api/modelos", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nombre: nombre, icono: ic})
+  }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
+    .then(function (par) {
+      var ok = par[0], d = par[1];
+      if (!ok) { aviso(d.mensaje || "No se pudo guardar el modelo.", "mal"); return }
+      E.modelos = d.modelos;
+      fNombreModelo.value = "";
+      pintaModelos();
+      aviso("Modelo «" + d.guardado.nombre + "» guardado con todo: tamaño, giro, "
+            + "animación, círculo e información. Púlsalo en Modelos y cada clic "
+            + "en el mapa pone uno igual.", "ok");
+    }).catch(function (e) { aviso("No se pudo guardar: " + e.message, "mal") });
 });
 // El arrastre HTML5 dispara pointerup en el destino; aqui se lee el tipo que
 // venia en el dataTransfer. Sin esto, el pointerdown del mapa colocaria el
@@ -1103,14 +1363,20 @@ paleta.addEventListener("click", function (ev) {
 s.addEventListener("dragover", function (ev) { ev.preventDefault(); ev.dataTransfer.dropEffect = "copy" });
 s.addEventListener("drop", function (ev) {
   ev.preventDefault();
-  var tipo = ev.dataTransfer.getData("text/plain") || tipoPalo;
-  if (!tipo || !figuraDe(tipo)) return;
-  var p = aMapa(ev);
-  E.iconos.push([tipo, p[0], p[1], nombreDe(tipo), +fTamNuevo.value]);
-  tipoPalo = null;
+  var tipo = ev.dataTransfer.getData("text/plain");
+  var ic = estampa || (tipo ? {t: tipo, n: nombreDe(tipo), s: +fTamNuevo.value} : null);
+  if (!ic) return;
+  ic = Object.assign({}, ic);
+  delete ic.modelo;
+  // Un arrastre estampa una sola vez y suelta: es una accion suelta, no un
+  // modo. Dejarlo puesto pondria un icono en cada clic siguiente, y arrastrar
+  // ya significa «quiero este aqui» y nada mas.
+  estampa = null;
+  E.iconos.push(Object.assign(ic, {x: aMapa(ev)[0], y: aMapa(ev)[1]}));
   pintaPaleta();
   elige("icono", E.iconos.length - 1);
   hayCambios();
+  aviso("", "");
 });
 
 // --- iconos propios -------------------------------------------------------
@@ -1246,6 +1512,14 @@ fTam.addEventListener("input", function () {
   document.getElementById("vTam").textContent = fTam.value;
   tocaIcono(function (ic) { ic.s = +fTam.value });
 });
+// El tamaño de los nuevos no toca ningún icono: es con el que nace el
+// siguiente. Y como la paleta dibuja sus miniaturas a ese tamaño, hay que
+// repintarla para que se vea.
+fTamNuevo.addEventListener("input", function () {
+  document.getElementById("vTamNuevo").textContent = fTamNuevo.value;
+  if (estampa) estampa.s = +fTamNuevo.value;
+  pintaPaleta();
+});
 fRot.addEventListener("input", function () {
   document.getElementById("vRot").textContent = fRot.value + "°";
   tocaIcono(function (ic) { ic.r = +fRot.value });
@@ -1272,6 +1546,17 @@ function guardaInfo() {
 }
 fInfoTitulo.addEventListener("input", guardaInfo);
 fInfoTexto.addEventListener("input", guardaInfo);
+
+// El círculo de fondo. Se guarda solo cuando se quita, como `"c": 0`: así los
+// iconos que lo llevan —que son la mayoría— no llenan el archivo de repetir
+// lo de siempre, y quien lo edite a mano no necesita escribir nada para el
+// caso normal.
+fAro.addEventListener("change", function () {
+  tocaIcono(function (ic) {
+    if (fAro.checked) delete ic.c;
+    else ic.c = 0;
+  });
+});
 
 // Los botones de giro rápido. Van en pasos porque a ojo es difícil dejar un
 // icono recto: 90° para tumbarlo, 15° para corregir una perspectiva.
@@ -1318,8 +1603,9 @@ document.getElementById("btnVertice").addEventListener("click", function () {
     aviso("Elige antes una zona para añadirle una esquina.", "aviso"); return;
   }
   modoVertice = !modoVertice;
-  tipoPalo = null;
-  pintaPaleta();
+  // Añadir una esquina y estampar iconos son dos formas de usar el mismo clic,
+  // así que no pueden estar puestas a la vez.
+  sueltaEstampa();
   dibuja();
   if (modoVertice) aviso("Haz clic en el borde de la zona: la esquina se mete ahí.", "");
   else aviso("", "");

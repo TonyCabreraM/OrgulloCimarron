@@ -508,77 +508,74 @@ def test_el_editor_rechaza_lo_ajeno() -> bool:
                 if e.code != 400:
                     problemas.append(f"con zonas solapadas esperaba 400 y dio {e.code}")
 
-            # 3. Un icono de un tipo que no existe: también se rechaza.
-            peticion = urllib.request.Request(
-                base + "/api/guardar",
-                data=json.dumps({"zonas": [], "iconos": [{"t": "inventado", "x": 100, "y": 100}]}).encode("utf-8"),
-                method="POST", headers={"Content-Type": "application/json"})
-            try:
-                with urllib.request.urlopen(peticion, timeout=5) as r:
-                    problemas.append(f"aceptó un icono de tipo inventado ({r.status})")
-            except urllib.error.HTTPError as e:
-                if e.code != 400:
-                    problemas.append(f"con un tipo inventado esperaba 400 y dio {e.code}")
+            # 3. Los iconos malos. Todas estas peticiones llevan TAMBIÉN las
+            #    zonas de verdad, y no una lista vacía: un croquis sin zonas se
+            #    rechaza por su cuenta, así que con la lista vacía todo daba
+            #    400 y la prueba pasaba sin haber mirado un solo icono. Pasó
+            #    justo eso: la validación de los iconos se quedó muerta en un
+            #    refactor y esta prueba siguió en verde.
+            zonas_reales = leer_bloque(CROQUIS.read_text(encoding="utf-8"), "ZONAS")
 
-            # 4. Lo mismo con los campos nuevos: un giro imposible, una
-            #    animación que el croquis no sabe hacer, una información a la
-            #    que le falta el texto y una clave mal escrita. Los cuatro dan
-            #    un icono roto o, peor, uno que se queda sin el dato y no se
-            #    nota hasta verlo en el mapa.
-            rotos = [
-                ({"t": "bano", "x": 100, "y": 100, "r": 9999}, "giro imposible"),
-                ({"t": "bano", "x": 100, "y": 100, "a": "temblar"}, "animación inventada"),
-                ({"t": "bano", "x": 100, "y": 100, "i": ["Solo título", "  "]},
-                 "información sin texto"),
-                ({"t": "bano", "X": 100, "y": 100}, "clave mal escrita"),
-            ]
-            for icono, etiqueta in rotos:
+            def guardar_iconos(iconos: list) -> tuple:
+                """Manda a guardar unos iconos y devuelve (código, mensaje)."""
                 peticion = urllib.request.Request(
                     base + "/api/guardar",
-                    data=json.dumps({"zonas": [], "iconos": [icono]}).encode("utf-8"),
+                    data=json.dumps({"zonas": zonas_reales, "iconos": iconos}).encode("utf-8"),
                     method="POST", headers={"Content-Type": "application/json"})
                 try:
                     with urllib.request.urlopen(peticion, timeout=5) as r:
-                        problemas.append(f"aceptó un icono con {etiqueta} ({r.status})")
+                        return r.status, ""
                 except urllib.error.HTTPError as e:
-                    if e.code != 400:
-                        problemas.append(f"con {etiqueta} esperaba 400 y dio {e.code}")
+                    return e.code, e.read().decode("utf-8", "replace")
+
+            # 4. Iconos que tienen que rebotar: un tipo que no existe, un giro
+            #    imposible, una animación que el croquis no sabe hacer, una
+            #    información a la que le falta el texto, un círculo que no es
+            #    0 ni 1 y una clave mal escrita.
+            rotos = [
+                ({"t": "inventado", "x": 100, "y": 100}, "un tipo inventado"),
+                ({"t": "bano", "x": 100, "y": 100, "r": 9999}, "un giro imposible"),
+                ({"t": "bano", "x": 100, "y": 100, "a": "temblar"}, "una animación inventada"),
+                ({"t": "bano", "x": 100, "y": 100, "i": ["Solo título", "  "]},
+                 "información sin texto"),
+                ({"t": "bano", "x": 100, "y": 100, "c": 2}, "un círculo que no es 0 ni 1"),
+                ({"t": "bano", "X": 100, "y": 100}, "una clave mal escrita"),
+            ]
+            for icono, etiqueta in rotos:
+                codigo, cuerpo = guardar_iconos([icono])
+                if codigo == 200:
+                    problemas.append(f"aceptó un icono con {etiqueta}")
+                elif codigo != 400:
+                    problemas.append(f"con {etiqueta} esperaba 400 y dio {codigo}")
+                elif "icono 1" not in cuerpo:
+                    # 400 por el motivo equivocado: si el mensaje no habla del
+                    # icono, es que rebotó por otra cosa y no se comprobó nada.
+                    problemas.append(
+                        f"con {etiqueta} dio 400, pero no por el icono: "
+                        f"{cuerpo.strip()[:70]}")
 
             # 5. Y uno bien formado, con todo, sí tiene que entrar. Es la otra
             #    mitad de la prueba: un validador que lo rechaza todo no vale.
             #
-            #    Hay que mandar también las zonas de verdad: un croquis sin
-            #    zonas se rechaza, y con razon, porque el mapa se quedaría sin
-            #    nada que tocar.
-            #
             #    Este paso SÍ escribe en el croquis, así que al terminar se
             #    deja como estaba. Se comprueba antes de restaurar, que es lo
             #    único que se puede comprobar.
-            zonas_reales = leer_bloque(CROQUIS.read_text(encoding="utf-8"), "ZONAS")
-            peticion = urllib.request.Request(
-                base + "/api/guardar",
-                data=json.dumps({"zonas": zonas_reales, "iconos": [
-                    {"t": "bano", "x": 300, "y": 250, "n": "Baños",
-                     "s": 60, "r": -30, "a": "late",
-                     "i": ["Baños", "Los baños están junto al escenario."]}]}).encode("utf-8"),
-                method="POST", headers={"Content-Type": "application/json"})
-            try:
-                with urllib.request.urlopen(peticion, timeout=5) as r:
-                    if r.status != 200:
-                        problemas.append(f"un icono completo dio {r.status}")
-            except urllib.error.HTTPError as e:
-                problemas.append(f"rechazó un icono completo: {e.code}")
+            codigo, cuerpo = guardar_iconos([
+                {"t": "bano", "x": 300, "y": 250, "n": "Baños",
+                 "s": 60, "r": -30, "a": "late", "c": 0,
+                 "i": ["Baños", "Los baños están junto al escenario."]}])
+            if codigo != 200:
+                problemas.append(f"rechazó un icono completo: {codigo} {cuerpo[:80]}")
 
             # 6. Lo que quedó escrito tiene que ser ese icono, entero y con
-            #    todos sus campos. Escrito como objeto, además: es el formato
-            #    que lee el croquis.
+            #    todos sus campos, y en el formato que lee el croquis.
             escrito = CROQUIS.read_text(encoding="utf-8")
-            if '"a": "late"' not in escrito or '"r": -30' not in escrito:
-                problemas.append("el icono bueno no se escribió con sus campos")
+            for clave, valor in (("a", '"late"'), ("r", "-30"), ("s", "60"),
+                                 ("c", "0"), ("x", "300"), ("y", "250")):
+                if f'"{clave}": {valor}' not in escrito:
+                    problemas.append(f"el icono bueno no se escribió con «{clave}»")
             if "Los baños están junto al escenario." not in escrito:
                 problemas.append("la información del icono no se escribió")
-            if '"x": 300' not in escrito:
-                problemas.append("las coordenadas del icono no se escribieron")
     finally:
         # Pase lo que pase, el croquis vuelve a como estaba. Una prueba que
         # deja su basura en el archivo es peor que no tenerla: al dia
@@ -702,6 +699,265 @@ def test_ningun_literal_cierra_una_etiqueta_sin_comilla() -> bool:
         print("    El navegador se traga media etiqueta y el elemento no se dibuja.")
         return False
     print("    ninguna etiqueta armada en JavaScript se queda sin cerrar")
+    return True
+
+
+def _sin_cadenas_ni_comentarios(texto: str) -> str:
+    """El texto sin comentarios, sin cadenas y sin expresiones regulares.
+
+    Hace falta para poder contar parentesis, corchetes y llaves: dentro de una
+    cadena o de un comentario no cuentan, y `"("` no abre nada. Se recorre
+    caracter a caracter porque el orden importa: un `//` dentro de una cadena
+    no es un comentario, y una comilla dentro de un comentario no abre una
+    cadena. Mirar uno y luego el otro se equivoca siempre en algun caso.
+    """
+    fuera = []
+    i, n = 0, len(texto)
+    # El ultimo caracter significativo, para saber si un `/` abre una
+    # expresion regular o es una division. Es la heuristica de siempre: tras
+    # un operador, un parentesis o una coma, `/` abre una regex.
+    anterior = ""
+    while i < n:
+        c = texto[i]
+        if c == "/" and i + 1 < n and texto[i + 1] == "/":
+            while i < n and texto[i] != "\n":
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and texto[i + 1] == "*":
+            fin = texto.find("*/", i + 2)
+            i = n if fin < 0 else fin + 2
+            continue
+        if c in "'\"`":
+            comilla, i = c, i + 1
+            while i < n:
+                if texto[i] == "\\":
+                    i += 2
+                    continue
+                if texto[i] == comilla:
+                    i += 1
+                    break
+                # Una cadena sin cerrar no puede colar el resto del archivo.
+                if texto[i] == "\n" and comilla != "`":
+                    break
+                i += 1
+            anterior = comilla
+            continue
+        if c == "/" and (anterior == "" or anterior in "(,=:[!&|?{};+-*%~^<>"):
+            # Expresion regular: se salta hasta el `/` que la cierra, sin
+            # contar los que van dentro de una clase [^/].
+            i += 1
+            dentro_clase = False
+            while i < n:
+                if texto[i] == "\\":
+                    i += 2
+                    continue
+                if texto[i] == "[":
+                    dentro_clase = True
+                elif texto[i] == "]":
+                    dentro_clase = False
+                elif texto[i] == "/" and not dentro_clase:
+                    i += 1
+                    break
+                elif texto[i] == "\n":
+                    break
+                i += 1
+            anterior = "/"
+            continue
+        fuera.append(c)
+        if not c.isspace():
+            anterior = c
+        i += 1
+    return "".join(fuera)
+
+
+def test_el_javascript_cuadra() -> bool:
+    """El JavaScript de los dos archivos tiene los cierres que abre.
+
+    Un parentesis de mas o de menos en el `<script>` deja la pagina entera en
+    blanco: no se dibujan ni las zonas ni los iconos, y lo unico que sale es un
+    `Unexpected token` en la consola del navegador, que nadie mira. Paso de
+    verdad al añadir el circulo opcional: un `)` de mas en una funcion de tres
+    lineas tumbo el mapa entero.
+
+    No es un validador de JavaScript, es un contador de cierres. No entiende la
+    sintaxis, pero caza el error de tecleo que mas veces deja estos archivos
+    muertos, y lo caza antes de abrir el navegador.
+    """
+    parejas = {")": "(", "]": "[", "}": "{"}
+    problemas = []
+    for archivo in (CROQUIS, Path("editor/editor.html")):
+        texto = archivo.read_text(encoding="utf-8")
+        for k, bloque in enumerate(re.findall(r"<script[^>]*>(.*?)</script>",
+                                              texto, flags=re.S)):
+            limpio = _sin_cadenas_ni_comentarios(bloque)
+            pila = []
+            for pos, c in enumerate(limpio):
+                if c in "([{":
+                    pila.append((c, pos))
+                elif c in parejas:
+                    if not pila:
+                        linea = limpio.count("\n", 0, pos) + 1
+                        problemas.append(
+                            f"{archivo.name} (script {k + 1}): sobra un «{c}» "
+                            f"sobre la línea {linea}")
+                        break
+                    abierto, _ = pila.pop()
+                    if abierto != parejas[c]:
+                        linea = limpio.count("\n", 0, pos) + 1
+                        problemas.append(
+                            f"{archivo.name} (script {k + 1}): se cierra con "
+                            f"«{c}» lo que se abrió con «{abierto}», sobre la "
+                            f"línea {linea}")
+                        break
+            else:
+                if pila:
+                    abierto, pos = pila[-1]
+                    linea = limpio.count("\n", 0, pos) + 1
+                    problemas.append(
+                        f"{archivo.name} (script {k + 1}): se abre «{abierto}» "
+                        f"sobre la línea {linea} y no se cierra")
+
+    if problemas:
+        for p in problemas:
+            print(f"    {p}")
+        print("    Un cierre de mas o de menos deja la pagina en blanco y solo")
+        print("    se ve un «Unexpected token» en la consola del navegador.")
+        return False
+    print("    los cierres del JavaScript cuadran en los dos archivos")
+    return True
+
+
+def test_los_modelos_se_guardan_y_se_estamplan() -> bool:
+    """Un modelo guardado se puede estampar tal cual en el mapa.
+
+    Un modelo es un icono guardado entero menos la posicion: el tipo, el
+    tamano, el giro, la animacion, el circulo y la informacion. Al pulsarlo y
+    hacer clic en el mapa se pone uno igual.
+
+    Se comprueba el viaje completo: guardarlo, que el icono que sale de el
+    pase las reglas del mapa, y que el archivo de modelos no acabe con cosas
+    que el croquis rechazaria. Es el fallo que mas caro saldria: un modelo mal
+    guardado no se nota al guardarlo, sino al estampar veinte iconos con el.
+    """
+    import tempfile
+
+    # El archivo de modelos se escribe de verdad, asi que se apunta a uno
+    # temporal durante la prueba y se deja el de verdad como estaba. Sin esto,
+    # cada pasada por las pruebas borraria los modelos del usuario.
+    original = editor.MODELOS
+    problemas = []
+    with tempfile.TemporaryDirectory() as carpeta:
+        editor.MODELOS = Path(carpeta) / "modelos.json"
+        try:
+            # 1. Uno completo entra.
+            guardado = editor.guarda_modelo("Puesto de comida", {
+                "t": "comida", "x": 700, "y": 400, "n": "Puesto de comida",
+                "s": 70, "r": -15, "a": "late", "c": 0,
+                "i": ["Puesto de comida", "Aquí se sirve comida."]}, {})
+            if guardado["nombre"] != "Puesto de comida":
+                problemas.append("no se guardó con el nombre que se pidió")
+
+            leidos = editor.lee_modelos()
+            if len(leidos) != 1:
+                problemas.append(f"se esperaba 1 modelo y hay {len(leidos)}")
+            # 2. La posicion NO se guarda: la elige quien estampa.
+            if "x" in leidos[0]["i"] or "y" in leidos[0]["i"]:
+                problemas.append("el modelo guardó una posicion")
+            # 3. Pero todo lo demas si.
+            for clave in ("t", "n", "s", "r", "a", "c", "i"):
+                if clave not in leidos[0]["i"]:
+                    problemas.append(f"el modelo perdió «{clave}» al guardarse")
+
+            # 4. Y lo que sale de un modelo tiene que valer como icono del mapa.
+            estampado = dict(leidos[0]["i"], x=600, y=300)
+            problemas.extend(v.revisar_iconos([estampado], {}))
+
+            # 5. Volver a guardar con el mismo nombre reemplaza, no acumula.
+            editor.guarda_modelo("Puesto de comida", {"t": "comida", "s": 90}, {})
+            leidos = editor.lee_modelos()
+            if len(leidos) != 1:
+                problemas.append("volver a guardar con el mismo nombre acumuló")
+            elif leidos[0]["i"].get("s") != 90:
+                problemas.append("volver a guardar no actualizó el modelo")
+
+            # 6. Un nombre vacío o un icono sin tipo se rechazan.
+            for malo, etiqueta in ((("", {"t": "bano"}), "sin nombre"),
+                                   (("X", {"n": "sin tipo"}), "sin tipo")):
+                try:
+                    editor.guarda_modelo(malo[0], malo[1], {})
+                    problemas.append(f"aceptó un modelo {etiqueta}")
+                except editor.ErrorEditor:
+                    pass
+
+            # 7. Y quitarlo funciona y no deja rastro.
+            editor.borra_modelo("Puesto de comida", {})
+            if editor.lee_modelos():
+                problemas.append("quitar el modelo lo dejó en el archivo")
+            try:
+                editor.borra_modelo("No existe", {})
+                problemas.append("quitar un modelo que no está no dio error")
+            except editor.ErrorEditor:
+                pass
+        finally:
+            editor.MODELOS = original
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el modelo guarda el icono entero menos la posición y se estampa igual")
+    return True
+
+
+def test_el_circulo_se_puede_quitar() -> bool:
+    """Un icono puede ir sin el círculo de fondo, y el croquis lo respeta.
+
+    El círculo se guarda como `"c": 0` y solo cuando se quita: los que lo
+    llevan —que son la mayoría— no llenan el archivo de repetir lo de siempre.
+
+    Aquí se comprueba la cadena entera, que es donde está el peligro: que el
+    servidor escriba la clave, que el croquis la lea sin confundir el 0 con la
+    ausencia, y que los tres sitios que dibujan un icono (el mapa, la ventana y
+    la miniatura del editor) usen la misma regla. Un `if (!ic.c)` en cualquiera
+    de ellos trataría el 0 como «no está» y el círculo seguiría saliendo.
+    """
+    import tempfile
+
+    problemas = []
+    for archivo, etiqueta in ((CROQUIS, "el croquis"),
+                              (Path("editor/editor.html"), "el editor")):
+        texto = archivo.read_text(encoding="utf-8")
+        # La comprobación tiene que distinguir el 0 de la ausencia.
+        if '("c" in ic)' not in texto:
+            problemas.append(
+                f"{etiqueta}: no comprueba «c» con `in`, así que un `c: 0` "
+                f"se confundiría con no llevarlo")
+        # Y tiene que haber una regla para el icono sin círculo.
+        if "sinAro" not in texto:
+            problemas.append(f"{etiqueta}: no hay ningún estilo para el icono sin círculo")
+
+    # El 0 tiene que sobrevivir al viaje de ida y vuelta por el serializador.
+    ejemplo = {"t": "bano", "x": 100, "y": 100, "c": 0}
+    escrito = editor._texto_iconos([ejemplo])
+    if '"c": 0' not in escrito:
+        problemas.append(f"el serializador perdió el círculo apagado: {escrito!r}")
+    if v.revisar_iconos([ejemplo], {}):
+        problemas.append("un icono sin círculo no pasa las reglas")
+
+    # Y con el círculo puesto no se escribe nada, para no llenar el archivo.
+    con_aro = {"t": "bano", "x": 100, "y": 100}
+    if '"c"' in editor._texto_iconos([con_aro]):
+        problemas.append("un icono con círculo escribe una clave que no hace falta")
+
+    # Un valor que no sea 0 ni 1 se rechaza.
+    if not v.revisar_iconos([{"t": "bano", "x": 100, "y": 100, "c": 5}], {}):
+        problemas.append("aceptó un círculo que no es 0 ni 1")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el círculo se puede quitar y el 0 no se confunde con la ausencia")
     return True
 
 
@@ -885,8 +1141,11 @@ def main() -> int:
     pruebas = [
         ("minificado conserva estructura", test_minificado_conserva_estructura),
         ("atributos sin comillas no se tragan", test_atributos_sin_comillas_no_se_tragan),
+        ("el javascript cuadra", test_el_javascript_cuadra),
         ("etiqueta sin comilla de cierre",
          test_ningun_literal_cierra_una_etiqueta_sin_comilla),
+        ("el círculo se puede quitar", test_el_circulo_se_puede_quitar),
+        ("los modelos se guardan y se estampan", test_los_modelos_se_guardan_y_se_estamplan),
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),

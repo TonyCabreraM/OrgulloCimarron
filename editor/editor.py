@@ -55,6 +55,15 @@ RESPALDO = Path(__file__).resolve().parent / "_respaldo"
 # original: la que se subio ya no esta en ningun sitio, asi que se guarda aqui.
 BIBLIOTECA = Path(__file__).resolve().parent / "iconos"
 
+# Los modelos: iconos guardados enteros, con su tamano, su giro, su animacion
+# y su informacion, listos para estampar varios iguales de un clic.
+#
+# Viven en un archivo aparte y NO dentro del croquis. El croquis solo lleva lo
+# que se ve en el mapa, y un modelo no se ve: es la plantilla con la que se
+# hacen los iconos. Meterlos ahi engordaria la pagina que abre el QR con datos
+# que el movil no usa.
+MODELOS = Path(__file__).resolve().parent / "modelos.json"
+
 # validar.py vive junto a este archivo, pero cuando el proyecto se importa
 # desde fuera (test_qr.py lo hace) el paquete se llama editor. Se admiten las
 # dos formas para que funcione igual ejecutado que importado.
@@ -65,6 +74,8 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     ANIMACIONES,
     MAX_ICONO,
     MAX_ICONOS_PROPIOS,
+    MAX_MODELOS,
+    MAX_NOMBRE_MODELO,
     MAX_ROT,
     MAX_TAM_ICONO,
     MAX_TEXTO,
@@ -74,6 +85,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     NOMBRE_PROPIO,
     SIMBOLOS,
     revisar,
+    revisar_modelos,
 )
 
 HOSTS_LOCALES = {"127.0.0.1", "localhost", "::1", "[::1]"}
@@ -234,44 +246,52 @@ def _texto_zonas(zonas: list) -> str:
     return "var ZONAS = [\n" + ",\n\n".join(trozos) + "\n];"
 
 
-def _texto_iconos(iconos: list) -> str:
-    """El array de iconos, un objeto por linea.
+def _campos_icono(ic: dict) -> list[str]:
+    """Los campos de un icono, en orden y solo los que hacen falta.
 
-    Los campos van siempre en el mismo orden y solo se escriben los que hacen
-    falta: un icono normal ocupa una linea corta, y uno con informacion y
-    animacion se parte en dos. Asi el diff de git ensena lo que de verdad se
-    toco y no se llena de ceros y textos vacios.
-
-    El orden es t, x, y, n, s, r, a, i, que es de lo que mas se usa a lo que
+    El orden es t, x, y, n, s, r, a, c, i: de lo que mas se usa a lo que
     menos. Con nombres en vez de posiciones, el dia que haga falta un campo
-    nuevo se añade al final y ningun icono se entera.
+    nuevo se añade al final y ningun icono guardado se entera.
+
+    Se omite lo que vale por defecto, para que un icono normal ocupe una linea
+    corta y el diff de git ensene lo que de verdad se toco.
     """
+    partes = [f'"t": {json.dumps(ic.get("t", ""), ensure_ascii=False)}']
+    if "x" in ic:
+        partes.append(f'"x": {_n(ic["x"])}')
+    if "y" in ic:
+        partes.append(f'"y": {_n(ic["y"])}')
+    if ic.get("n"):
+        partes.append(f'"n": {json.dumps(ic["n"], ensure_ascii=False)}')
+    if ic.get("s"):
+        partes.append(f'"s": {_n(ic["s"])}')
+    if ic.get("r"):
+        partes.append(f'"r": {_n(ic["r"])}')
+    if ic.get("a"):
+        partes.append(f'"a": {json.dumps(ic["a"], ensure_ascii=False)}')
+    # El circulo solo se escribe cuando se quita. Se mira con `in` y no por
+    # lo que valga, porque 0 es un valor legitimo y `if ic.get("c")` lo
+    # tomaria por ausencia.
+    if "c" in ic:
+        partes.append(f'"c": {_n(ic["c"])}')
+    if ic.get("i"):
+        titulo, texto = ic["i"]
+        partes.append('"i": [' + json.dumps(titulo, ensure_ascii=False)
+                      + ", " + json.dumps(texto, ensure_ascii=False) + "]")
+    return partes
+
+
+def _texto_iconos(iconos: list) -> str:
+    """El array de iconos, un objeto por linea."""
     if not iconos:
         return "var ICONOS = [];"
-    lineas = []
-    for ic in iconos:
-        partes = [f'"t": {json.dumps(ic.get("t", ""), ensure_ascii=False)}',
-                  f'"x": {_n(ic.get("x", 0))}',
-                  f'"y": {_n(ic.get("y", 0))}']
-        if ic.get("n"):
-            partes.append(f'"n": {json.dumps(ic["n"], ensure_ascii=False)}')
-        if ic.get("s"):
-            partes.append(f'"s": {_n(ic["s"])}')
-        if ic.get("r"):
-            partes.append(f'"r": {_n(ic["r"])}')
-        if ic.get("a"):
-            partes.append(f'"a": {json.dumps(ic["a"], ensure_ascii=False)}')
-        if ic.get("i"):
-            titulo, texto = ic["i"]
-            partes.append('"i": [' + json.dumps(titulo, ensure_ascii=False)
-                          + ", " + json.dumps(texto, ensure_ascii=False) + "]")
-        lineas.append("  {" + ", ".join(partes) + "}")
-
     # Cada objeto en una linea, separados por coma. Si alguno es largo (los
     # que llevan informacion) la linea se pasa de ancho, pero partirla por
     # campos daria un archivo mucho mas largo y mas dificil de leer en
     # conjunto. Se prefiere la linea larga.
-    return "var ICONOS = [\n" + ",\n".join(lineas) + "\n];"
+    return ("var ICONOS = [\n"
+            + ",\n".join("  {" + ", ".join(_campos_icono(ic)) + "}" for ic in iconos)
+            + "\n];")
 
 
 def _texto_propios(propios: dict) -> str:
@@ -402,6 +422,77 @@ def borra_de_biblioteca(nombre: str) -> None:
     ruta = BIBLIOTECA / f"{nombre}.png"
     if ruta.is_file():
         ruta.unlink()
+
+
+# ---------------------------------------------------------------------------
+# Modelos
+# ---------------------------------------------------------------------------
+# Un modelo es un icono guardado entero menos la posicion. Se estampa en el
+# mapa tal cual, con su tamano, su giro, su animacion, su circulo y su
+# informacion. Es lo que hace que poner veinte puestos de comida iguales sea
+# veinte clics y no veinte veces de configurarlos a mano.
+def lee_modelos() -> list:
+    """Los modelos guardados. Lista vacia si todavia no hay ninguno."""
+    if not MODELOS.is_file():
+        return []
+    try:
+        datos = json.loads(MODELOS.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        raise ErrorEditor(
+            f"El archivo de modelos ({MODELOS.name}) no se puede leer: {e}.\n"
+            f"Si lo has editado a mano, revisa las comas y las comillas. "
+            f"Puedes borrarlo para empezar de cero: no toca el croquis.") from None
+    return datos if isinstance(datos, list) else []
+
+
+def _escribe_modelos(modelos: list) -> None:
+    """Guarda los modelos. Es lo unico que escribe este archivo."""
+    MODELOS.write_text(json.dumps(modelos, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+
+
+def guarda_modelo(nombre: str, icono: dict, propios: dict) -> dict:
+    """Añade un modelo, o reemplaza el que tenga el mismo nombre.
+
+    Reemplazar en vez de acumular es lo que uno espera al volver a guardar con
+    el mismo nombre («Puesto de comida» de antes pasa a ser el de ahora). Si
+    se acumularan, la lista se llenaria de variantes y no se sabria cual es la
+    buena.
+    """
+    nombre = (nombre or "").strip()
+    if not nombre:
+        raise ErrorEditor("El modelo necesita un nombre.")
+    if len(nombre) > MAX_NOMBRE_MODELO:
+        raise ErrorEditor(f"El nombre pasa de {MAX_NOMBRE_MODELO} caracteres.")
+
+    if not isinstance(icono, dict):
+        raise ErrorEditor("No hay ningún icono que guardar.")
+    # La posicion se elige al estampar, asi que no se guarda.
+    limpio = {k: v for k, v in icono.items() if k not in ("x", "y")}
+
+    modelos = [m for m in lee_modelos()
+               if not (isinstance(m, dict)
+                       and str(m.get("nombre", "")).strip().lower() == nombre.lower())]
+    modelos.append({"nombre": nombre, "i": limpio})
+
+    problemas = revisar_modelos(modelos, propios)
+    if problemas:
+        raise ErrorEditor("\n".join(problemas))
+    _escribe_modelos(modelos)
+    return {"nombre": nombre, "modelos": len(modelos)}
+
+
+def borra_modelo(nombre: str, propios: dict) -> dict:
+    """Quita un modelo por su nombre."""
+    modelos = lee_modelos()
+    quedan = [m for m in modelos
+              if not (isinstance(m, dict)
+                      and str(m.get("nombre", "")).strip().lower()
+                      == (nombre or "").strip().lower())]
+    if len(quedan) == len(modelos):
+        raise ErrorEditor(f"No hay ningún modelo que se llame «{nombre}».")
+    _escribe_modelos(quedan)
+    return {"quitados": len(modelos) - len(quedan), "modelos": len(quedan)}
 
 
 def _nombre_libre(nombre: str, ocupados: set) -> str:
@@ -631,6 +722,7 @@ class Manejador(BaseHTTPRequestHandler):
                                   "totalPropios": MAX_ICONOS_PROPIOS}
                 datos["animaciones"] = ANIMACIONES
                 datos["biblioteca"] = lista_biblioteca(datos["propios"])
+                datos["modelos"] = lee_modelos()
                 datos["git"] = estado_git()
                 datos["publicado"] = "https://tonycabreram.github.io/OrgulloCimarron/plantilla/croquis.html"
                 self._json(datos)
@@ -641,6 +733,8 @@ class Manejador(BaseHTTPRequestHandler):
                 # croquis. El contenido se pide aparte, con POST, para no
                 # mandar medio mega de imagenes cada vez que se pinta el panel.
                 self._json({"biblioteca": lista_biblioteca(leer_croquis()["propios"])})
+            elif ruta == "/api/modelos":
+                self._json({"modelos": lee_modelos()})
             else:
                 self._error("Esa direccion no existe en el editor.", 404)
         except ErrorEditor as e:
@@ -686,6 +780,23 @@ class Manejador(BaseHTTPRequestHandler):
                     nombre = str(datos.get("nombre") or "")
                     self._json({"ok": True, "nombre": nombre,
                                 "datos": lee_de_biblioteca(nombre)})
+            elif ruta == "/api/modelos":
+                # Guardar un modelo, o quitarlo.
+                #
+                # Los modelos NO van dentro del croquis, asi que no hace falta
+                # pulsar Guardar despues: su archivo es suyo y se escribe
+                # aqui mismo. Es lo contrario de los iconos, que si son
+                # contenido del mapa y esperan al Guardar.
+                propios = leer_croquis()["propios"]
+                if datos.get("quitar"):
+                    quitado = borra_modelo(str(datos["quitar"]), propios)
+                    self._json({"ok": True, "modelos": lee_modelos(),
+                                "quitado": quitado})
+                else:
+                    guardado = guarda_modelo(str(datos.get("nombre") or ""),
+                                             datos.get("icono"), propios)
+                    self._json({"ok": True, "guardado": guardado,
+                                "modelos": lee_modelos()})
             elif ruta == "/api/subir":
                 mensaje = str(datos.get("mensaje") or "").strip()
                 if not mensaje:

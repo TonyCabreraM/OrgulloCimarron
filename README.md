@@ -456,6 +456,7 @@ var ICONOS = [
 | `s` | Lo que mide, de 16 a 160 unidades | No, 46 |
 | `r` | El giro, en grados | No, 0 |
 | `a` | La animación | No, ninguna |
+| `c` | `0` para quitarle el círculo de fondo | No, lo lleva |
 | `i` | `[título, texto]`: la ventana que sale al pulsarlo | No, y sin esto no se puede pulsar |
 
 **Antes era una tupla posicional** y creció hasta siete campos, que es donde uno
@@ -468,11 +469,64 @@ que de verdad se tocó.
 **El tamaño va en unidades del mapa, no en píxeles**: los iconos son parte del
 plano y crecen con el zoom igual que las calles.
 
+### Con círculo o sin él
+
+Por defecto un icono lleva el círculo claro con filo detrás, que es lo que lo
+despega del pasto. Se le puede quitar, y entonces se ve solo el dibujo.
+
+**El `0` se comprueba con `in`, no por lo que vale.** Un `if (!ic.c)` tomaría el
+`0` por ausencia y el círculo seguiría saliendo: es un valor legítimo, no un
+«no está». Hay una prueba que vigila las tres partes —el servidor que lo
+escribe, el croquis que lo lee y el editor que lo enseña— precisamente porque
+es un fallo fácil de cometer en cualquiera de ellas.
+
+Sin círculo, los símbolos vectoriales llevan un **halo blanco** alrededor del
+trazo (`drop-shadow` en las cuatro direcciones, dos veces). El pasto es una
+textura cargada y se come las líneas finas. A una imagen propia se le quita
+además el recorte en círculo: si se quita el círculo, se quita entero, y una
+foto sale como es. Media medida dejaría la imagen redonda sin nada que lo
+explique.
+
 **Los iconos no reciben el toque**, salvo los que llevan información. El grupo
 va con `pointer-events: none`, que heredan los hijos, así que un icono plantado
 en medio de un estacionamiento no se come esa parte del estacionamiento. Los
 que llevan ventana se lo devuelven uno por uno: son pocos y pequeños, y a
 cambio de un trozo mínimo de zona se puede consultar algo.
+
+### Los modelos
+
+Un **modelo** es un icono guardado entero —tipo, tamaño, giro, animación,
+círculo e información— menos la posición. Se guarda desde el panel con
+**Guardar como modelo**, aparece en la caja **Modelos** y al pulsarlo cada clic
+en el mapa pone uno igual.
+
+Es lo que hace que poner veinte puestos de comida iguales sean veinte clics y no
+veinte veces de configurarlos a mano. En la lista se ve la miniatura con su
+tamaño, su giro, su animación y su círculo de verdad, y debajo una nota corta
+(`late · 70 · sin aro · info`) para saber qué lleva cada uno sin abrirlo.
+
+Guardar con un nombre que ya existe **reemplaza** en vez de acumular: al volver
+a guardar «Puesto de comida», el de antes pasa a ser el de ahora. Si se
+acumularan, la lista se llenaría de variantes y no se sabría cuál es la buena.
+
+**Los modelos no van dentro del croquis.** Viven en `editor/modelos.json`, que
+está fuera de git como la biblioteca de imágenes. Son una herramienta de quien
+edita, no contenido del mapa: el archivo publicado no los necesita y cada byte
+suyo lo descarga un móvil por nada. El croquis solo lleva lo que se ve.
+
+### Poner varios seguidos
+
+Al pulsar un símbolo de la paleta o un modelo, el editor se queda **en modo
+estampado**: cada clic en el mapa añade uno con esa configuración, y el modo no
+se suelta hasta que se sale. Se sale con `Escape` o volviendo a pulsar lo mismo.
+
+Antes se soltaba al primer clic, que está bien para poner uno y mal para poner
+quince. Arrastrar, en cambio, sí estampa una sola vez y suelta: un arrastre es
+una acción suelta, no un modo.
+
+Mientras está puesto, la barra de arriba lo dice y el botón de la paleta queda
+marcado, porque si no es fácil quedarse pulsando el mapa sin saber por qué sale
+un icono cada vez.
 
 ### La ventana de información
 
@@ -595,7 +649,10 @@ interfaz es un HTML suelto.
 | Ajustar su tamaño | El deslizador **Tamaño**; los nuevos salen con el que diga **Tamaño de los nuevos** |
 | Girarlo | El deslizador **Giro**, o los botones de ±15° y ±90° |
 | Animarlo | El desplegable **Animación** |
+| Quitarle el círculo | La casilla **Con círculo de fondo** |
 | Ponerle información | Los campos de **Información que sale al pulsarlo**; si se dejan vacíos, el icono no se puede pulsar |
+| Guardar el icono entero | **Guardar como modelo** |
+| Poner varios iguales | Pulsar el modelo en **Modelos** y hacer clic en el mapa todas las veces que haga falta |
 | Crear un icono propio | **Subir una imagen…**; queda en la paleta con el borde discontinuo |
 | Volver a poner uno guardado | Pulsarlo en **Guardados** |
 | Quitar un icono propio | Pulsarlo en **En el croquis**; la imagen baja a **Guardados** |
@@ -603,6 +660,13 @@ interfaz es un HTML suelto.
 | Acercar | Rueda del ratón, o los botones **+** y **−** |
 
 Abajo a la izquierda del mapa están las mismas instrucciones.
+
+Una nota sobre las dos «Guardados» y «Modelos», que es fácil de confundir:
+
+| | Qué guarda | Para qué |
+| --- | --- | --- |
+| **Guardados** | Una imagen (PNG) | Volver a poner un icono propio sin buscar el archivo |
+| **Modelos** | Un icono configurado entero | Poner muchos iguales de un clic |
 
 ### Marcar varios iconos y alinearlos
 
@@ -740,6 +804,26 @@ croquis o la página base:
 - **La URL completa ronda los 2100 caracteres** porque el fragmento va dentro.
   Chrome y Safari manejan esas longitudes, pero si un lector concreto se
   trunca, hay que bajar el documento (menos texto o menos zonas) y regenerar.
+- **Un cierre de más o de menos en el `<script>` deja la página en blanco.** No
+  se dibujan ni las zonas ni los iconos, y lo único que sale es un
+  `Unexpected token` en la consola del navegador. Pasó al añadir el círculo
+  opcional: un `)` de más en una función de tres líneas tumbó el mapa entero.
+  La prueba `el javascript cuadra` no valida JavaScript, cuenta cierres: no
+  entiende la sintaxis, pero caza el error de tecleo que más veces deja estos
+  archivos muertos, y lo caza antes de abrir el navegador.
+- **Un `if` mal anidado deja código muerto que parece vivo.** Al partir la
+  validación de un icono en una función aparte, las comprobaciones de después
+  se quedaron con la indentación del bucle que ya no existía, o sea dentro de
+  un `if` de tres líneas. El resultado: `revisar_iconos` no comprobaba **nada**
+  y devolvía la lista vacía, así que el editor aceptaba cualquier cosa. Y la
+  prueba que lo vigilaba seguía en verde, porque mandaba las zonas vacías: el
+  guardado rebotaba por «no hay ninguna zona» y parecía que había rechazado el
+  icono. Dos lecciones: la prueba tiene que comprobar **por qué** falla y no
+  solo que falle, y las reglas compartidas necesitan una prueba que las llame
+  directamente, sin pasar por el servidor.
+- **`0` no es «no está».** El círculo se apaga con `"c": 0`, así que hay que
+  comprobarlo con `"c" in ic` y nunca con `if ic.get("c")`, que tomaría el cero
+  por ausencia y dejaría el círculo puesto. Lo mismo al leerlo en el croquis.
 - **Un atributo HTML sin comillas se traga la `/` que cierra la etiqueta.**
   `fill=#16241c/>` se parsea como `fill="#16241c/"`, la etiqueta nunca se
   cierra y se traga todo el dibujo: el mapa sale negro y **sin ningún error en

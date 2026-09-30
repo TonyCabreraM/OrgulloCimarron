@@ -67,6 +67,21 @@ body{
    que aqui no hay nada que hacer salvo que no se salgan del aro. */
 #iconos .fig{pointer-events:none}
 
+/* --- Sin circulo -----------------------------------------------------------
+   Un icono puede ir sin el aro, solo con su dibujo. Es lo que conviene para
+   una imagen que ya es redonda de por si, o para un simbolo que se lee mejor
+   suelto.
+
+   Quitarle el aro tiene un precio: las lineas finas se pierden sobre el pasto,
+   que es una textura cargada. Se compensa con un halo blanco alrededor del
+   trazo, hecho con drop-shadow en las cuatro direcciones. El halo es de la
+   misma medida en unidades del mapa, asi que crece con el icono y no se
+   convierte en una mancha al ampliar. */
+#iconos .sinAro .lam{filter:drop-shadow(0 0 1.6px #fff) drop-shadow(0 0 1.6px #fff)}
+/* Una imagen sin aro tampoco lleva el recorte en circulo: si se quita el
+   circulo, se quita entero, y una foto sale como es. */
+#iconos .sinAro .fig{clip-path:none}
+
 /* Un icono con informacion se puede pulsar, y lo dice: se le marca el filo y
    sale la manita. Sin esa pista no hay forma de saber cuales llevan algo
    detras.
@@ -521,15 +536,20 @@ CH.innerHTML = ZONAS.map(function (z, k) {
 K = CH.querySelectorAll(".chip");
 var G = ZON.querySelectorAll(".g");
 
-// La forma de un icono: el dibujo del simbolo, o la imagen propia recortada
-// en circulo. Vacio si el tipo no existe, que es lo que hace que un icono
-// desconocido se salte en vez de salir como un hueco.
-function figuraDe(tipo) {
+// La forma de un icono: el dibujo del simbolo, o la imagen propia. Vacio si
+// el tipo no existe, que es lo que hace que un icono desconocido se salte en
+// vez de salir como un hueco.
+//
+// El recorte en circulo de las imagenes y el aro van juntos: si el icono va
+// sin circulo, la imagen tambien pierde el recorte y sale como es. Media
+// medida (aro fuera, recorte dentro) dejaria la imagen redonda sin nada que
+// lo explique.
+function figuraDe(tipo, conAro) {
   if (SIMBOLOS[tipo]) return '<g class="lam">' + SIMBOLOS[tipo] + "</g>";
   if (PROPIOS[tipo]) {
     return '<image class="fig" href="' + PROPIOS[tipo]
          + '" x="-12.2" y="-12.2" width="24.4" height="24.4"'
-         + ' clip-path="url(#recorte)"/>';
+         + (conAro ? ' clip-path="url(#recorte)"' : "") + "/>";
   }
   return "";
 }
@@ -549,7 +569,10 @@ function nombreDe(tipo) {
 // girar un icono. Si fuera antes del scale, giraria sobre un centro ya escalado
 // y se iria del sitio.
 ICN.innerHTML = ICONOS.map(function (ic, k) {
-  var dentro = figuraDe(ic.t);
+  // `c` en 0 es "sin circulo". Se comprueba asi y no por lo que valga, porque
+  // 0 es un valor legitimo y un `if (!ic.c)` lo confundiria con la ausencia.
+  var conAro = !("c" in ic) || !!ic.c;
+  var dentro = figuraDe(ic.t, conAro);
   if (!dentro) return "";
 
   // El <g> de dentro es el que anima. El de fuera lleva la posicion y no se
@@ -557,8 +580,9 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
   // que animar el de fuera mandaria el icono a la esquina de la hoja.
   var clase = "an" + (ic.a ? " " + ic.a : "");
   var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
-  var caja = ic.i ? ' class="ic conInfo" data-info="' + k + '"'
-                  : ' class="ic"';
+  var clases = "ic" + (conAro ? "" : " sinAro") + (ic.i ? " conInfo" : "");
+  var caja = ic.i ? ' class="' + clases + '" data-info="' + k + '"'
+                  : ' class="' + clases + '"';
   // La comilla que cierra el transform va al principio del ultimo trozo. Es
   // facil dejarla fuera (paso dos veces) y el navegador se traga la etiqueta
   // entera: el icono desaparece y solo sale un aviso en la consola.
@@ -566,7 +590,8 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
        + ") scale(" + ((ic.s || TAM_ICONO) / 24) + ")"
        + (ic.r ? " rotate(" + ic.r + ")" : "") + '"><title>'
        + escapa(ic.n || nombreDe(ic.t)) + "</title>"
-       + '<circle class="aro" r="13.4"/><g class="' + clase + '">'
+       + (conAro ? '<circle class="aro" r="13.4"/>' : "")
+       + '<g class="' + clase + '">'
        + ondas + dentro + "</g></g>";
 }).join("");
 
@@ -656,11 +681,14 @@ function abreVentana(k) {
   // que se vea de cual se trata. El SVG se arma aqui y no se copia del mapa
   // porque alli el icono lleva el transform de la posicion, y copiarlo tal
   // cual lo dejaria fuera de la caja.
-  var forma = figuraDe(ic.t);
   var esPropio = !SIMBOLOS[ic.t] && !!PROPIOS[ic.t];
+  // Se le pasa conAro = true siempre: en la ventana la imagen va dentro de un
+  // cuadro cuadrado y el recorte en circulo es lo que la hace encajar. Si se
+  // copiara el "sin circulo" del mapa, una foto saldria con las esquinas
+  // pegadas a un marco que no es el suyo.
   SELLO.innerHTML = esPropio
     ? '<img src="' + PROPIOS[ic.t] + '" alt="">'
-    : '<svg viewBox="-13 -13 26 26">' + forma + "</svg>";
+    : '<svg viewBox="-13 -13 26 26">' + figuraDe(ic.t, true) + "</svg>";
   SELLO.setAttribute("aria-hidden", "true");
   VENT.hidden = false;
   // Un fotograma con `hidden` ya quitado antes de poner la clase, o el

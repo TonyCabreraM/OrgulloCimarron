@@ -10,3 +10,4 @@ _tmp_*
 # croquis, que es quien lleva dentro las imagenes que de verdad se usan.
 editor/_respaldo/
 editor/iconos/
+editor/modelos.json

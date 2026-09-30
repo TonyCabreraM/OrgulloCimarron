@@ -83,10 +83,24 @@ ANIMACIONES = {
     "ondas": "Ondas",
 }
 
+# El aro: el circulo claro con filo que llevan los iconos detras. Por defecto
+# SI se lleva, que es como estaban todos antes de que se pudiera elegir, asi
+# que en el archivo solo aparece cuando se quita, como `"c": 0`.
+CON_ARO = 1
+SIN_ARO = 0
+
+# Los modelos: iconos guardados enteros, con su tamano, su giro, su animacion
+# y su informacion, para poder estampar varios iguales de un clic. Viven en
+# editor/modelos.json y no dentro del croquis, porque son una herramienta de
+# quien edita y no contenido del mapa: el archivo publicado no los necesita y
+# cada byte suyo lo descarga un movil por nada.
+MAX_MODELOS = 60
+MAX_NOMBRE_MODELO = 40
+
 # Las claves de un icono. Se rechaza cualquier otra: un nombre mal escrito
 # (`X` por `x`) dejaria el icono sin ese dato y no se notaria hasta verlo en
 # el mapa, que es la peor forma de enterarse.
-CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "i"}
+CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "c", "i"}
 
 # El texto que sale en la ventana al tocar un icono. Va dentro del croquis,
 # asi que se limita: una parrafada convertiria la pagina del movil en algo
@@ -231,8 +245,98 @@ def revisar_zonas(zonas: list) -> list[str]:
     return problemas
 
 
+def _revisar_icono(ic, sitio: str, conocidos: set, con_posicion: bool) -> list[str]:
+    """Los problemas de un icono suelto.
+
+    `con_posicion` distingue un icono del mapa de un modelo guardado. Un modelo
+    no lleva x ni y, porque el sitio se elige al estamparlo; si se le
+    exigieran, guardar un modelo seria imposible.
+    """
+    problemas: list[str] = []
+    if not isinstance(ic, dict):
+        ejemplo = ('{t:"bano", x:499, y:470}' if con_posicion
+                   else '{t:"bano", s:60, a:"late"}')
+        return [f"{sitio}: tiene que ser un objeto como {ejemplo}"]
+
+    raros = sorted(set(ic) - CLAVES_ICONO)
+    if raros:
+        return [f"{sitio}: no conozco {' ni '.join(raros)}. "
+                f"Las claves son {', '.join(sorted(CLAVES_ICONO))} "
+                f"(t=tipo, x, y, n=etiqueta, s=tamaño, r=rotación, "
+                f"a=animación, c=círculo, i=información)"]
+
+    tipo = ic.get("t")
+    if tipo not in conocidos:
+        return [f"{sitio}: «{tipo}» no es un simbolo conocido ni un icono tuyo. "
+                f"Los que hay: {', '.join(sorted(conocidos))}"]
+
+    if con_posicion:
+        x, y = ic.get("x"), ic.get("y")
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                   for v in (x, y)):
+            return [f"{sitio}: hacen falta las coordenadas x e y como numeros"]
+        if not (MARGEN_ICONO <= x <= ANCHO - MARGEN_ICONO and
+                MARGEN_ICONO <= y <= ALTO - MARGEN_ICONO):
+            problemas.append(
+                f"{sitio} ({titulo_de(tipo, conocidos)}): esta pegado al borde del "
+                f"mapa ({x:.0f}, {y:.0f}); el centro tiene que caer dentro")
+
+    if "n" in ic and not isinstance(ic["n"], str):
+        problemas.append(f"{sitio}: la etiqueta tiene que ser texto")
+
+    if "s" in ic:
+        tam = ic["s"]
+        if not isinstance(tam, (int, float)) or isinstance(tam, bool):
+            problemas.append(f"{sitio}: el tamaño tiene que ser un numero")
+        elif not MIN_TAM_ICONO <= tam <= MAX_TAM_ICONO:
+            problemas.append(
+                f"{sitio}: el tamaño {tam:.0f} se sale del rango de "
+                f"{MIN_TAM_ICONO} a {MAX_TAM_ICONO}")
+
+    if "r" in ic:
+        rot = ic["r"]
+        if not isinstance(rot, (int, float)) or isinstance(rot, bool):
+            problemas.append(f"{sitio}: la rotación tiene que ser un numero")
+        elif not MIN_ROT <= rot <= MAX_ROT:
+            problemas.append(
+                f"{sitio}: la rotación {rot:.0f}° se sale de "
+                f"{MIN_ROT} a {MAX_ROT}")
+
+    if "a" in ic and ic["a"] not in ANIMACIONES:
+        problemas.append(
+            f"{sitio}: «{ic['a']}» no es una animación de las que hay. "
+            f"Las que hay: {', '.join(k for k in ANIMACIONES if k) or 'ninguna'}")
+
+    if "c" in ic and ic["c"] not in (CON_ARO, SIN_ARO):
+        problemas.append(
+            f"{sitio}: «c» solo puede ser {SIN_ARO} (sin el círculo) o "
+            f"{CON_ARO} (con él), y viene {ic['c']!r}")
+
+    if "i" in ic:
+        info = ic["i"]
+        if (not isinstance(info, (list, tuple)) or len(info) != 2
+                or not all(isinstance(t, str) for t in info)):
+            problemas.append(
+                f'{sitio}: la información tiene que ser [título, texto]')
+        else:
+            titulo, texto = info
+            if not titulo.strip():
+                problemas.append(f"{sitio}: la información no tiene título")
+            elif len(titulo) > MAX_TITULO:
+                problemas.append(
+                    f"{sitio}: el título pasa de {MAX_TITULO} caracteres")
+            if not texto.strip():
+                problemas.append(f"{sitio}: la información no tiene texto")
+            elif len(texto) > MAX_TEXTO:
+                problemas.append(
+                    f"{sitio}: el texto de la información pasa de "
+                    f"{MAX_TEXTO} caracteres y no se lee en una ventana")
+
+    return problemas
+
+
 def revisar_iconos(iconos: list, propios=None) -> list[str]:
-    """Devuelve la lista de problemas de los iconos. Vacia es que todo bien.
+    """Devuelve la lista de problemas de los iconos del mapa.
 
     Cada icono es un objeto, y solo hacen falta el tipo y el sitio:
 
@@ -242,7 +346,7 @@ def revisar_iconos(iconos: list, propios=None) -> list[str]:
          i: ["Información", "Aquí puedes preguntar por el programa..."]}
 
     Los nombres de las claves son cortos porque se repiten en cada icono y el
-    archivo se escribe a mano. Antes era una tupla posicional y crecio hasta
+    archivo se escribe a mano. Antes era una tupla posicional y creció hasta
     siete campos, que es donde uno empieza a contar comas con la vista; con
     nombres cada dato se lee solo y se pueden dejar fuera los que no hacen
     falta.
@@ -251,97 +355,88 @@ def revisar_iconos(iconos: list, propios=None) -> list[str]:
     son los que vienen en `propios`. Uno que no este en ninguna de las dos
     listas saldria como un hueco sin nada y sin ningun error en consola.
     """
-    problemas: list[str] = []
     if not isinstance(iconos, (list, tuple)):
         return ["los iconos tienen que ser una lista"]
 
     conocidos = set(SIMBOLOS) | set(propios or {})
+    problemas: list[str] = []
     for k, ic in enumerate(iconos):
-        sitio = f"icono {k + 1}"
-        if not isinstance(ic, dict):
+        problemas.extend(_revisar_icono(ic, f"icono {k + 1}", conocidos, True))
+    return problemas
+
+
+def revisar_modelos(modelos, propios=None) -> list[str]:
+    """Los problemas de los modelos guardados.
+
+    Un modelo es `{nombre, i: {...}}`, donde el icono lleva todo menos la
+    posicion: eso es justo lo que se estampa al hacer clic. Se valida con las
+    mismas reglas que un icono del mapa, que es la unica forma de que un
+    modelo guardado no acabe dando un icono que el croquis rechace.
+
+    Los modelos NO van dentro del croquis: son una herramienta de quien edita
+    y viven en editor/modelos.json. El archivo publicado no los necesita, y
+    cada byte de mas lo descarga un movil por nada.
+    """
+    if modelos is None:
+        return []
+    if not isinstance(modelos, (list, tuple)):
+        return ["los modelos tienen que ser una lista"]
+
+    conocidos = set(SIMBOLOS) | set(propios or {})
+    problemas: list[str] = []
+    if len(modelos) > MAX_MODELOS:
+        problemas.append(
+            f"Hay {len(modelos)} modelos y el tope son {MAX_MODELOS}. "
+            f"Quita alguno: esta lista es para tener a mano los de este "
+            f"evento, no un catálogo")
+
+    vistos = set()
+    for k, m in enumerate(modelos):
+        sitio = f"modelo {k + 1}"
+        if not isinstance(m, dict) or "nombre" not in m or "i" not in m:
             problemas.append(
-                f"{sitio}: tiene que ser un objeto como "
-                f'{{t:"bano", x:499, y:470}}')
+                f'{sitio}: tiene que ser {{"nombre": "...", "i": {{...}}}}')
             continue
 
-        raros = sorted(set(ic) - CLAVES_ICONO)
-        if raros:
+        nombre = m["nombre"]
+        if not isinstance(nombre, str) or not nombre.strip():
+            problemas.append(f"{sitio}: le falta el nombre")
+        elif len(nombre) > MAX_NOMBRE_MODELO:
             problemas.append(
-                f"{sitio}: no conozco {' ni '.join(raros)}. "
-                f"Las claves son {', '.join(sorted(CLAVES_ICONO))} "
-                f"(t=tipo, x, y, n=etiqueta, s=tamaño, r=rotación, "
-                f"a=animación, i=información)")
+                f"{sitio}: el nombre pasa de {MAX_NOMBRE_MODELO} caracteres")
+        elif nombre.strip().lower() in vistos:
+            problemas.append(
+                f"{sitio}: hay dos modelos que se llaman «{nombre.strip()}». "
+                f"Con dos iguales no se sabe cuál se está estampando")
+        else:
+            vistos.add(nombre.strip().lower())
+
+        icono = m["i"]
+        # Un modelo no puede llevar posicion: la elige quien estampa. Se
+        # comprueba aqui porque es lo unico del modelo que las reglas del
+        # icono no pueden ver.
+        if isinstance(icono, dict) and ({"x", "y"} & set(icono)):
+            problemas.append(
+                f"{sitio}: el icono no puede llevar x ni y; la posición se "
+                f"elige al pulsar en el mapa")
             continue
 
-        tipo = ic.get("t")
-        if tipo not in conocidos:
-            problemas.append(
-                f"{sitio}: «{tipo}» no es un simbolo conocido ni un icono tuyo. "
-                f"Los que hay: {', '.join(sorted(conocidos))}")
-            continue
-
-        x, y = ic.get("x"), ic.get("y")
-        if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
-                   for v in (x, y)):
-            problemas.append(f"{sitio}: hacen falta las coordenadas x e y como numeros")
-            continue
-        if not (MARGEN_ICONO <= x <= ANCHO - MARGEN_ICONO and
-                MARGEN_ICONO <= y <= ALTO - MARGEN_ICONO):
-            problemas.append(
-                f"{sitio} ({titulo_de(tipo, propios)}): esta pegado al borde del "
-                f"mapa ({x:.0f}, {y:.0f}); el centro tiene que caer dentro")
-
-        if "n" in ic and not isinstance(ic["n"], str):
-            problemas.append(f"{sitio}: la etiqueta tiene que ser texto")
-
-        if "s" in ic:
-            tam = ic["s"]
-            if not isinstance(tam, (int, float)) or isinstance(tam, bool):
-                problemas.append(f"{sitio}: el tamaño tiene que ser un numero")
-            elif not MIN_TAM_ICONO <= tam <= MAX_TAM_ICONO:
-                problemas.append(
-                    f"{sitio}: el tamaño {tam:.0f} se sale del rango de "
-                    f"{MIN_TAM_ICONO} a {MAX_TAM_ICONO}")
-
-        if "r" in ic:
-            rot = ic["r"]
-            if not isinstance(rot, (int, float)) or isinstance(rot, bool):
-                problemas.append(f"{sitio}: la rotación tiene que ser un numero")
-            elif not MIN_ROT <= rot <= MAX_ROT:
-                problemas.append(
-                    f"{sitio}: la rotación {rot:.0f}° se sale de "
-                    f"{MIN_ROT} a {MAX_ROT}")
-
-        if "a" in ic and ic["a"] not in ANIMACIONES:
-            problemas.append(
-                f"{sitio}: «{ic['a']}» no es una animación de las que hay. "
-                f"Las que hay: {', '.join(k for k in ANIMACIONES if k) or 'ninguna'}")
-
-        if "i" in ic:
-            info = ic["i"]
-            if (not isinstance(info, (list, tuple)) or len(info) != 2
-                    or not all(isinstance(t, str) for t in info)):
-                problemas.append(
-                    f'{sitio}: la información tiene que ser [título, texto]')
-            else:
-                titulo, texto = info
-                if not titulo.strip():
-                    problemas.append(f"{sitio}: la información no tiene título")
-                elif len(titulo) > MAX_TITULO:
-                    problemas.append(
-                        f"{sitio}: el título pasa de {MAX_TITULO} caracteres")
-                if not texto.strip():
-                    problemas.append(f"{sitio}: la información no tiene texto")
-                elif len(texto) > MAX_TEXTO:
-                    problemas.append(
-                        f"{sitio}: el texto de la información pasa de "
-                        f"{MAX_TEXTO} caracteres y no se lee en una ventana")
+        # Se le añade una posicion de mentira para reutilizar la validacion
+        # del mapa, que exige x e y. El centro del mapa siempre vale.
+        if isinstance(icono, dict):
+            icono = dict(icono, x=ANCHO / 2, y=ALTO / 2)
+        problemas.extend(_revisar_icono(
+            icono, f"{sitio} «{m['nombre']}»", conocidos, True))
 
     return problemas
 
 
-def titulo_de(tipo: str, propios=None) -> str:
-    """Como se llama un icono para ensenarlo en un mensaje de error."""
+def titulo_de(tipo: str, conocidos=None) -> str:
+    """Como se llama un icono para ensenarlo en un mensaje de error.
+
+    `conocidos` puede ser el diccionario de propios, o el conjunto de tipos
+    que hay: da igual, lo unico que importa es si el tipo esta en SIMBOLOS.
+    """
     if tipo in SIMBOLOS:
         return SIMBOLOS[tipo]
     return f"icono propio «{tipo}»"
