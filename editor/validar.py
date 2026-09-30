@@ -87,7 +87,23 @@ ANIMACIONES = {
     "gira": "Gira",
     "brilla": "Brilla",
     "ondas": "Ondas",
+    "vibra": "Vibra",
+    "viento": "Viento",
 }
+
+# Las que no tienen intensidad. `gira` da una vuelta completa: no hay nada que
+# ampliar ni que reducir, asi que la intensidad no le hace nada y el editor no
+# ofrece el control. Se dice aqui y no en el editor para que las dos partes
+# lean lo mismo.
+ANIMACIONES_SIN_INTENSIDAD = frozenset({"gira"})
+
+# La intensidad del movimiento: cuanto se mueve, no a que velocidad. 1 es lo
+# normal; por debajo se mueve menos y por encima mas. No se baja de 0.2 porque
+# ahi ya no se ve que se mueve, y no se pasa de 2.5 porque un icono que salta
+# media zona ensucia el mapa en vez de llamar la atencion.
+INTENSIDAD = 1.0
+MIN_INTENSIDAD = 0.2
+MAX_INTENSIDAD = 2.5
 
 # El aro: el circulo claro con filo que llevan los iconos detras. Por defecto
 # SI se lleva, que es como estaban todos antes de que se pudiera elegir, asi
@@ -106,7 +122,7 @@ MAX_NOMBRE_MODELO = 40
 # Las claves de un icono. Se rechaza cualquier otra: un nombre mal escrito
 # (`X` por `x`) dejaria el icono sin ese dato y no se notaria hasta verlo en
 # el mapa, que es la peor forma de enterarse.
-CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "c", "i"}
+CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "c", "m", "i"}
 
 # El texto que sale en la ventana al tocar un icono. Va dentro del croquis,
 # asi que se limita: una parrafada convertiria la pagina del movil en algo
@@ -322,6 +338,19 @@ def _revisar_icono(ic, sitio: str, conocidos: set, con_posicion: bool) -> list[s
             f"{sitio}: «{ic['a']}» no es una animación de las que hay. "
             f"Las que hay: {', '.join(k for k in ANIMACIONES if k) or 'ninguna'}")
 
+    if "m" in ic:
+        inte = ic["m"]
+        if not isinstance(inte, (int, float)) or isinstance(inte, bool):
+            problemas.append(f"{sitio}: la intensidad tiene que ser un numero")
+        elif not MIN_INTENSIDAD <= inte <= MAX_INTENSIDAD:
+            problemas.append(
+                f"{sitio}: la intensidad {inte:.2f} se sale de "
+                f"{MIN_INTENSIDAD} a {MAX_INTENSIDAD}")
+        elif ic.get("a") in ANIMACIONES_SIN_INTENSIDAD:
+            problemas.append(
+                f"{sitio}: la animación «{ic['a']}» da una vuelta completa y no "
+                f"tiene intensidad que ajustar; quita el «m»")
+
     if "c" in ic and ic["c"] not in (CON_ARO, SIN_ARO):
         problemas.append(
             f"{sitio}: «c» solo puede ser {SIN_ARO} (sin el círculo) o "
@@ -463,10 +492,11 @@ def revisar_ajustes(ajustes) -> list[str]:
     if not isinstance(ajustes, dict):
         return ["los ajustes tienen que ser un objeto"]
 
-    raros = sorted(set(ajustes) - {"s", "a", "c"})
+    raros = sorted(set(ajustes) - {"s", "a", "m", "c"})
     if raros:
         return [f"en los ajustes no conozco {' ni '.join(raros)}. "
-                f"Los que hay son s (tamaño), a (animación) y c (círculo)"]
+                f"Los que hay son s (tamaño), a (animación), m (intensidad) "
+                f"y c (círculo)"]
 
     problemas: list[str] = []
 
@@ -484,6 +514,19 @@ def revisar_ajustes(ajustes) -> list[str]:
             f"«{ajustes['a']}» no es una animación de las que hay. "
             f"Las que hay: {', '.join(k for k in ANIMACIONES if k) or 'ninguna'}")
 
+    if "m" in ajustes:
+        inte = ajustes["m"]
+        if not isinstance(inte, (int, float)) or isinstance(inte, bool):
+            problemas.append("la intensidad de los ajustes tiene que ser un numero")
+        elif not MIN_INTENSIDAD <= inte <= MAX_INTENSIDAD:
+            problemas.append(
+                f"la intensidad {inte:.2f} de los ajustes se sale de "
+                f"{MIN_INTENSIDAD} a {MAX_INTENSIDAD}")
+        elif ajustes.get("a") in ANIMACIONES_SIN_INTENSIDAD:
+            problemas.append(
+                f"la animación «{ajustes['a']}» da una vuelta completa y no tiene "
+                f"intensidad que ajustar; quita la «m» de los ajustes")
+
     if "c" in ajustes and ajustes["c"] not in (CON_ARO, SIN_ARO):
         problemas.append(
             f"el círculo de los ajustes solo puede ser {SIN_ARO} (sin él) o "
@@ -493,7 +536,7 @@ def revisar_ajustes(ajustes) -> list[str]:
 
 
 def limpiar_ajustes(ajustes) -> dict:
-    """Los ajustes sin lo que sobra: solo s, a y c, y solo si valen.
+    """Los ajustes sin lo que sobra: solo s, a, m y c, y solo si valen.
 
     Se llama al guardarlos desde el editor, que manda lo que tiene en pantalla
     y no siempre esta todo. Se descarta lo vacio para que el archivo quede
@@ -501,7 +544,7 @@ def limpiar_ajustes(ajustes) -> dict:
     no hace falta escribirlos.
     """
     limpio: dict = {}
-    for clave in ("s", "a", "c"):
+    for clave in ("s", "a", "m", "c"):
         if clave not in ajustes:
             continue
         valor = ajustes[clave]
@@ -509,6 +552,9 @@ def limpiar_ajustes(ajustes) -> dict:
             continue
         if clave == "c" and valor == CON_ARO:
             # Con circulo es lo de siempre: no se escribe.
+            continue
+        if clave == "m" and valor == INTENSIDAD:
+            # La intensidad normal tampoco: es la de fabrica.
             continue
         limpio[clave] = valor
     return limpio

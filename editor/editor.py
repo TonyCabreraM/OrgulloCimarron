@@ -72,8 +72,11 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     ALTO,
     ANCHO,
     ANIMACIONES,
+    ANIMACIONES_SIN_INTENSIDAD,
+    INTENSIDAD,
     MAX_ICONO,
     MAX_ICONOS_PROPIOS,
+    MAX_INTENSIDAD,
     MAX_MODELOS,
     MAX_NOMBRE_MODELO,
     MAX_ROT,
@@ -81,6 +84,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     MAX_TEXTO,
     MAX_TITULO,
     MAX_VECTOR,
+    MIN_INTENSIDAD,
     MIN_ROT,
     MIN_TAM_ICONO,
     NOMBRE_PROPIO,
@@ -253,7 +257,7 @@ def _texto_zonas(zonas: list) -> str:
 def _campos_icono(ic: dict) -> list[str]:
     """Los campos de un icono, en orden y solo los que hacen falta.
 
-    El orden es t, x, y, n, s, r, a, c, i: de lo que mas se usa a lo que
+    El orden es t, x, y, n, s, r, a, m, c, i: de lo que mas se usa a lo que
     menos. Con nombres en vez de posiciones, el dia que haga falta un campo
     nuevo se añade al final y ningun icono guardado se entera.
 
@@ -273,6 +277,10 @@ def _campos_icono(ic: dict) -> list[str]:
         partes.append(f'"r": {_n(ic["r"])}')
     if ic.get("a"):
         partes.append(f'"a": {json.dumps(ic["a"], ensure_ascii=False)}')
+    # La intensidad se escribe con un decimal como mucho: 1.4 y no 1.3999999.
+    # Y se omite cuando vale 1, que es lo normal.
+    if ic.get("m") and float(ic["m"]) != INTENSIDAD:
+        partes.append(f'"m": {round(float(ic["m"]), 2):g}')
     # El circulo solo se escribe cuando se quita. Se mira con `in` y no por
     # lo que valga, porque 0 es un valor legitimo y `if ic.get("c")` lo
     # tomaria por ausencia.
@@ -819,10 +827,12 @@ class Manejador(BaseHTTPRequestHandler):
                 datos["ancho"], datos["alto"] = ANCHO, ALTO
                 datos["topes"] = {"tam": [MIN_TAM_ICONO, MAX_TAM_ICONO],
                                   "rot": [MIN_ROT, MAX_ROT],
+                                  "inte": [MIN_INTENSIDAD, MAX_INTENSIDAD],
                                   "lado": LADO_ICONO,
                                   "titulo": MAX_TITULO, "texto": MAX_TEXTO,
                                   "totalPropios": MAX_ICONOS_PROPIOS}
                 datos["animaciones"] = ANIMACIONES
+                datos["sinIntensidad"] = sorted(ANIMACIONES_SIN_INTENSIDAD)
                 datos["biblioteca"] = lista_biblioteca(datos["propios"])
                 # Los ajustes de cada icono propio, para que la paleta los
                 # dibuje como son y al ponerlos salgan ya configurados.

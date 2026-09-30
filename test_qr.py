@@ -267,6 +267,43 @@ def leer_objeto(texto: str, nombre: str):
 
 
 CROQUIS = Path("plantilla/croquis.html")
+EDITOR_HTML = Path("editor/editor.html")
+
+
+def _cuerpo_de_keyframe(css: str, nombre: str) -> str | None:
+    """Lo que hay dentro de un @keyframes, o None si no esta definido.
+
+    Hay que buscar el cierre contando llaves y no con una expresion regular:
+    los pasos de un keyframe llevan llaves dentro, asi que el primer `}` que
+    aparece no es el que cierra el bloque. Contando se sabe donde acaba.
+
+    Y el nombre se busca entero: `@keyframes icGira` esta contenido en
+    `@keyframes icGiraMas`, asi que sin mirar lo que viene detras se podria
+    dar por bueno un keyframe que no existe.
+    """
+    desde = 0
+    while True:
+        i = css.find("@keyframes " + nombre, desde)
+        if i < 0:
+            return None
+        fin = i + len("@keyframes ") + len(nombre)
+        if fin >= len(css) or not (css[fin].isalnum() or css[fin] in "_-"):
+            break
+        desde = i + 1
+    j = css.find("{", fin)
+    if j < 0:
+        return None
+    hondo = 0
+    k = j
+    while k < len(css):
+        if css[k] == "{":
+            hondo += 1
+        elif css[k] == "}":
+            hondo -= 1
+            if hondo == 0:
+                return css[j + 1:k]
+        k += 1
+    return None
 
 
 def test_croquis_zonas_coherentes() -> bool:
@@ -374,6 +411,201 @@ def test_iconos_y_simbolos_coinciden() -> bool:
 
     print(f"    {len(formas)} símbolos dibujables y con el mismo nombre, "
           f"uno por cada tipo del editor")
+    return True
+
+
+def test_animaciones_e_intensidad() -> bool:
+    """Cada animación que se ofrece existe de verdad, en el mapa y en el editor.
+
+    Son varias listas que tienen que decir lo mismo y viven en sitios
+    distintos: las animaciones que validar.py deja guardar, los keyframes del
+    croquis publicado y las reglas del editor (que tiene tres copias: el mapa,
+    la vista previa del menú de subir y las miniaturas). Si se separan, se
+    puede elegir una animación que no hace nada: el icono se guarda, el mapa
+    se publica y el icono se queda quieto. Sin un solo error en ninguna parte.
+    Es la peor forma de fallar, así que aquí se vigila a mano.
+
+    Y de la INTENSIDAD se comprueba lo que de verdad se puede romper en
+    silencio: que los keyframes la lean. Los keyframes son globales, así que
+    con mirarlos una vez vale. Sin el `var(--m, 1)` dentro del calc() el
+    deslizador se movería, el número se guardaría en el archivo y el icono se
+    movería siempre igual: un ajuste que no ajusta nada.
+    """
+    problemas = []
+
+    # --- 1. Las animaciones y sus reglas ------------------------------------
+    # El nombre del keyframe sale del de la animación: `vibra` -> `icVibra`.
+    # Si algún día no fuera así, lo dice la comprobación de más abajo.
+    animadas = [k for k in v.ANIMACIONES if k]
+
+    # Los sitios donde tiene que haber una regla por animación. Van uno por uno
+    # y no por número: si falta el de las miniaturas hay que poder decir cuál
+    # falta, y no «faltan dos».
+    sitios = [("mapa publicado", CROQUIS, ["#iconos .an.{a}"]),
+              ("mapa del editor", EDITOR_HTML, ["#gIconos .an.{a}"]),
+              ("vista previa del menú de subir", EDITOR_HTML,
+               ["#previoDialogo .an.{a}"]),
+              ("miniaturas", EDITOR_HTML,
+               [".palo svg .an.{a},", ".modelo svg .an.{a},", ".icono svg .an.{a}"])]
+
+    for nombre, ruta, plantillas in sitios:
+        if not ruta.is_file():
+            problemas.append(f"no existe {ruta}")
+            continue
+        css = ruta.read_text(encoding="utf-8")
+        for a in animadas:
+            for plantilla in plantillas:
+                # El selector entero, para no confundir la clase del panel con
+                # la regla del SVG, que es la única que dibuja algo.
+                if plantilla.format(a=a) not in css:
+                    problemas.append(
+                        f"en el {nombre} no hay regla para «{a}» "
+                        f"(falta `{plantilla.format(a=a)}`)")
+
+    # --- 2. Que los keyframes existan y que lean la intensidad --------------
+    css_croquis = CROQUIS.read_text(encoding="utf-8")
+    revisadas = 0
+    for a in animadas:
+        uso = re.search(r"#iconos \.an\." + re.escape(a)
+                        + r"\{[^}]*animation:\s*(\w+)", css_croquis)
+        if not uso:
+            continue          # de la regla que falta ya se ha avisado arriba
+        revisadas += 1
+        nombre_keyframe = uso.group(1)
+        cuerpo = _cuerpo_de_keyframe(css_croquis, nombre_keyframe)
+        if cuerpo is None:
+            problemas.append(
+                f"la animación «{a}» usa el keyframe «{nombre_keyframe}», que no "
+                f"está definido: el icono saldría quieto y sin avisar")
+        elif a in v.ANIMACIONES_SIN_INTENSIDAD:
+            if "var(--m" in cuerpo:
+                problemas.append(
+                    f"«{a}» está en ANIMACIONES_SIN_INTENSIDAD y su keyframe usa "
+                    f"la intensidad, que no le hace nada")
+        elif "var(--m" not in cuerpo:
+            problemas.append(
+                f"el keyframe «{nombre_keyframe}» de «{a}» no lee «var(--m)»: "
+                f"el deslizador se movería y el icono se movería siempre igual")
+
+    # Si la búsqueda de arriba no reconociera una sola regla, el bucle entero se
+    # saltaría en silencio y esta parte de la prueba daría el visto bueno sin
+    # haber mirado nada. Es exactamente el engaño en el que ya se cayó una vez
+    # aquí, con una validación que se quedó dentro de un `if` y no comprobaba
+    # nada. Por eso se cuenta y se exige que estén todas.
+    if revisadas != len(animadas):
+        problemas.append(
+            f"solo se pudieron leer {revisadas} de {len(animadas)} animaciones "
+            f"del croquis: el resto no se comprobó")
+
+    # Y que el icono se dibuje con la intensidad puesta, en un elemento del que
+    # el grupo animado la pueda heredar. En el mismo grupo también valdría, así
+    # que lo que se comprueba es que esté, no dónde exactamente.
+    for ruta in (CROQUIS, EDITOR_HTML):
+        if 'style="--m:' not in ruta.read_text(encoding="utf-8"):
+            problemas.append(
+                f"{ruta.name} no pone nunca «--m» en un icono: la intensidad no "
+                f"llegaría a los keyframes")
+    # En el editor se dibuja en tres sitios: el mapa y las dos formas de
+    # miniatura (la del menú de subir y la de la paleta, que comparten función).
+    # Contando la definición, tienen que salir al menos tres usos.
+    if EDITOR_HTML.read_text(encoding="utf-8").count("fuerzaDe(") < 3:
+        problemas.append(
+            "en editor.html «fuerzaDe» no se usa en los tres sitios donde se "
+            "dibuja un icono: el mapa y las miniaturas")
+
+    # --- 3. Los ajustes: lo que se guarda y lo que se tira ------------------
+    limpios = [
+        ({"s": 46, "a": "late", "m": 1.0, "c": 1}, {"s": 46, "a": "late"},
+         "la intensidad de fábrica no se escribe"),
+        ({"a": "vibra", "m": 1.4, "c": 0}, {"a": "vibra", "m": 1.4, "c": 0},
+         "una intensidad distinta sí se escribe"),
+        ({"m": 0.5}, {"m": 0.5}, "la intensidad sola se conserva"),
+        ({"m": ""}, {}, "una intensidad vacía se descarta"),
+        ({"m": None}, {}, "una intensidad nula se descarta"),
+    ]
+    for entrada, esperado, nota in limpios:
+        salida = v.limpiar_ajustes(dict(entrada))
+        if salida != esperado:
+            problemas.append(f"{nota}: {entrada} -> {salida}, esperaba {esperado}")
+
+    # --- 4. Lo que se rechaza ----------------------------------------------
+    # El booleano tiene que caer: en Python `True` es un número, y sin mirarlo
+    # aparte colaría como si fuera una intensidad de 1.
+    malos = [
+        ({"a": "late", "m": 0.1}, "por debajo del mínimo"),
+        ({"a": "late", "m": 2.6}, "por encima del máximo"),
+        ({"a": "late", "m": "mucho"}, "un texto en vez de un número"),
+        ({"a": "late", "m": True}, "un booleano"),
+        ({"a": "gira", "m": 1.5}, "una animación que no tiene intensidad"),
+        ({"a": "vuelta", "m": 1.5}, "una animación que no existe"),
+    ]
+    buenos = [
+        ({"a": "vibra", "m": v.MIN_INTENSIDAD}, "vibra en el mínimo"),
+        ({"a": "viento", "m": v.MAX_INTENSIDAD}, "viento en el máximo"),
+        ({"a": "vibra"}, "vibra sin intensidad, que es la de fábrica"),
+        ({"a": "gira"}, "gira sin intensidad"),
+        ({"s": 60}, "solo un tamaño"),
+    ]
+    for ajustes, nota in malos:
+        if not v.revisar_ajustes(dict(ajustes)):
+            problemas.append(f"aceptó unos ajustes con {nota}: {ajustes}")
+    for ajustes, nota in buenos:
+        salida = v.revisar_ajustes(dict(ajustes))
+        if salida:
+            problemas.append(f"rechazó unos ajustes con {nota}: {salida}")
+
+    # Y lo mismo en los iconos del mapa, que es por donde entra de verdad. Se
+    # mira el mensaje además del rechazo: si el error viniera de otro sitio
+    # (un tipo que no existe, por ejemplo) la prueba pasaría sin comprobar
+    # nada, que es justo el engaño en el que ya se cayó una vez aquí.
+    icono = {"t": "bano", "x": 300, "y": 250, "a": "vibra", "m": 1.5}
+    salida = v.revisar_iconos([dict(icono)])
+    if salida:
+        problemas.append(f"rechazó un icono con vibra al 1.5: {salida}")
+    for valor, nota in ((0.1, "una intensidad por debajo del mínimo"),
+                        ("mucho", "una intensidad que no es número"),
+                        (True, "una intensidad booleana")):
+        salida = v.revisar_iconos([dict(icono, m=valor)])
+        if not salida:
+            problemas.append(f"aceptó un icono con {nota}")
+        elif "icono 1" not in " ".join(salida):
+            problemas.append(
+                f"un icono con {nota} se rechazó, pero no por el icono: {salida}")
+    salida = v.revisar_iconos([dict(icono, a="gira")])
+    if not salida:
+        problemas.append("aceptó un icono que gira y que además lleva intensidad")
+
+    # --- 5. Lo que se escribe en el archivo --------------------------------
+    # Se llama a la función que arma los campos en vez de levantar el servidor
+    # entero: es la misma línea de código, y así la prueba no escribe nada en
+    # el croquis ni en la biblioteca.
+    campos = editor._campos_icono({"t": "bano", "x": 300, "y": 250,
+                                   "a": "vibra", "m": 1.4})
+    escrito = "{" + ", ".join(campos) + "}"
+    if '"m": 1.4' not in escrito:
+        problemas.append(f"el icono no se escribió con su intensidad: {escrito}")
+    campos = editor._campos_icono({"t": "bano", "x": 300, "y": 250,
+                                   "a": "late", "m": 1.0})
+    if '"m"' in "{" + ", ".join(campos) + "}":
+        problemas.append("se escribió la intensidad de fábrica, que es la de siempre")
+
+    # El orden importa: el archivo se lee entero de arriba abajo y `m` va entre
+    # `a` y `c`. En otro sitio costaría encontrar cada campo al editarlo a mano.
+    # El giro va con un valor de verdad: con 0 no se escribe, porque 0 es «sin
+    # girar» y no hace falta decirlo.
+    orden = [p.split(":", 1)[0].strip('"') for p in editor._campos_icono(
+        {"t": "bano", "x": 1, "y": 2, "n": "Baños", "s": 46, "r": -30,
+         "a": "vibra", "m": 2, "c": 0, "i": ["Título", "Texto"]})]
+    if orden != ["t", "x", "y", "n", "s", "r", "a", "m", "c", "i"]:
+        problemas.append(f"los campos salen en otro orden: {orden}")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print(f"    {len(animadas)} animaciones dibujadas y con su keyframe, y la "
+          f"intensidad de {v.MIN_INTENSIDAD} a {v.MAX_INTENSIDAD} leída por los "
+          f"keyframes y rechazada donde no vale")
     return True
 
 
@@ -1372,6 +1604,7 @@ def main() -> int:
         ("los svg se limpian y no se pixelan", test_los_svg_se_limpian_y_no_se_pixelan),
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
+        ("animaciones e intensidad", test_animaciones_e_intensidad),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),

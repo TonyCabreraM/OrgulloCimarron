@@ -109,6 +109,12 @@ select{
        color:var(--texto);margin:0;cursor:pointer}
 .marca input{width:16px;height:16px;accent-color:var(--verde);cursor:pointer;margin:0}
 .campo + .campo{margin-top:9px}
+/* Un campo que no aplica (la intensidad con una animación que no la usa) se
+   apaga entero, etiqueta incluida. Solo bajar la opacidad del deslizador
+   dejaria el texto a plena tinta y pareceria que sigue activo. */
+.campo.apagado{opacity:.45}
+.campo.apagado label,.campo.apagado .pista{cursor:default}
+input[type=range]:disabled{cursor:not-allowed}
 
 /* lista de zonas */
 #listaZonas{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}
@@ -233,6 +239,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 #previoDialogo .an.gira{animation:icGira 14s linear infinite}
 #previoDialogo .an.brilla{animation:icBrilla 2.6s ease-in-out infinite}
 #previoDialogo .an.ondas{animation:icOndas 2.6s ease-out infinite}
+#previoDialogo .an.vibra{animation:icVibra .22s linear infinite}
+#previoDialogo .an.viento{animation:icViento 3.4s ease-in-out infinite}
 #previoDialogo .onda{fill:none;stroke:var(--verde);stroke-width:1.6;
                      stroke-opacity:.9}
 #nombreDialogo{font-size:10.5px;color:var(--tenue);text-align:center;
@@ -324,6 +332,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 #gIconos .an.gira{animation:icGira 14s linear infinite}
 #gIconos .an.brilla{animation:icBrilla 2.6s ease-in-out infinite}
 #gIconos .an.ondas{animation:icOndas 2.6s ease-out infinite}
+#gIconos .an.vibra{animation:icVibra .22s linear infinite}
+#gIconos .an.viento{animation:icViento 3.4s ease-in-out infinite}
 #gIconos .onda{fill:none;stroke:var(--verde);stroke-width:1.6;stroke-opacity:.9;
                vector-effect:non-scaling-stroke}
 /* Igual que en el croquis publicado: sin circulo, el trazo lleva un halo
@@ -355,15 +365,69 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
   animation:icBrilla 2.6s ease-in-out infinite}
 .palo svg .an.ondas,.modelo svg .an.ondas,.icono svg .an.ondas{
   animation:icOndas 2.6s ease-out infinite}
-@keyframes icLate{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
-@keyframes icFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+.palo svg .an.vibra,.modelo svg .an.vibra,.icono svg .an.vibra{
+  animation:icVibra .22s linear infinite}
+.palo svg .an.viento,.modelo svg .an.viento,.icono svg .an.viento{
+  animation:icViento 3.4s ease-in-out infinite}
+
+/* --- Las animaciones -------------------------------------------------------
+   Las mismas que las del croquis publicado, y a proposito: son globales, asi
+   que una sola copia sirve para el mapa, la vista previa del dialogo y las
+   miniaturas. Si se cambia aqui, cambia en los tres sitios a la vez y no
+   pueden quedar distintas.
+
+   La INTENSIDAD va en la variable `--m` de cada icono. Dentro de un calc()
+   sirve para que la misma animacion mueva mucho o poco segun el icono, sin
+   duplicar los keyframes por cada fuerza. */
+@keyframes icLate{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(calc(1 + .1 * var(--m, 1)))}}
+@keyframes icFlota{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(calc(-1.6px * var(--m, 1)))}}
+/* Da una vuelta completa: no tiene intensidad, no hay nada que ampliar. */
 @keyframes icGira{to{transform:rotate(360deg)}}
-@keyframes icBrilla{0%,100%{opacity:1}50%{opacity:.42}}
+/* La opacidad la recorta el navegador al rango 0..1, asi que de mas de 1.7
+   hacia arriba ya no cambia nada. */
+@keyframes icBrilla{
+  0%,100%{opacity:1}
+  50%{opacity:calc(1 - .58 * var(--m, 1))}}
 @keyframes icOndas{
   0%{transform:scale(1);opacity:.55}
-  70%{transform:scale(1.9);opacity:0}
-  100%{transform:scale(1.9);opacity:0}}
-@media (prefers-reduced-motion:reduce){#gIconos .an{animation:none}}
+  70%{transform:scale(calc(1 + .9 * var(--m, 1)));opacity:0}
+  100%{transform:scale(calc(1 + .9 * var(--m, 1)));opacity:0}}
+/* Temblor: pasos cortos y en diagonal, cada uno hacia un lado distinto. */
+@keyframes icVibra{
+  0%,100%{transform:translate(0,0) rotate(0)}
+  12%{transform:translate(calc(-.5px * var(--m, 1)),calc(.15px * var(--m, 1)))
+     rotate(calc(-1deg * var(--m, 1)))}
+  25%{transform:translate(calc(.45px * var(--m, 1)),calc(-.2px * var(--m, 1)))
+     rotate(calc(.9deg * var(--m, 1)))}
+  37%{transform:translate(calc(-.35px * var(--m, 1)),calc(-.15px * var(--m, 1)))
+     rotate(calc(-.7deg * var(--m, 1)))}
+  50%{transform:translate(calc(.5px * var(--m, 1)),calc(.2px * var(--m, 1)))
+     rotate(calc(1.1deg * var(--m, 1)))}
+  62%{transform:translate(calc(-.4px * var(--m, 1)),calc(.1px * var(--m, 1)))
+     rotate(calc(-.9deg * var(--m, 1)))}
+  75%{transform:translate(calc(.3px * var(--m, 1)),calc(-.1px * var(--m, 1)))
+     rotate(calc(.6deg * var(--m, 1)))}
+  87%{transform:translate(calc(-.45px * var(--m, 1)),calc(.15px * var(--m, 1)))
+     rotate(calc(-1.1deg * var(--m, 1)))}}
+/* Viento: se inclina hacia un lado y vuelve, con una racha mas fuerte despues.
+   Los tiempos no son simetricos a proposito; una racha pareja se lee como un
+   mecanismo y no como aire. */
+@keyframes icViento{
+  0%,100%{transform:rotate(0) translateX(0)}
+  18%{transform:rotate(calc(3.5deg * var(--m, 1)))
+     translateX(calc(.7px * var(--m, 1)))}
+  42%{transform:rotate(calc(1.2deg * var(--m, 1)))
+     translateX(calc(.25px * var(--m, 1)))}
+  66%{transform:rotate(calc(5deg * var(--m, 1)))
+     translateX(calc(1px * var(--m, 1)))}
+  84%{transform:rotate(calc(2deg * var(--m, 1)))
+     translateX(calc(.4px * var(--m, 1)))}}
+/* Aqui no se quitan las animaciones al reducir el movimiento: en el editor son
+   la vista previa, y sin ellas no habria forma de elegir cual queda mejor. */
 #gAyudas{pointer-events:none}
 #gAyudas text{
   fill:var(--tinta);font-weight:700;font-family:system-ui,sans-serif;
@@ -495,6 +559,14 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <label for="fAnim">Animación</label>
         <select id="fAnim"></select>
       </div>
+      <div class="campo" id="campoIntensidad">
+        <label for="fInt">Intensidad del movimiento · <b id="vInt">1.0</b></label>
+        <input type="range" id="fInt" min="0.2" max="2.5" step="0.1" value="1">
+        <div class="pista" id="pistaInt">
+          Cuánto se mueve, no a qué velocidad. Con 0.2 apenas se nota y con
+          2.5 el movimiento se ve desde lejos.
+        </div>
+      </div>
       <div class="campo">
         <label class="marca" for="fAro">
           <input type="checkbox" id="fAro" checked>
@@ -584,6 +656,10 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
           <label for="dAnim">Animación</label>
           <select id="dAnim"></select>
         </div>
+        <div class="campo" id="campoDIntensidad">
+          <label for="dInt">Intensidad del movimiento · <b id="vDInt">1.0</b></label>
+          <input type="range" id="dInt" min="0.2" max="2.5" step="0.1" value="1">
+        </div>
         <div class="campo">
           <label class="marca" for="dAro">
             <input type="checkbox" id="dAro" checked>
@@ -608,10 +684,11 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 // datos se desincronicen.
 // ---------------------------------------------------------------------------
 var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [],
-         biblioteca: [], modelos: [], animaciones: {},
+         biblioteca: [], modelos: [], animaciones: {}, sinIntensidad: [],
          // Los ajustes con los que se subio cada icono propio: tamano,
-         // animacion y circulo. Es lo que hace que al ponerlo en el mapa salga
-         // como se dejo. Lo manda el servidor, que los guarda al lado del PNG.
+         // animacion, intensidad y circulo. Es lo que hace que al ponerlo en el
+         // mapa salga como se dejo. Lo manda el servidor, que los guarda al
+         // lado del PNG.
          ajustesPropios: {},
          // Cuales de esos iconos son vectores. Un SVG no se pixela al
          // ampliarlo y un PNG si, asi que conviene saberlo al elegir con cual
@@ -654,6 +731,8 @@ var s = document.getElementById("s"),
     fTamNuevo = document.getElementById("fTamNuevo"),
     fRot = document.getElementById("fRot"),
     fAnim = document.getElementById("fAnim"),
+    fInt = document.getElementById("fInt"),
+    campoIntensidad = document.getElementById("campoIntensidad"),
     fEtiqueta = document.getElementById("fEtiqueta"),
     fInfoTitulo = document.getElementById("fInfoTitulo"),
     fInfoTexto = document.getElementById("fInfoTexto"),
@@ -667,6 +746,8 @@ var s = document.getElementById("s"),
     dNombre = document.getElementById("dNombre"),
     dTam = document.getElementById("dTam"),
     dAnim = document.getElementById("dAnim"),
+    dInt = document.getElementById("dInt"),
+    campoDIntensidad = document.getElementById("campoDIntensidad"),
     dAro = document.getElementById("dAro");
 
 // La imagen que se acaba de elegir y todavia no se ha aceptado, como data URL.
@@ -714,6 +795,28 @@ function nombreDe(tipo) { return E.simbolos[tipo] || tipo; }
 // porque 0 es un valor legítimo y un `if (!ic.c)` lo tomaría por ausencia.
 function conAroDe(ic) { return !("c" in ic) || !!ic.c; }
 function rotDe(ic) { return ic.r || 0; }
+
+// La intensidad del movimiento, como atributo suelto para el grupo de fuera.
+//
+// Va en el grupo de FUERA y no en el animado: un `style` que solo pone una
+// variable no pisa el `transform` del elemento que lo lleva, y desde ahi se
+// hereda hacia dentro, que es donde lo leen los keyframes. Ponerlo en el
+// grupo animado tambien funcionaria, pero este es el que ya se construye en
+// los tres sitios y no hay que tocar el dibujo.
+//
+// Se omite cuando vale 1, que es lo de siempre, para no llenar de atributos el
+// mapa que se publica.
+function fuerzaDe(ic) {
+  return (typeof ic.m === "number" && ic.m !== 1) ? ' style="--m:' + ic.m + '"' : "";
+}
+
+// La intensidad que tiene un icono, con la de fabrica si no lleva ninguna.
+function intDe(ic) { return typeof ic.m === "number" ? ic.m : 1; }
+
+// Las animaciones que no tienen intensidad que ajustar, porque dan una vuelta
+// completa y no hay nada que ampliar. Las manda el servidor junto con la lista
+// de animaciones: dos listas separadas acabarian diciendo cosas distintas.
+function sinIntensidad(anim) { return E.sinIntensidad.indexOf(anim || "") >= 0; }
 
 // El dibujo de un icono: o la forma del simbolo, o la imagen propia. Se usa en
 // el mapa, en la paleta, en las listas y en los modelos, para que lo que se
@@ -766,8 +869,10 @@ function contenidoMiniatura(ic, hrefPropio) {
   var clase = "an" + (ic.a ? " " + ic.a : "");
   var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
   // El giro va en un grupo propio para no pisar el del tamaño, igual que en el
-  // mapa: el giro tiene que ser lo último.
-  return "<g" + (ic.r ? ' transform="rotate(' + ic.r + ')"' : "") + ">"
+  // mapa: el giro tiene que ser lo último. Y la intensidad va en ese mismo
+  // grupo de fuera, que es de donde la hereda el de la animación.
+  return "<g" + (ic.r ? ' transform="rotate(' + ic.r + ')"' : "")
+       + fuerzaDe(ic) + ">"
        + (conAro ? '<circle class="aro" r="13.4"/>' : "")
        + '<g class="' + clase + '">' + ondas + forma + "</g></g>";
 }
@@ -965,7 +1070,7 @@ function dibuja() {
     // atributo, el navegador se traga la etiqueta entera y el icono no sale.
     // Es justo el fallo que documenta el README del croquis.
     return '<g class="' + clases.join(" ") + '" data-icono="' + k
-         + '" transform="' + transformDe(ic) + '"><title>'
+         + '" transform="' + transformDe(ic) + '"' + fuerzaDe(ic) + '><title>'
          + escapa(ic.n || nombreDe(ic.t)) + "</title>"
          + (conAro ? '<circle class="aro" r="13.4"/>' : "") + dentro + "</g>";
   }).join("");
@@ -1050,6 +1155,10 @@ function pintaPanel(mal) {
     if (document.activeElement !== fRot) fRot.value = rot;
     document.getElementById("vRot").textContent = rot + "°";
     if (document.activeElement !== fAnim) fAnim.value = ic.a || "";
+    if (document.activeElement !== fInt) fInt.value = intDe(ic);
+    document.getElementById("vInt").textContent = intDe(ic).toFixed(1);
+    refrescaIntensidad(ic.a, campoIntensidad, fInt,
+                       document.getElementById("pistaInt"));
     if (document.activeElement !== fEtiqueta) fEtiqueta.value = ic.n || "";
     fAro.checked = conAroDe(ic);
     if (document.activeElement !== fInfoTitulo) fInfoTitulo.value = ic.i ? ic.i[0] : "";
@@ -1480,7 +1589,7 @@ function pintaModelos() {
   listaModelos.innerHTML = E.modelos.map(function (m, k) {
     var ic = m.i || {};
     var nota = [];
-    if (ic.a) nota.push(ic.a);
+    if (ic.a) nota.push(ic.a + (ic.m ? " ×" + ic.m : ""));
     if (ic.r) nota.push(Math.round(ic.r) + "°");
     if (ic.s) nota.push(Math.round(ic.s));
     if (ic.i) nota.push("info");
@@ -1633,6 +1742,7 @@ function abrirDialogo(datosUrl, nombreArchivo) {
   // círculo, que es lo de siempre.
   dTam.value = +fTamNuevo.value;
   dAnim.value = "";
+  dInt.value = 1;
   dAro.checked = true;
   pintaPrevio();
   DIA.hidden = false;
@@ -1650,12 +1760,16 @@ function cerrarDialogo() {
 }
 
 // Los ajustes que salen del menú, en el formato que entiende el servidor.
+// La intensidad solo se pone si hay animación que la use: con `gira` el
+// servidor la rechaza, y sin ninguna animación no significa nada.
 function ajustesDelDialogo() {
-  return {
+  var aj = {
     s: +dTam.value,
     a: dAnim.value || "",
     c: dAro.checked ? 1 : 0
   };
+  if (aj.a && !sinIntensidad(aj.a) && +dInt.value !== 1) aj.m = +dInt.value;
+  return aj;
 }
 
 // La vista previa: la imagen de verdad con su recorte, su círculo y su
@@ -1667,6 +1781,8 @@ function pintaPrevio() {
   PREVIO.setAttribute("class", dAro.checked ? "" : "sinAro");
   PREVIO.innerHTML = contenidoMiniatura(ic, imagenPendiente);
   document.getElementById("vDTam").textContent = dTam.value;
+  document.getElementById("vDInt").textContent = (+dInt.value).toFixed(1);
+  refrescaIntensidad(dAnim.value, campoDIntensidad, dInt, null);
   document.getElementById("nombreDialogo").textContent =
     dNombre.value || "(sin nombre)";
 }
@@ -1675,6 +1791,7 @@ function pintaPrevio() {
 // los desplegables en `change` (al soltar). Escuchar el evento que no toca
 // deja la vista previa sin actualizar hasta que se toque otra cosa.
 dTam.addEventListener("input", pintaPrevio);
+dInt.addEventListener("input", pintaPrevio);
 [dAnim, dAro].forEach(function (c) { c.addEventListener("change", pintaPrevio) });
 dNombre.addEventListener("input", function () {
   document.getElementById("nombreDialogo").textContent = dNombre.value || "(sin nombre)";
@@ -1729,9 +1846,27 @@ document.getElementById("btnAceptarDialogo").addEventListener("click", function 
 function describeAjustes(ajustes) {
   var partes = [];
   if (ajustes.s && ajustes.s !== TAM_ICONO) partes.push("tamaño " + ajustes.s);
-  if (ajustes.a) partes.push(ajustes.a);
+  if (ajustes.a) partes.push(ajustes.a + (ajustes.m ? " al " + ajustes.m : ""));
   if (ajustes.c === 0) partes.push("sin círculo");
   return partes.length ? partes.join(", ") : "los valores de siempre";
+}
+
+// Deja el control de la intensidad como toque: el campo apagado cuando la
+// animación elegida no la usa, con una pista que diga por que. Un deslizador
+// que se puede arrastrar pero no hace nada es peor que no tenerlo: parece que
+// el mapa está roto. El valor que tuviera NO se borra de aquí; de eso se
+// encarga quien cambia la animación, que es el único que sabe si toca.
+function refrescaIntensidad(anim, campo, control, pista) {
+  var apagada = sinIntensidad(anim);
+  campo.classList.toggle("apagado", apagada);
+  control.disabled = apagada;
+  if (pista) {
+    pista.textContent = apagada
+      ? "Esta animación da una vuelta completa: no hay movimiento que ampliar "
+        + "ni que reducir."
+      : "Cuánto se mueve, no a qué velocidad. Con 0.2 apenas se nota y con 2.5 "
+        + "el movimiento se ve desde lejos.";
+  }
 }
 
 // El botón de aceptar se apaga mientras se prepara la imagen: son unos cientos
@@ -1946,6 +2081,19 @@ fAnim.addEventListener("change", function () {
   tocaIcono(function (ic) {
     if (fAnim.value) ic.a = fAnim.value;
     else delete ic.a;
+    // Al pasar a una animación que da una vuelta completa se quita la
+    // intensidad: no le hace nada y el servidor la rechaza por eso mismo.
+    // Dejarla escondida en el icono seria un error de guardado sin pista.
+    if (sinIntensidad(ic.a)) delete ic.m;
+  });
+});
+// La intensidad es cuanto se mueve, no a que velocidad: el keyframe usa el
+// valor dentro de un calc(), asi que la misma animacion sirve para todos.
+fInt.addEventListener("input", function () {
+  document.getElementById("vInt").textContent = (+fInt.value).toFixed(1);
+  tocaIcono(function (ic) {
+    if (+fInt.value === 1) delete ic.m;
+    else ic.m = +fInt.value;
   });
 });
 fEtiqueta.addEventListener("input", function () {
@@ -2117,14 +2265,21 @@ fetch("/api/estado").then(function (r) {
   var r = (E.topes && E.topes.rot) || [-180, 180];
   ROT_MIN = r[0]; ROT_MAX = r[1];
   fRot.min = r[0]; fRot.max = r[1];
+  // Y la intensidad: el rango lo decide el servidor, que es quien lo valida.
+  var in_ = (E.topes && E.topes.inte) || [0.2, 2.5];
+  [fInt, dInt].forEach(function (c) { c.min = in_[0]; c.max = in_[1] });
   if (E.topes) { TIT_MAX = E.topes.titulo || 60; TEX_MAX = E.topes.texto || 600 }
   fInfoTitulo.maxLength = TIT_MAX;
   // Las animaciones las manda el servidor, que es quien las valida: si la
   // lista de aqui se moviera aparte, se podria elegir una que luego rechaza.
   // Son las mismas opciones en el panel y en el menú de subir, que se llenan
-  // de la misma lista para que no puedan separarse.
+  // de la misma lista para que no puedan separarse. Lo mismo con las que no
+  // tienen intensidad, que van marcadas en el desplegable: asi se ve antes de
+  // elegirla que esa no la usa, en vez de descubrirlo con el control apagado.
   var opciones = Object.keys(E.animaciones).map(function (k) {
-    return '<option value="' + escapa(k) + '">' + escapa(E.animaciones[k]) + "</option>";
+    var nota = sinIntensidad(k) ? " · sin intensidad" : "";
+    return '<option value="' + escapa(k) + '">' + escapa(E.animaciones[k] + nota)
+         + "</option>";
   }).join("");
   fAnim.innerHTML = opciones;
   dAnim.innerHTML = opciones;

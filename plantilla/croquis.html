@@ -103,21 +103,78 @@ body{
    Se mueven transform y opacidad, que el navegador compone sin repintar, y
    son suaves a proposito: esto es un mapa, no un anuncio. `transform-box` y
    `transform-origin` hacen que giren y latan sobre su propio centro (el 0,0
-   donde estan dibujados) y no sobre la esquina de la hoja. */
+   donde estan dibujados) y no sobre la esquina de la hoja.
+
+   La INTENSIDAD va en la variable `--m`, que cada icono lleva puesta en su
+   <g> de fuera (por defecto 1). Los keyframes la usan dentro de un calc(), asi
+   que la misma animacion sirve para todos y cada uno se mueve lo suyo sin
+   duplicar reglas. La variable se hereda, asi que ponerla en el <g> de fuera
+   basta; y ahi es seguro porque un `style` con solo una variable no toca el
+   atributo `transform` que lleva ese mismo elemento. */
 #iconos .an{transform-box:fill-box;transform-origin:center}
 #iconos .an.late{animation:icLate 2.4s ease-in-out infinite}
 #iconos .an.flota{animation:icFlota 3.2s ease-in-out infinite}
 #iconos .an.gira{animation:icGira 14s linear infinite}
 #iconos .an.brilla{animation:icBrilla 2.6s ease-in-out infinite}
 #iconos .an.ondas{animation:icOndas 2.6s ease-out infinite}
-@keyframes icLate{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
-@keyframes icFlota{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+/* Vibra y viento van mas rapido que las otras a proposito: son las dos que
+   imitan algo que se mueve solo, y a camara lenta no se reconocen. */
+#iconos .an.vibra{animation:icVibra .22s linear infinite}
+#iconos .an.viento{animation:icViento 3.4s ease-in-out infinite}
+
+/* Un latido: crece y vuelve. */
+@keyframes icLate{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(calc(1 + .1 * var(--m, 1)))}}
+/* Sube y baja despacio. */
+@keyframes icFlota{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(calc(-1.6px * var(--m, 1)))}}
+/* Una vuelta completa. No tiene intensidad: no hay nada que ampliar, asi que
+   el editor no ofrece el control para esta. */
 @keyframes icGira{to{transform:rotate(360deg)}}
-@keyframes icBrilla{0%,100%{opacity:1}50%{opacity:.42}}
+/* Aparece y desaparece. La opacidad la recorta el navegador al rango 0..1 por
+   su cuenta, asi que con intensidad alta se queda en 0 un momento y ya esta. */
+@keyframes icBrilla{
+  0%,100%{opacity:1}
+  50%{opacity:calc(1 - .58 * var(--m, 1))}}
+/* Un anillo que se expande desde el icono y se desvanece, como un radar. La
+   intensidad decide hasta donde llega: con poca, el anillo apenas asoma. */
 @keyframes icOndas{
   0%{transform:scale(1);opacity:.55}
-  70%{transform:scale(1.9);opacity:0}
-  100%{transform:scale(1.9);opacity:0}}
+  70%{transform:scale(calc(1 + .9 * var(--m, 1)));opacity:0}
+  100%{transform:scale(calc(1 + .9 * var(--m, 1)));opacity:0}}
+/* Temblor: va y viene muy rapido y en diagonal, con un giro minimo. Cada paso
+   empuja hacia un lado distinto para que no se lea como un balanceo. */
+@keyframes icVibra{
+  0%,100%{transform:translate(0,0) rotate(0)}
+  12%{transform:translate(calc(-.5px * var(--m, 1)),calc(.15px * var(--m, 1)))
+     rotate(calc(-1deg * var(--m, 1)))}
+  25%{transform:translate(calc(.45px * var(--m, 1)),calc(-.2px * var(--m, 1)))
+     rotate(calc(.9deg * var(--m, 1)))}
+  37%{transform:translate(calc(-.35px * var(--m, 1)),calc(-.15px * var(--m, 1)))
+     rotate(calc(-.7deg * var(--m, 1)))}
+  50%{transform:translate(calc(.5px * var(--m, 1)),calc(.2px * var(--m, 1)))
+     rotate(calc(1.1deg * var(--m, 1)))}
+  62%{transform:translate(calc(-.4px * var(--m, 1)),calc(.1px * var(--m, 1)))
+     rotate(calc(-.9deg * var(--m, 1)))}
+  75%{transform:translate(calc(.3px * var(--m, 1)),calc(-.1px * var(--m, 1)))
+     rotate(calc(.6deg * var(--m, 1)))}
+  87%{transform:translate(calc(-.45px * var(--m, 1)),calc(.15px * var(--m, 1)))
+     rotate(calc(-1.1deg * var(--m, 1)))}}
+/* Viento: se inclina hacia un lado y vuelve, con una racha mas fuerte despues.
+   Los tiempos no son simetricos a proposito; una racha pareja se lee como un
+   mecanismo y no como aire. */
+@keyframes icViento{
+  0%,100%{transform:rotate(0) translateX(0)}
+  18%{transform:rotate(calc(3.5deg * var(--m, 1)))
+     translateX(calc(.7px * var(--m, 1)))}
+  42%{transform:rotate(calc(1.2deg * var(--m, 1)))
+     translateX(calc(.25px * var(--m, 1)))}
+  66%{transform:rotate(calc(5deg * var(--m, 1)))
+     translateX(calc(1px * var(--m, 1)))}
+  84%{transform:rotate(calc(2deg * var(--m, 1)))
+     translateX(calc(.4px * var(--m, 1)))}}
 
 /* El anillo que se expande en las ondas. Va con el trazo del color de la
    tinta y sin relleno, para que se lea como una onda y no como un aro solido. */
@@ -619,10 +676,14 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
   var clases = "ic" + (conAro ? "" : " sinAro") + (ic.i ? " conInfo" : "");
   var caja = ic.i ? ' class="' + clases + '" data-info="' + k + '"'
                   : ' class="' + clases + '"';
+  // La intensidad del movimiento va en un `style` con solo la variable, para
+  // que no pise el atributo `transform` de este mismo elemento, que es el que
+  // pone el icono en su sitio. Se omite cuando vale 1, que es lo normal.
+  var fuerza = (ic.m && ic.m !== 1) ? ' style="--m:' + ic.m + '"' : "";
   // La comilla que cierra el transform va al principio del ultimo trozo. Es
   // facil dejarla fuera (paso dos veces) y el navegador se traga la etiqueta
   // entera: el icono desaparece y solo sale un aviso en la consola.
-  return "<g" + caja + ' transform="translate(' + ic.x + "," + ic.y
+  return "<g" + caja + fuerza + ' transform="translate(' + ic.x + "," + ic.y
        + ") scale(" + ((ic.s || TAM_ICONO) / 24) + ")"
        + (ic.r ? " rotate(" + ic.r + ")" : "") + '"><title>'
        + escapa(ic.n || nombreDe(ic.t)) + "</title>"

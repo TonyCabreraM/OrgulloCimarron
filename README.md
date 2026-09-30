@@ -443,7 +443,7 @@ array de objetos, uno por icono:
 /* === INICIO ICONOS === */
 var ICONOS = [
   {"t": "bano", "x": 300, "y": 250, "n": "Baños junto al escenario", "i": ["Baños", "Los baños están junto al escenario."]},
-  {"t": "estrella", "x": 500, "y": 400, "n": "Punto de interés", "s": 70, "r": -15, "a": "late"}
+  {"t": "estrella", "x": 500, "y": 400, "n": "Punto de interés", "s": 70, "r": -15, "a": "viento", "m": 1.6}
 ];
 /* === FIN ICONOS === */
 ```
@@ -456,6 +456,7 @@ var ICONOS = [
 | `s` | Lo que mide, de 16 a 160 unidades | No, 46 |
 | `r` | El giro, en grados | No, 0 |
 | `a` | La animación | No, ninguna |
+| `m` | La intensidad del movimiento, de 0.2 a 2.5 | No, 1 |
 | `c` | `0` para quitarle el círculo de fondo | No, lo lleva |
 | `i` | `[título, texto]`: la ventana que sale al pulsarlo | No, y sin esto no se puede pulsar |
 
@@ -496,14 +497,15 @@ cambio de un trozo mínimo de zona se puede consultar algo.
 ### Los modelos
 
 Un **modelo** es un icono guardado entero —tipo, tamaño, giro, animación,
-círculo e información— menos la posición. Se guarda desde el panel con
-**Guardar como modelo**, aparece en la caja **Modelos** y al pulsarlo cada clic
-en el mapa pone uno igual.
+intensidad, círculo e información— menos la posición. Se guarda desde el panel
+con **Guardar como modelo**, aparece en la caja **Modelos** y al pulsarlo cada
+clic en el mapa pone uno igual.
 
 Es lo que hace que poner veinte puestos de comida iguales sean veinte clics y no
 veinte veces de configurarlos a mano. En la lista se ve la miniatura con su
 tamaño, su giro, su animación y su círculo de verdad, y debajo una nota corta
-(`late · 70 · sin aro · info`) para saber qué lleva cada uno sin abrirlo.
+(`late · 70 · sin aro · info`, o `viento ×1.6`) para saber qué lleva cada uno
+sin abrirlo.
 
 Guardar con un nombre que ya existe **reemplaza** en vez de acumular: al volver
 a guardar «Puesto de comida», el de antes pasa a ser el de ahora. Si se
@@ -550,16 +552,18 @@ detrás.
 
 ### Las animaciones
 
-Hay cinco, y todas se mueven con `transform` y `opacidad`, que el navegador
+Hay siete, y todas se mueven con `transform` y `opacidad`, que el navegador
 compone sin repintar. Son suaves a propósito: esto es un mapa, no un anuncio.
 
-| Nombre | Qué hace |
-| --- | --- |
-| `late` | El icono crece y vuelve, como un latido |
-| `flota` | Sube y baja despacio |
-| `gira` | Da vueltas despacio |
-| `brilla` | Aparece y desaparece |
-| `ondas` | Un anillo que se expande y se desvanece, como un radar |
+| Nombre | Qué hace | ¿Intensidad? |
+| --- | --- | --- |
+| `late` | El icono crece y vuelve, como un latido | Sí |
+| `flota` | Sube y baja despacio | Sí |
+| `gira` | Da vueltas despacio | No |
+| `brilla` | Aparece y desaparece | Sí |
+| `ondas` | Un anillo que se expande y se desvanece, como un radar | Sí |
+| `vibra` | Tiembla, en diagonal y muy rápido | Sí |
+| `viento` | Se inclina hacia un lado y vuelve, con una racha más fuerte después | Sí |
 
 **Se aplican a un `<g>` interior, nunca al que lleva la posición.** En SVG el
 `transform` de CSS pisa al atributo `transform`, así que animar el grupo de
@@ -567,8 +571,48 @@ fuera borraría el `translate` que pone el icono en su sitio y todos se
 apilarían en la esquina. Ese grupo interior lleva `transform-box: fill-box` y
 `transform-origin: center` para que giren y latan sobre su propio centro.
 
+**`vibra` y `viento` van más rápidas que las otras a propósito** (0.22 s y
+3.4 s). Son las dos que imitan algo que se mueve solo, y a cámara lenta no se
+reconocen: un temblor lento se lee como un fallo de dibujo y un viento lento
+como un balanceo. El viento, además, tiene los tiempos desiguales —18 %, 42 %,
+66 %, 84 %— porque una racha pareja se lee como un mecanismo.
+
 Si el sistema pide menos movimiento (`prefers-reduced-motion`), se quedan
 quietos.
+
+### La intensidad
+
+La clave `m` dice **cuánto** se mueve un icono, no a qué velocidad. Va de 0.2
+a 2.5 y por defecto es 1, que es el movimiento que estaba de antes de que esto
+existiera. Se elige con el deslizador **Intensidad del movimiento**, justo
+debajo del de la animación, en el panel y en el menú de subir una imagen.
+
+El valor no se copia en cada `@keyframes`: viaja en una **variable CSS**
+(`--m`) que cada icono lleva puesta en su grupo de fuera, y los keyframes la
+leen dentro de un `calc()`.
+
+```css
+@keyframes icFlota{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(calc(-1.6px * var(--m, 1)))}}
+```
+
+Así hay **una sola copia de cada animación** para los veintisiete iconos del
+mapa, la paleta, los modelos y la vista previa del menú de subir. Con una copia
+por intensidad serían siete animaciones por cada valor posible, y la primera
+que alguien tocara se quedaría distinta de las demás.
+
+**La variable va en el grupo de fuera, no en el que se anima.** Un `style`
+que solo pone una variable no toca el atributo `transform` de ese mismo
+elemento, así que ahí es donde no estorba; y como las variables se heredan,
+el grupo animado la lee igual. Se omite cuando vale 1: los iconos que no la
+tocan no llenan el archivo de repetir lo de siempre.
+
+**`gira` no tiene intensidad y el servidor la rechaza si se la pones.** Da una
+vuelta completa: no hay nada que ampliar ni que reducir. Para que nadie se
+tropiece con eso, el desplegable la marca como «sin intensidad», el panel apaga
+el control con una explicación, y al elegirla se borra la `m` que tuviera el
+icono, en vez de dejarla escondida para que reviente al guardar.
 
 ### Los iconos propios
 
@@ -674,7 +718,7 @@ declaración en vez de quitarle el prefijo, que sería reescribir el dibujo.
 
 Cada imagen que se sube se guarda también en `editor/iconos/`, ya preparada
 —el PNG recortado y reducido, o el SVG limpiado— **junto a un JSON con sus
-ajustes**: el tamaño, la animación y si lleva círculo. Esa carpeta está fuera de
+ajustes**: el tamaño, la animación, la intensidad y si lleva círculo. Esa carpeta está fuera de
 git y es la despensa del editor: al quitar un icono propio del croquis, la
 imagen **no se pierde**, baja a la lista **Guardados** y se vuelve a poner con un
 clic, sin tener que buscarla otra vez en el disco y **con los mismos ajustes con
@@ -768,12 +812,12 @@ interfaz es un HTML suelto.
 | Poner un icono | Arrastrarlo de la paleta al mapa, o pulsarlo y hacer clic |
 | Ajustar su tamaño | El deslizador **Tamaño**; los nuevos salen con el que diga **Tamaño de los nuevos** |
 | Girarlo | El deslizador **Giro**, o los botones de ±15° y ±90° |
-| Animarlo | El desplegable **Animación** |
+| Animarlo | El desplegable **Animación** y, si la que se elige la usa, **Intensidad del movimiento** |
 | Quitarle el círculo | La casilla **Con círculo de fondo** |
 | Ponerle información | Los campos de **Información que sale al pulsarlo**; si se dejan vacíos, el icono no se puede pulsar |
 | Guardar el icono entero | **Guardar como modelo** |
 | Poner varios iguales | Pulsar el modelo en **Modelos** y hacer clic en el mapa todas las veces que haga falta |
-| Crear un icono propio | **Subir una imagen…**: se abre el menú donde se elige tamaño, animación y círculo. Vale PNG, JPG, WebP, GIF, BMP o **SVG** |
+| Crear un icono propio | **Subir una imagen…**: se abre el menú donde se elige tamaño, animación, intensidad y círculo. Vale PNG, JPG, WebP, GIF, BMP o **SVG** |
 | Borrar iconos | Ver **Borrar iconos**, más arriba |
 | Deshacer un borrado | `Ctrl+Z` |
 | Volver a poner uno guardado | Pulsarlo en **Guardados** |
@@ -946,6 +990,18 @@ croquis o la página base:
 - **`0` no es «no está».** El círculo se apaga con `"c": 0`, así que hay que
   comprobarlo con `"c" in ic` y nunca con `if ic.get("c")`, que tomaría el cero
   por ausencia y dejaría el círculo puesto. Lo mismo al leerlo en el croquis.
+- **Una variable CSS sí funciona dentro de un `@keyframes`.** Lo natural es
+  pensar que no, porque en un keyframe no hay cascada que valga; pero el
+  `calc()` se resuelve con el valor que la variable tiene **en ese elemento**,
+  y como las variables se heredan, basta con ponerla en un grupo de fuera.
+  Comprobado midiendo: el mismo keyframe da 0.32 px de recorrido con `--m: 0.5`,
+  0.64 px con 1 y 1.27 px con 2. Sin eso habría que duplicar los siete
+  keyframes por cada valor de intensidad.
+- **Un `style` que solo pone una variable no pisa el `transform`.** Es la razón
+  de que la intensidad pueda ir en el mismo grupo que lleva la posición: el
+  atributo `transform` y la propiedad `--m` no se estorban. Poner `style`
+  también con `transform` sí borraría la posición, que es el fallo clásico de
+  este mapa.
 - **Una prueba que escribe archivos tiene que apuntar a una carpeta temporal.**
   Las de la biblioteca y los modelos usan `tempfile` y restauran la constante
   en un `finally`. Una que escribía en `editor/iconos/` de verdad pisó una
