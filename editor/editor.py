@@ -84,7 +84,9 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     MIN_TAM_ICONO,
     NOMBRE_PROPIO,
     SIMBOLOS,
+    limpiar_ajustes,
     revisar,
+    revisar_ajustes,
     revisar_modelos,
 )
 
@@ -372,16 +374,40 @@ def preparar_icono(datos_url: str, nombre: str, ocupados: set,
     return _nombre_libre(nombre, ocupados), salida, png
 
 
-def guarda_en_biblioteca(nombre: str, png: bytes) -> None:
-    """Deja el PNG preparado en la biblioteca del editor.
+def guarda_en_biblioteca(nombre: str, png: bytes, ajustes: dict) -> None:
+    """Deja el PNG preparado en la biblioteca del editor, con sus ajustes.
 
     Se guarda el PNG ya recortado y reducido, no la imagen que subio el
     usuario: asi volver a poner el icono es instantaneo y no hay que repetir
     el trabajo. Vive fuera de git, como el respaldo: el croquis ya lleva
     dentro las imagenes que usa, y esto es solo la despensa.
+
+    Los ajustes van en un JSON al lado del PNG. Son el tamano, la animacion y
+    el circulo con los que se configuro la imagen al subirla: lo que hace que
+    al volver a poner ese icono salga como se dejo, y no con los valores de
+    fabrica.
     """
     BIBLIOTECA.mkdir(exist_ok=True)
     (BIBLIOTECA / f"{nombre}.png").write_bytes(png)
+    (BIBLIOTECA / f"{nombre}.json").write_text(
+        json.dumps(ajustes, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _ajustes_de(nombre: str) -> dict:
+    """Los ajustes guardados de un icono de la biblioteca. Vacio si no hay.
+
+    Si el JSON esta roto se devuelve vacio en vez de fallar: unos ajustes que
+    no se pueden leer no son motivo para no poder usar el icono, que es lo que
+    de verdad importa.
+    """
+    ruta = BIBLIOTECA / f"{nombre}.json"
+    if not ruta.is_file():
+        return {}
+    try:
+        datos = json.loads(ruta.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return datos if isinstance(datos, dict) else {}
 
 
 def lista_biblioteca(propios: dict) -> list[dict]:
@@ -389,6 +415,9 @@ def lista_biblioteca(propios: dict) -> list[dict]:
 
     Los que ya estan no se listan: aparecen en la paleta, y ofrecerlos otra
     vez en dos sitios distintos solo confunde.
+
+    Cada uno lleva sus ajustes, para que la lista pueda decir con que se
+    configuro y al recuperarlo vuelvan.
     """
     if not BIBLIOTECA.is_dir():
         return []
@@ -396,12 +425,13 @@ def lista_biblioteca(propios: dict) -> list[dict]:
     for ruta in sorted(BIBLIOTECA.glob("*.png")):
         if ruta.stem in propios:
             continue
-        fuera.append({"nombre": ruta.stem, "bytes": ruta.stat().st_size})
+        fuera.append({"nombre": ruta.stem, "bytes": ruta.stat().st_size,
+                      "ajustes": _ajustes_de(ruta.stem)})
     return fuera
 
 
-def lee_de_biblioteca(nombre: str) -> str:
-    """La imagen de la biblioteca como data URL, lista para meter en el croquis."""
+def lee_de_biblioteca(nombre: str) -> dict:
+    """Lo que hace falta para volver a poner un icono de la biblioteca."""
     if not NOMBRE_PROPIO.fullmatch(nombre or ""):
         raise ErrorEditor(f"«{nombre}» no es un nombre de icono valido.")
     ruta = BIBLIOTECA / f"{nombre}.png"
@@ -412,16 +442,18 @@ def lee_de_biblioteca(nombre: str) -> str:
         raise ErrorEditor(
             f"«{nombre}» pesa {len(datos) // 1024} KB y el tope son "
             f"{MAX_ICONO // 1024} KB, asi que no cabe en el croquis.")
-    return "data:image/png;base64," + base64.b64encode(datos).decode("ascii")
+    return {"datos": "data:image/png;base64," + base64.b64encode(datos).decode("ascii"),
+            "ajustes": _ajustes_de(nombre)}
 
 
 def borra_de_biblioteca(nombre: str) -> None:
-    """Quita un icono de la biblioteca. No toca el croquis."""
+    """Quita un icono de la biblioteca, con sus ajustes. No toca el croquis."""
     if not NOMBRE_PROPIO.fullmatch(nombre or ""):
         raise ErrorEditor(f"«{nombre}» no es un nombre de icono valido.")
-    ruta = BIBLIOTECA / f"{nombre}.png"
-    if ruta.is_file():
-        ruta.unlink()
+    for sufijo in (".png", ".json"):
+        ruta = BIBLIOTECA / f"{nombre}{sufijo}"
+        if ruta.is_file():
+            ruta.unlink()
 
 
 # ---------------------------------------------------------------------------
@@ -722,6 +754,10 @@ class Manejador(BaseHTTPRequestHandler):
                                   "totalPropios": MAX_ICONOS_PROPIOS}
                 datos["animaciones"] = ANIMACIONES
                 datos["biblioteca"] = lista_biblioteca(datos["propios"])
+                # Los ajustes de cada icono propio, para que la paleta los
+                # dibuje como son y al ponerlos salgan ya configurados.
+                datos["ajustesPropios"] = {
+                    n: _ajustes_de(n) for n in datos["propios"]}
                 datos["modelos"] = lee_modelos()
                 datos["git"] = estado_git()
                 datos["publicado"] = "https://tonycabreram.github.io/OrgulloCimarron/plantilla/croquis.html"
@@ -766,20 +802,28 @@ class Manejador(BaseHTTPRequestHandler):
                 nombre, imagen, png = preparar_icono(
                     datos.get("datos"), str(datos.get("nombre") or ""),
                     set(SIMBOLOS) | set(datos.get("existentes") or []))
+                # Los ajustes se validan antes de guardar nada: unos ajustes
+                # malos no se notan al guardarlos, sino al estampar con ellos.
+                ajustes = limpiar_ajustes(datos.get("ajustes") or {})
+                problemas = revisar_ajustes(ajustes)
+                if problemas:
+                    raise ErrorEditor("\n".join(problemas))
                 # Se guarda en la biblioteca ademas de mandarlo: asi se puede
-                # volver a poner mas adelante sin buscar la imagen otra vez.
-                guarda_en_biblioteca(nombre, png)
+                # volver a poner mas adelante sin buscar la imagen otra vez, y
+                # con los ajustes que se le pusieron.
+                guarda_en_biblioteca(nombre, png, ajustes)
                 self._json({"ok": True, "nombre": nombre, "datos": imagen,
-                            "bytes": len(imagen)})
+                            "bytes": len(imagen), "ajustes": ajustes})
             elif ruta == "/api/biblioteca":
                 # Recuperar un icono guardado, o quitarlo de la despensa.
                 if datos.get("quitar"):
                     borra_de_biblioteca(str(datos["quitar"]))
-                    self._json({"ok": True, "mensaje": "Quitado de la biblioteca."})
+                    self._json({"ok": True, "mensaje": "Quitado de la biblioteca.",
+                                "biblioteca": lista_biblioteca(leer_croquis()["propios"])})
                 else:
                     nombre = str(datos.get("nombre") or "")
-                    self._json({"ok": True, "nombre": nombre,
-                                "datos": lee_de_biblioteca(nombre)})
+                    self._json(dict({"ok": True, "nombre": nombre},
+                                    **lee_de_biblioteca(nombre)))
             elif ruta == "/api/modelos":
                 # Guardar un modelo, o quitarlo.
                 #

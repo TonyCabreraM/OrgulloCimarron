@@ -431,6 +431,74 @@ def revisar_modelos(modelos, propios=None) -> list[str]:
     return problemas
 
 
+def revisar_ajustes(ajustes) -> list[str]:
+    """Los problemas de unos ajustes de icono propio. Vacia es que todo bien.
+
+    Unos ajustes son la configuracion con la que se subio una imagen: el
+    tamano, la animacion y si lleva circulo. Se guardan al lado del PNG, en la
+    biblioteca, y son lo que hace que al volver a poner ese icono salga como se
+    dejo en vez de con los valores de fabrica.
+
+    Se validan con las mismas reglas que un icono del mapa. No es un capricho:
+    unos ajustes malos no se notan al guardarlos, sino al estampar con ellos, y
+    entonces ya hay veinte iconos mal puestos en el mapa.
+    """
+    if ajustes is None:
+        return []
+    if not isinstance(ajustes, dict):
+        return ["los ajustes tienen que ser un objeto"]
+
+    raros = sorted(set(ajustes) - {"s", "a", "c"})
+    if raros:
+        return [f"en los ajustes no conozco {' ni '.join(raros)}. "
+                f"Los que hay son s (tamaño), a (animación) y c (círculo)"]
+
+    problemas: list[str] = []
+
+    if "s" in ajustes:
+        tam = ajustes["s"]
+        if not isinstance(tam, (int, float)) or isinstance(tam, bool):
+            problemas.append("el tamaño de los ajustes tiene que ser un numero")
+        elif not MIN_TAM_ICONO <= tam <= MAX_TAM_ICONO:
+            problemas.append(
+                f"el tamaño {tam:.0f} de los ajustes se sale de "
+                f"{MIN_TAM_ICONO} a {MAX_TAM_ICONO}")
+
+    if "a" in ajustes and ajustes["a"] not in ANIMACIONES:
+        problemas.append(
+            f"«{ajustes['a']}» no es una animación de las que hay. "
+            f"Las que hay: {', '.join(k for k in ANIMACIONES if k) or 'ninguna'}")
+
+    if "c" in ajustes and ajustes["c"] not in (CON_ARO, SIN_ARO):
+        problemas.append(
+            f"el círculo de los ajustes solo puede ser {SIN_ARO} (sin él) o "
+            f"{CON_ARO} (con él), y viene {ajustes['c']!r}")
+
+    return problemas
+
+
+def limpiar_ajustes(ajustes) -> dict:
+    """Los ajustes sin lo que sobra: solo s, a y c, y solo si valen.
+
+    Se llama al guardarlos desde el editor, que manda lo que tiene en pantalla
+    y no siempre esta todo. Se descarta lo vacio para que el archivo quede
+    corto: unos ajustes con `a: ""` y `c: 1` son exactamente los de fabrica y
+    no hace falta escribirlos.
+    """
+    limpio: dict = {}
+    for clave in ("s", "a", "c"):
+        if clave not in ajustes:
+            continue
+        valor = ajustes[clave]
+        if valor in ("", None):
+            continue
+        if clave == "c" and valor == CON_ARO:
+            # Con circulo es lo de siempre: no se escribe.
+            continue
+        limpio[clave] = valor
+    return limpio
+
+
 def titulo_de(tipo: str, conocidos=None) -> str:
     """Como se llama un icono para ensenarlo en un mensaje de error.
 

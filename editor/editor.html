@@ -175,11 +175,90 @@ select{
 
 input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 
+/* --- El menú de subir una imagen -------------------------------------------
+   Mismo lenguaje que el panel: mismo fondo, mismo filo, mismo radio y el
+   verde institucional. Se ve que es algo que se abre encima del editor y no
+   otra pantalla.
+
+   A la izquierda va la vista previa con el recorte y el círculo puestos, para
+   ver cómo va a quedar antes de aceptar: la imagen original se recorta a lo
+   que no es transparente y se encaja en un cuadro, y eso no se sabe hasta
+   verlo. */
+#dialogo{position:fixed;inset:0;z-index:10;display:grid;place-items:center;
+         padding:16px;background:#0a484233;opacity:0;
+         transition:opacity .2s ease;pointer-events:none}
+#dialogo.abierto{opacity:1;pointer-events:auto}
+#dialogo[hidden]{display:none}
+#cajaDialogo{width:100%;max-width:520px;max-height:90vh;overflow-y:auto;
+             background:var(--panel);border:1px solid var(--linea);
+             border-radius:20px;padding:22px;scrollbar-width:none;
+             box-shadow:0 24px 60px #17322e33;
+             transform:translateY(12px) scale(.985);
+             transition:transform .24s cubic-bezier(.22,1,.36,1)}
+#cajaDialogo::-webkit-scrollbar{display:none}
+#dialogo.abierto #cajaDialogo{transform:none}
+#tDialogo{font-size:16px;font-weight:780;color:var(--tinta);
+          letter-spacing:-.01em}
+#cuerpoDialogo{display:grid;grid-template-columns:132px 1fr;gap:18px;
+               margin-top:16px}
+#vistaDialogo{display:flex;flex-direction:column;align-items:center;gap:8px}
+/* La vista previa se pinta sobre el mismo cuadriculado que se usa para ver
+   transparencias: así se entiende que lo que sobra es transparente y no
+   blanco. */
+#previoDialogo{width:112px;height:112px;flex:none;border-radius:16px;
+               border:1px solid var(--linea);
+               background-color:#fff;
+               background-image:
+                 linear-gradient(45deg,#e8efec 25%,transparent 25%),
+                 linear-gradient(-45deg,#e8efec 25%,transparent 25%),
+                 linear-gradient(45deg,transparent 75%,#e8efec 75%),
+                 linear-gradient(-45deg,transparent 75%,#e8efec 75%);
+               background-size:14px 14px;
+               background-position:0 0,0 7px,7px -7px,-7px 0}
+#previoDialogo .aro{fill:#ffffffdd;stroke:#0a484266;stroke-width:1}
+#previoDialogo .lam *{fill:none;stroke:var(--tinta);stroke-width:1.9;
+                      stroke-linecap:round;stroke-linejoin:round}
+#previoDialogo .lam .relleno{fill:var(--tinta);stroke:none}
+#previoDialogo.sinAro .lam{
+  filter:drop-shadow(0 0 1.6px #fff) drop-shadow(0 0 1.6px #fff)}
+#previoDialogo.sinAro .fig{clip-path:none}
+#previoDialogo .an{transform-box:fill-box;transform-origin:center}
+#previoDialogo .an.late{animation:icLate 2.4s ease-in-out infinite}
+#previoDialogo .an.flota{animation:icFlota 3.2s ease-in-out infinite}
+#previoDialogo .an.gira{animation:icGira 14s linear infinite}
+#previoDialogo .an.brilla{animation:icBrilla 2.6s ease-in-out infinite}
+#previoDialogo .an.ondas{animation:icOndas 2.6s ease-out infinite}
+#previoDialogo .onda{fill:none;stroke:var(--verde);stroke-width:1.6;
+                     stroke-opacity:.9}
+#nombreDialogo{font-size:10.5px;color:var(--tenue);text-align:center;
+               word-break:break-all;line-height:1.3}
+#ajustesDialogo .campo + .campo{margin-top:11px}
+
+/* En el móvil la vista previa pasa arriba y los ajustes debajo: dos columnas
+   en una pantalla estrecha dejan las dos cosas inservibles. */
+@media (max-width:560px){
+  #cuerpoDialogo{grid-template-columns:1fr;gap:14px}
+  #vistaDialogo{flex-direction:row;justify-content:center;gap:14px}
+  #previoDialogo{width:88px;height:88px}
+  #nombreDialogo{text-align:left}
+}
+
 /* lista de iconos colocados */
 #listaIconos{display:flex;flex-direction:column;gap:3px;max-height:170px;overflow-y:auto}
 .icono{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;
        border:1px solid transparent;background:#f4f8f7;text-align:left;width:100%}
 .icono:hover{background:#eaf2f0}
+
+/* Una fila de la biblioteca: el botón de recuperar y, al lado, la × para
+   borrarla. La × sale al pasar por encima, para no llenar la lista de botones
+   rojos: borrar una imagen guardada es raro y recuperarla es lo de siempre. */
+.ficha{display:flex;align-items:center;gap:4px}
+.ficha .icono{flex:1;min-width:0}
+.quitaFicha{flex:none;width:24px;height:24px;padding:0;border:0;border-radius:8px;
+            display:none;place-content:center;background:#0a484214;color:var(--tinta);
+            font-size:14px;line-height:1;cursor:pointer}
+.ficha:hover .quitaFicha{display:grid}
+.quitaFicha:hover{background:var(--alerta);color:#fff}
 .icono.sel{border-color:var(--verde);background:#e6f2ec}
 .icono svg{width:19px;height:19px;flex:none}
 .icono svg *{fill:none;stroke:var(--tinta);stroke-width:2}
@@ -376,6 +455,9 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         Ninguno colocado. Arrastra uno de la paleta al mapa, o púlsalo y luego
         haz clic en el sitio.
       </div>
+      <div class="fila" style="margin-top:10px">
+        <button class="boton peligro" id="btnBorrarIconos">Borrar los colocados</button>
+      </div>
       <div id="listaIconos"></div>
     </div>
 
@@ -459,6 +541,55 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
   </aside>
 </main>
 
+<!-- El menú que sale al subir una imagen. Antes la imagen entraba directa a la
+     paleta, con el tamaño de los nuevos y sin animación ni forma de decir si
+     llevaba círculo; ahora se elige ahí mismo, y esos valores quedan como los
+     de ese icono para siempre. Después cada icono colocado se puede cambiar
+     como cualquier otro.
+
+     Empieza en `hidden`, que además de esconderlo lo saca del alcance del
+     teclado: con solo opacidad, sus botones seguirían siendo tabulables. -->
+<div id="dialogo" hidden>
+  <div id="cajaDialogo" role="dialog" aria-modal="true" aria-labelledby="tDialogo">
+    <strong id="tDialogo">Nuevo icono</strong>
+    <div id="cuerpoDialogo">
+      <div id="vistaDialogo">
+        <svg id="previoDialogo" viewBox="-16 -16 32 32"></svg>
+        <div class="pista" id="nombreDialogo"></div>
+      </div>
+      <div id="ajustesDialogo">
+        <div class="campo">
+          <label for="dNombre">Nombre</label>
+          <input type="text" id="dNombre" maxlength="24"
+                 placeholder="extintor">
+          <div class="pista">
+            Es el nombre con el que se guarda. Se le añade un número si ya
+            existe otro igual.
+          </div>
+        </div>
+        <div class="campo">
+          <label for="dTam">Tamaño · <b id="vDTam">46</b></label>
+          <input type="range" id="dTam" min="16" max="160" step="1" value="46">
+        </div>
+        <div class="campo">
+          <label for="dAnim">Animación</label>
+          <select id="dAnim"></select>
+        </div>
+        <div class="campo">
+          <label class="marca" for="dAro">
+            <input type="checkbox" id="dAro" checked>
+            <span>Con círculo de fondo</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="fila" style="margin-top:16px;justify-content:flex-end">
+      <button class="boton" id="btnCancelarDialogo">Cancelar</button>
+      <button class="boton principal" id="btnAceptarDialogo">Añadir a la paleta</button>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 // ---------------------------------------------------------------------------
@@ -469,6 +600,10 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 // ---------------------------------------------------------------------------
 var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [],
          biblioteca: [], modelos: [], animaciones: {},
+         // Los ajustes con los que se subio cada icono propio: tamano,
+         // animacion y circulo. Es lo que hace que al ponerlo en el mapa salga
+         // como se dejo. Lo manda el servidor, que los guarda al lado del PNG.
+         ajustesPropios: {},
          topes: {tam: [16, 160], rot: [-180, 180]},
          vista: [110, 100, 1005, 640], ancho: 1224, alto: 792, git: {}};
 var sel = null;          // {tipo:"zona"|"icono", i: n}
@@ -513,7 +648,43 @@ var s = document.getElementById("s"),
     fNombreModelo = document.getElementById("fNombreModelo"),
     listaPropios = document.getElementById("listaPropios"),
     listaBiblioteca = document.getElementById("listaBiblioteca"),
-    listaModelos = document.getElementById("listaModelos");
+    listaModelos = document.getElementById("listaModelos"),
+    DIA = document.getElementById("dialogo"),
+    PREVIO = document.getElementById("previoDialogo"),
+    dNombre = document.getElementById("dNombre"),
+    dTam = document.getElementById("dTam"),
+    dAnim = document.getElementById("dAnim"),
+    dAro = document.getElementById("dAro");
+
+// La imagen que se acaba de elegir y todavia no se ha aceptado, como data URL.
+// Vive aqui mientras el menú está abierto: hasta que se pulsa Añadir no se
+// manda nada al servidor, así que cancelar no deja rastro.
+var imagenPendiente = null;
+
+// Una pila de estados anteriores de los iconos, para poder deshacer un
+// borrado. Guarda copias enteras, no diferencias: con un puñado de iconos una
+// copia ocupa nada y no hay forma de que el deshacer se desincronice.
+//
+// Es a propósito solo para borrados, que es lo único del editor que no se
+// puede rehacer a mano. Mover o cambiar un tamaño se arregla moviéndolo otra
+// vez, y llenar la pila con eso haría que Ctrl+Z dejara de hacer lo que uno
+// espera.
+var historial = [];
+var MAX_HISTORIAL = 20;
+
+function apuntaHistorial() {
+  historial.push(JSON.stringify(E.iconos));
+  if (historial.length > MAX_HISTORIAL) historial.shift();
+}
+
+function deshacer() {
+  if (!historial.length) { aviso("No hay nada que deshacer.", "aviso"); return }
+  E.iconos = JSON.parse(historial.pop());
+  sel = null;
+  multi = [];
+  hayCambios();
+  aviso("Deshecho. Quedan " + historial.length + " paso(s) por deshacer.", "ok");
+}
 
 // Lo que mide un icono cuando no lleva tamano propio. Tiene que ser el mismo
 // que TAM_ICONO en croquis.html.
@@ -567,23 +738,34 @@ function dentroConAnimacion(ic) {
   return '<g class="' + clase + '">' + ondas + forma + "</g>";
 }
 
-// Un icono dibujado entero dentro de una caja de 32x32, para las miniaturas
-// (la paleta, los modelos y la lista). Se normaliza el tamano: un icono de 46
-// unidades —el de por defecto— sale a escala 1, uno mas pequeño se ve mas
-// pequeño y uno mas grande se corta en ese tope, porque en una caja de 32
-// pixeles un icono de 160 no cabria de ninguna forma.
-function miniaturaDe(ic) {
+// El dibujo de un icono dentro de una caja de 32x32, sin el <svg> que lo
+// envuelve. Se separa de miniaturaDe para poder reusarlo en la vista previa
+// del menú de subir, que es un <svg> que ya está en la pagina y al que solo
+// hay que cambiarle las tripas.
+function contenidoMiniatura(ic, hrefPropio) {
   var conAro = conAroDe(ic);
-  var forma = figuraDe(ic.t, conAro);
+  var forma = hrefPropio
+    ? '<image class="fig" href="' + hrefPropio + '" x="-12.2" y="-12.2"'
+      + ' width="24.4" height="24.4"' + (conAro ? ' clip-path="url(#recorte)"' : "")
+      + "/>"
+    : figuraDe(ic.t, conAro);
   if (!forma) return "";
   var clase = "an" + (ic.a ? " " + ic.a : "");
   var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
-  // El giro va en un grupo propio para no pisar el del tamano, igual que en el
-  // mapa: `scale` no lo usa la caja, pero el giro si tiene que ser el ultimo.
-  return '<svg viewBox="-16 -16 32 32"' + (conAro ? "" : ' class="sinAro"') + ">"
-       + "<g" + (ic.r ? ' transform="rotate(' + ic.r + ')"' : "") + ">"
+  // El giro va en un grupo propio para no pisar el del tamaño, igual que en el
+  // mapa: el giro tiene que ser lo último.
+  return "<g" + (ic.r ? ' transform="rotate(' + ic.r + ')"' : "") + ">"
        + (conAro ? '<circle class="aro" r="13.4"/>' : "")
-       + '<g class="' + clase + '">' + ondas + forma + "</g></g></svg>";
+       + '<g class="' + clase + '">' + ondas + forma + "</g></g>";
+}
+
+// Un icono dibujado entero dentro de su caja, para las miniaturas (la paleta,
+// los modelos y la lista).
+function miniaturaDe(ic) {
+  var contenido = contenidoMiniatura(ic);
+  if (!contenido) return "";
+  return '<svg viewBox="-16 -16 32 32"' + (conAroDe(ic) ? "" : ' class="sinAro"')
+       + ">" + contenido + "</svg>";
 }
 function aviso(texto, tipo) {
   if (!texto) { mensaje.textContent = ""; mensaje.className = ""; return; }
@@ -891,6 +1073,10 @@ function actualizaPistaInfo(ic) {
 
 // La lista de los iconos propios: lo que ocupan y como quitarlos. Se dice
 // cuantos iconos del mapa usan cada uno, porque al quitarlo se van con el.
+//
+// La miniatura se dibuja con los ajustes con los que se subio el icono, no con
+// los de fabrica: si se subio sin circulo y con animacion, en la paleta se ve
+// asi, que es como va a salir al ponerlo.
 function pintaPropios() {
   var nombres = Object.keys(E.propios);
   if (!nombres.length) { listaPropios.innerHTML = ""; return }
@@ -901,8 +1087,10 @@ function pintaPropios() {
     + "<b>" + Math.round(total / 1024) + " KB</b></div>"
     + nombres.map(function (n) {
       var usos = E.iconos.filter(function (ic) { return ic.t === n }).length;
+      var aj = E.ajustesPropios[n] || {};
       return '<button class="icono" data-propio="' + escapa(n) + '" title="Quitar '
-           + escapa(n) + ' del croquis">' + miniaturaDe({t: n})
+           + escapa(n) + ' del croquis">'
+           + miniaturaDe(Object.assign({t: n}, aj))
            + '<span class="nom">' + escapa(n) + "</span>"
            + '<span class="coor">' + (usos ? usos + " en el mapa" : "sin usar")
            + " · quitar</span></button>";
@@ -919,10 +1107,18 @@ function pintaBiblioteca() {
     + "<b>" + Math.round(E.biblioteca.reduce(function (a, b) { return a + b.bytes }, 0) / 1024)
     + " KB</b></div>"
     + E.biblioteca.map(function (b) {
-      return '<button class="icono" data-recupera="' + escapa(b.nombre)
+      // La miniatura sale con los ajustes con los que se guardo, para saber
+      // como va a volver antes de recuperarlo.
+      var aj = b.ajustes || {};
+      return '<div class="ficha">'
+           + '<button class="icono" data-recupera="' + escapa(b.nombre)
            + '" title="Volver a poner ' + escapa(b.nombre) + ' en el croquis">'
+           + miniaturaDe(Object.assign({t: b.nombre}, aj))
            + '<span class="nom">' + escapa(b.nombre) + "</span>"
-           + '<span class="coor">' + Math.round(b.bytes / 1024) + " KB · añadir</span></button>";
+           + '<span class="coor">' + describeAjustes(aj) + " · añadir</span></button>"
+           + '<button class="quitaFicha" data-borrar="' + escapa(b.nombre)
+           + '" title="Borrar ' + escapa(b.nombre) + ' de Guardados">×</button>'
+           + "</div>";
     }).join("");
 }
 
@@ -1163,10 +1359,14 @@ addEventListener("keydown", function (ev) {
     return;
   }
   if (ev.key === "s" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); guardar(); return }
+  if (ev.key === "z" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); deshacer(); return }
   if (ev.key === "Escape") {
-    // Escape suelta lo que haya puesto: primero el estampado, y si no habia
-    // nada que estampar, la seleccion. Es el orden que uno espera: lo ultimo
-    // que hiciste es lo primero que se deshace.
+    // El menú de subir va primero: si está abierto, Escape lo cierra, que es
+    // lo que uno espera de un menú.
+    if (!DIA.hidden) { cerrarDialogo(); return }
+    // Después suelta lo que haya puesto: el estampado, y si no había nada que
+    // estampar, la selección. Es el orden que uno espera: lo último que
+    // hiciste es lo primero que se deshace.
     if (!sueltaEstampa()) {
       modoVertice = false;
       elige(null);
@@ -1205,14 +1405,30 @@ addEventListener("keydown", function (ev) {
 // La paleta son los simbolos de serie y los iconos propios; los modelos van
 // aparte, en su propia caja, porque no son tipos de icono sino iconos ya
 // hechos. Pulsar cualquiera de los dos deja el modo de estampado puesto.
+
+// Con que sale un tipo al ponerlo en el mapa. Los simbolos de serie salen con
+// el tamaño de los nuevos y sin nada mas; los iconos propios, con los ajustes
+// que se eligieron al subirlos, que es lo que hace que repetir un icono propio
+// no obligue a configurarlo cada vez.
+function ajustesDe(tipo) {
+  if (E.propios[tipo]) {
+    return Object.assign({s: +fTamNuevo.value}, E.ajustesPropios[tipo] || {});
+  }
+  return {s: +fTamNuevo.value};
+}
+
+function estampaDe(tipo) {
+  return Object.assign({t: tipo, n: nombreDe(tipo)}, ajustesDe(tipo));
+}
+
 function pintaPaleta() {
   var deSerie = Object.keys(E.simbolos).map(function (t) {
-    return paloHTML({t: t, n: E.simbolos[t], s: +fTamNuevo.value}, E.simbolos[t], false);
+    return paloHTML(estampaDe(t), E.simbolos[t], false);
   });
   // Los propios van al final, con el borde discontinuo: asi se ve de un
   // vistazo cuales son de la casa y cuales los subio quien edita.
   var mios = Object.keys(E.propios).map(function (t) {
-    return paloHTML({t: t, n: t, s: +fTamNuevo.value}, t, true);
+    return paloHTML(estampaDe(t), t, true);
   });
   paleta.innerHTML = deSerie.concat(mios).join("");
   pintaModelos();
@@ -1265,7 +1481,7 @@ paleta.addEventListener("dragstart", function (ev) {
   if (!p) return;
   // El arrastre tambien estampa, y se lleva el tamano de los nuevos, que es lo
   // que se ve en la miniatura de la paleta.
-  estampa = {t: p.dataset.tipo, n: nombreDe(p.dataset.tipo), s: +fTamNuevo.value};
+  estampa = estampaDe(p.dataset.tipo);
   pintaPaleta();
   ev.dataTransfer.setData("text/plain", p.dataset.tipo);
   ev.dataTransfer.effectAllowed = "copy";
@@ -1275,8 +1491,7 @@ paleta.addEventListener("click", function (ev) {
   if (!p) return;
   var t = p.dataset.tipo;
   // Volver a pulsar el mismo lo suelta: es la forma de salir sin el teclado.
-  estampa = (estampa && estampa.t === t && !estampa.modelo)
-    ? null : {t: t, n: nombreDe(t), s: +fTamNuevo.value};
+  estampa = (estampa && estampa.t === t && !estampa.modelo) ? null : estampaDe(t);
   modoVertice = false;
   pintaPaleta();
   avisaEstampa();
@@ -1364,7 +1579,7 @@ s.addEventListener("dragover", function (ev) { ev.preventDefault(); ev.dataTrans
 s.addEventListener("drop", function (ev) {
   ev.preventDefault();
   var tipo = ev.dataTransfer.getData("text/plain");
-  var ic = estampa || (tipo ? {t: tipo, n: nombreDe(tipo), s: +fTamNuevo.value} : null);
+  var ic = estampa || (tipo ? estampaDe(tipo) : null);
   if (!ic) return;
   ic = Object.assign({}, ic);
   delete ic.modelo;
@@ -1379,6 +1594,130 @@ s.addEventListener("drop", function (ev) {
   aviso("", "");
 });
 
+// --- El menú de subir una imagen -------------------------------------------
+// Al elegir una imagen no entra directa a la paleta: se abre esto, donde se
+// elige el tamaño, la animación y si lleva círculo. Esos valores se guardan
+// con la imagen en la biblioteca, así que al volver a poner ese icono sale
+// como se dejó, no con los valores de fábrica.
+//
+// Después cada icono colocado en el mapa se puede cambiar como cualquier otro:
+// esto solo decide con qué nace.
+function abrirDialogo(datosUrl, nombreArchivo) {
+  imagenPendiente = datosUrl;
+  // El nombre se propone a partir del archivo, sin extensión y en minúsculas,
+  // que es lo que va a acabar siendo en el croquis.
+  dNombre.value = (nombreArchivo || "").replace(/\.[^.]+$/, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24);
+  // Y los ajustes arrancan con lo que el usuario tenga puesto en el panel, que
+  // es lo que estaba usando: el tamaño de los nuevos, sin animación y con
+  // círculo, que es lo de siempre.
+  dTam.value = +fTamNuevo.value;
+  dAnim.value = "";
+  dAro.checked = true;
+  pintaPrevio();
+  DIA.hidden = false;
+  requestAnimationFrame(function () { DIA.classList.add("abierto") });
+}
+
+function cerrarDialogo() {
+  if (DIA.hidden) return;
+  DIA.classList.remove("abierto");
+  setTimeout(function () {
+    if (!DIA.classList.contains("abierto")) DIA.hidden = true;
+    imagenPendiente = null;
+  }, 220);
+  aviso("", "");
+}
+
+// Los ajustes que salen del menú, en el formato que entiende el servidor.
+function ajustesDelDialogo() {
+  return {
+    s: +dTam.value,
+    a: dAnim.value || "",
+    c: dAro.checked ? 1 : 0
+  };
+}
+
+// La vista previa: la imagen de verdad con su recorte, su círculo y su
+// animación, para ver cómo va a quedar antes de aceptar. La imagen original se
+// recorta a lo que no es transparente y se encaja en un cuadro, y eso no se
+// sabe hasta verlo.
+function pintaPrevio() {
+  var ic = ajustesDelDialogo();
+  PREVIO.setAttribute("class", dAro.checked ? "" : "sinAro");
+  PREVIO.innerHTML = contenidoMiniatura(ic, imagenPendiente);
+  document.getElementById("vDTam").textContent = dTam.value;
+  document.getElementById("nombreDialogo").textContent =
+    dNombre.value || "(sin nombre)";
+}
+
+// Los deslizadores avisan en `input` (mientras se arrastran) y las casillas y
+// los desplegables en `change` (al soltar). Escuchar el evento que no toca
+// deja la vista previa sin actualizar hasta que se toque otra cosa.
+dTam.addEventListener("input", pintaPrevio);
+[dAnim, dAro].forEach(function (c) { c.addEventListener("change", pintaPrevio) });
+dNombre.addEventListener("input", function () {
+  document.getElementById("nombreDialogo").textContent = dNombre.value || "(sin nombre)";
+});
+document.getElementById("btnCancelarDialogo").addEventListener("click", cerrarDialogo);
+DIA.addEventListener("pointerdown", function (ev) {
+  if (ev.target === DIA) cerrarDialogo();
+});
+
+document.getElementById("btnAceptarDialogo").addEventListener("click", function () {
+  if (!imagenPendiente) { cerrarDialogo(); return }
+  var ajustes = ajustesDelDialogo();
+  var nombre = dNombre.value.trim();
+  abrirOcupado();
+  fetch("/api/icono", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nombre: nombre || "icono", datos: imagenPendiente,
+                          ajustes: ajustes, existentes: Object.keys(E.propios)})
+  }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
+    .then(function (par) {
+      var ok = par[0], d = par[1];
+      if (!ok) { aviso(d.mensaje || "No se pudo preparar la imagen.", "mal"); return }
+      cerrarOcupado();
+      E.propios[d.nombre] = d.datos;
+      E.ajustesPropios[d.nombre] = d.ajustes || {};
+      cerrarDialogo();
+      hayCambios();
+      pintaPaleta();
+      aviso("«" + d.nombre + "» añadido a la paleta (" + Math.round(d.bytes / 1024)
+            + " KB). Sale con " + describeAjustes(d.ajustes)
+            + "; púlsalo y cada clic en el mapa pone uno. Pulsa Guardar para publicarlo.",
+            "ok");
+    })
+    .catch(function (e) {
+      cerrarOcupado();
+      aviso("No se pudo preparar la imagen: " + e.message, "mal");
+    });
+});
+
+// Los ajustes en palabras, para el aviso. Se dice solo lo que no es de fábrica,
+// porque «tamaño 46, sin animación, con círculo» es justo lo que sale cuando no
+// se ha tocado nada y no aporta nada leerlo.
+function describeAjustes(ajustes) {
+  var partes = [];
+  if (ajustes.s && ajustes.s !== TAM_ICONO) partes.push("tamaño " + ajustes.s);
+  if (ajustes.a) partes.push(ajustes.a);
+  if (ajustes.c === 0) partes.push("sin círculo");
+  return partes.length ? partes.join(", ") : "los valores de siempre";
+}
+
+// El botón de aceptar se apaga mientras se prepara la imagen: son unos cientos
+// de milisegundos con una imagen grande, y sin señal parece que no pasó nada.
+function abrirOcupado() {
+  var b = document.getElementById("btnAceptarDialogo");
+  b.disabled = true;
+  b.textContent = "Preparando…";
+}
+function cerrarOcupado() {
+  var b = document.getElementById("btnAceptarDialogo");
+  b.disabled = false;
+  b.textContent = "Añadir a la paleta";
+}
+
 // --- iconos propios -------------------------------------------------------
 // La imagen no se guarda al subirla: se queda en memoria y se escribe al
 // pulsar Guardar, como todo lo demas. Asi no hay dos formas distintas de
@@ -1392,26 +1731,11 @@ document.getElementById("archivo").addEventListener("change", function (ev) {
   ev.target.value = "";
   if (!f) return;
   if (!/^image\//.test(f.type)) { aviso("Eso no es una imagen.", "mal"); return }
+  // La imagen no se manda todavia: se enseña en el menú y el usuario decide
+  // con qué ajustes entra. Hasta que no pulsa Añadir, cancelar no deja rastro.
   var lector = new FileReader();
-  lector.onload = function () {
-    aviso("Preparando «" + f.name + "»…", "");
-    fetch("/api/icono", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({nombre: f.name, datos: lector.result,
-                            existentes: Object.keys(E.propios)})
-    }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
-      .then(function (par) {
-        var ok = par[0], d = par[1];
-        if (!ok) { aviso(d.mensaje || "No se pudo preparar la imagen.", "mal"); return }
-        E.propios[d.nombre] = d.datos;
-        hayCambios();
-        pintaPaleta();
-        aviso("Añadido «" + d.nombre + "» (" + Math.round(d.bytes / 1024) + " KB). "
-              + "Ya está en la paleta; arrástralo al mapa donde haga falta. "
-              + "Pulsa Guardar para publicarlo.", "ok");
-      })
-      .catch(function (e) { aviso("No se pudo preparar la imagen: " + e.message, "mal") });
-  };
+  lector.onload = function () { abrirDialogo(lector.result, f.name) };
+  lector.onerror = function () { aviso("No se pudo leer el archivo.", "mal") };
   lector.readAsDataURL(f);
 });
 
@@ -1444,6 +1768,28 @@ function recargaBiblioteca() {
 }
 
 listaBiblioteca.addEventListener("click", function (ev) {
+  // La × de una fila: borra la imagen de la biblioteca. Es lo único del editor
+  // que borra algo que no se puede deshacer con Escape, así que se pregunta.
+  var x = ev.target.closest("[data-borrar]");
+  if (x) {
+    var nombre = x.dataset.borrar;
+    if (!confirm("¿Borrar «" + nombre + "» de Guardados?\n\n"
+                 + "Se pierde la imagen guardada. Si el icono está en el mapa, "
+                 + "sigue ahí, pero ya no se podrá volver a poner sin subir la "
+                 + "imagen otra vez.")) return;
+    fetch("/api/biblioteca", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({quitar: nombre})
+    }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
+      .then(function (par) {
+        if (!par[0]) { aviso(par[1].mensaje || "No se pudo borrar.", "mal"); return }
+        E.biblioteca = par[1].biblioteca || [];
+        dibuja();
+        aviso("«" + nombre + "» borrado de Guardados.", "ok");
+      }).catch(function (e) { aviso("No se pudo borrar: " + e.message, "mal") });
+    return;
+  }
+
   var b = ev.target.closest("[data-recupera]");
   if (!b) return;
   var n = b.dataset.recupera;
@@ -1456,11 +1802,14 @@ listaBiblioteca.addEventListener("click", function (ev) {
       var ok = par[0], d = par[1];
       if (!ok) { aviso(d.mensaje || "No se pudo recuperar.", "mal"); return }
       E.propios[d.nombre] = d.datos;
+      // Los ajustes vuelven con el icono: si se subio sin circulo y con
+      // animacion, al volver a ponerlo sale asi, no con los de fabrica.
+      E.ajustesPropios[d.nombre] = d.ajustes || {};
       E.biblioteca = E.biblioteca.filter(function (x) { return x.nombre !== d.nombre });
       hayCambios();
       pintaPaleta();
-      aviso("«" + d.nombre + "» vuelve a estar en la paleta. Arrástralo al mapa "
-            + "y pulsa Guardar.", "ok");
+      aviso("«" + d.nombre + "» vuelve a la paleta con " + describeAjustes(d.ajustes || {})
+            + ". Ya puedes ponerlo en el mapa; pulsa Guardar para publicarlo.", "ok");
     })
     .catch(function (e) { aviso("No se pudo recuperar: " + e.message, "mal") });
 });
@@ -1490,12 +1839,44 @@ function borrar() {
   hayCambios();
 }
 document.getElementById("btnBorrarZona").addEventListener("click", borrar);
+
+// Borra el icono elegido. Si ademas hay varios marcados con Mayús, se van
+// todos: es lo que uno espera al haberlos marcado, y obligar a borrarlos de
+// uno en uno despues de agruparlos no tiene sentido.
 document.getElementById("btnBorrarIcono").addEventListener("click", function () {
-  if (!sel || sel.tipo !== "icono") return;
-  E.iconos.splice(sel.i, 1);
+  if (!sel || sel.tipo !== "icono" || !E.iconos[sel.i]) return;
+  borraIconos(multi.length >= 2 ? multi : [sel.i]);
+});
+
+// Borra los iconos indicados por su indice, de mayor a menor para que al
+// quitarlos no se corran los que quedan por quitar.
+function borraIconos(índices) {
+  apuntaHistorial();
+  var aBorrar = índices.slice().sort(function (a, b) { return b - a });
+  var cuantos = 0;
+  aBorrar.forEach(function (k) {
+    if (E.iconos[k]) { E.iconos.splice(k, 1); cuantos++ }
+  });
   multi = [];
   elige(null);
   hayCambios();
+  aviso(cuantos === 1 ? "Icono borrado. Ctrl+Z para deshacer."
+                      : cuantos + " iconos borrados. Ctrl+Z para deshacer.", "ok");
+}
+
+// Y todos los colocados de una vez. Pide confirmación porque puede ser mucho:
+// el que se equivoca de botón pierde el trabajo de media hora.
+document.getElementById("btnBorrarIconos").addEventListener("click", function () {
+  if (!E.iconos.length) { aviso("No hay ningún icono colocado.", "aviso"); return }
+  var cuantos = E.iconos.length;
+  if (!confirm("¿Borrar los " + cuantos + " iconos del mapa?\n\n"
+               + "Se recuperan con Ctrl+Z.")) return;
+  apuntaHistorial();
+  E.iconos = [];
+  multi = [];
+  elige(null);
+  hayCambios();
+  aviso(cuantos + " iconos borrados. Ctrl+Z para deshacer.", "ok");
 });
 
 // Los controles del icono elegido. Todos escriben en el icono y repintan: el
@@ -1703,15 +2084,18 @@ fetch("/api/estado").then(function (r) {
   fInfoTitulo.maxLength = TIT_MAX;
   // Las animaciones las manda el servidor, que es quien las valida: si la
   // lista de aqui se moviera aparte, se podria elegir una que luego rechaza.
-  fAnim.innerHTML = Object.keys(E.animaciones).map(function (k) {
+  // Son las mismas opciones en el panel y en el menú de subir, que se llenan
+  // de la misma lista para que no puedan separarse.
+  var opciones = Object.keys(E.animaciones).map(function (k) {
     return '<option value="' + escapa(k) + '">' + escapa(E.animaciones[k]) + "</option>";
   }).join("");
+  fAnim.innerHTML = opciones;
+  dAnim.innerHTML = opciones;
   document.getElementById("commit").value = "Croquis: ";
   pintaGit(d.git);
   pintaPaleta();
   verTodo();
-  if (d.avisos && d.avisos.length) aviso(d.avisos.join(" "), "aviso");
-}).catch(function (e) {
+  if (d.avisos && d.avisos.length) aviso(d.avisos.join(" "), "aviso");}).catch(function (e) {
   aviso("No se pudo hablar con el editor: " + e.message
         + ". ¿Sigue abierta la ventana de editor.py?", "mal");
 });

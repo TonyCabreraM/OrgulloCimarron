@@ -961,6 +961,86 @@ def test_el_circulo_se_puede_quitar() -> bool:
     return True
 
 
+def test_los_ajustes_del_icono_propio_viajan() -> bool:
+    """Un icono subido guarda con qué se configuró, y eso vuelve con él.
+
+    Al subir una imagen se eligen el tamaño, la animación y si lleva círculo.
+    Esos ajustes se guardan al lado del PNG en la biblioteca, así que al volver
+    a poner ese icono en el mapa sale como se dejó y no con los de fábrica.
+
+    Sin esto, subir un extintor sin círculo y con animación obliga a
+    configurarlo cada vez que se pone uno, y con veinte puestos eso es veinte
+    veces el mismo trabajo.
+
+    Se usa una carpeta temporal: esta prueba escribe de verdad, y hacerlo en
+    `editor/iconos/` borraría o pisaría las imágenes que tenga quien edita.
+    """
+    import io
+    import tempfile
+
+    from PIL import Image, ImageDraw
+
+    original = editor.BIBLIOTECA
+    problemas = []
+    with tempfile.TemporaryDirectory() as carpeta:
+        editor.BIBLIOTECA = Path(carpeta)
+        try:
+            # Una imagen mínima, como la que subiría alguien.
+            img = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+            ImageDraw.Draw(img).ellipse([20, 20, 180, 180], fill=(200, 60, 40, 255))
+            buf = io.BytesIO()
+            img.save(buf, "PNG")
+            datos_url = ("data:image/png;base64,"
+                         + base64.b64encode(buf.getvalue()).decode("ascii"))
+
+            nombre, datos, png = editor.preparar_icono(datos_url, "Extintor.png", set())
+            if nombre != "extintor-png":
+                problemas.append(f"el nombre salió «{nombre}» y se esperaba «extintor-png»")
+
+            ajustes = {"s": 16, "a": "flota", "c": 0}
+            editor.guarda_en_biblioteca(nombre, png, ajustes)
+
+            # 1. Vuelven al leerlo, que es lo que hace falta para recuperarlo.
+            leido = editor.lee_de_biblioteca(nombre)
+            if leido["ajustes"] != ajustes:
+                problemas.append(f"los ajustes volvieron como {leido['ajustes']}")
+            if not leido["datos"].startswith("data:image/png;base64,"):
+                problemas.append("la imagen no volvió como data URL de PNG")
+
+            # 2. Y se ven en la lista, para poder enseñarlos antes de recuperar.
+            en_lista = editor.lista_biblioteca({})
+            if len(en_lista) != 1 or en_lista[0]["ajustes"] != ajustes:
+                problemas.append(f"la lista no lleva los ajustes: {en_lista}")
+
+            # 3. Un icono que está en el croquis no se lista: ya se ve en la paleta.
+            if editor.lista_biblioteca({nombre: "x"}):
+                problemas.append("un icono que ya está en el croquis sigue en Guardados")
+
+            # 4. Se lee con los ajustes ya puestos y sirve para estampar.
+            estampado = dict(ajustes, t=nombre, x=400, y=300)
+            problemas.extend(v.revisar_iconos([estampado], {nombre: datos}))
+
+            # 5. Borrar se lleva el PNG y sus ajustes: no deja el JSON huérfano.
+            editor.borra_de_biblioteca(nombre)
+            if list(Path(carpeta).glob("*")):
+                problemas.append(
+                    f"borrar dejó rastro: {[p.name for p in Path(carpeta).glob('*')]}")
+            try:
+                editor.lee_de_biblioteca(nombre)
+                problemas.append("se pudo leer un icono ya borrado")
+            except editor.ErrorEditor:
+                pass
+        finally:
+            editor.BIBLIOTECA = original
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    los ajustes se guardan con la imagen, vuelven con ella y se borran con ella")
+    return True
+
+
 def test_atributos_sin_comillas_no_se_tragan() -> bool:
     """Ningun valor de atributo sin comillas puede terminar en '/>'.
 
@@ -1146,6 +1226,7 @@ def main() -> int:
          test_ningun_literal_cierra_una_etiqueta_sin_comilla),
         ("el círculo se puede quitar", test_el_circulo_se_puede_quitar),
         ("los modelos se guardan y se estampan", test_los_modelos_se_guardan_y_se_estamplan),
+        ("los ajustes del icono propio viajan", test_los_ajustes_del_icono_propio_viajan),
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),

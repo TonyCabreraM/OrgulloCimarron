@@ -599,13 +599,58 @@ descuido no convierta la página del móvil en algo que tarda en abrir.
 #### La biblioteca
 
 Cada imagen que se sube se guarda también en `editor/iconos/`, en PNG ya
-recortado y reducido. Esa carpeta está fuera de git y es la despensa del
-editor: al quitar un icono propio del croquis, la imagen **no se pierde**,
-baja a la lista **Guardados** del panel y se vuelve a poner con un clic, sin
-tener que buscarla otra vez en el disco.
+recortado y reducido, **junto a un JSON con sus ajustes**: el tamaño, la
+animación y si lleva círculo. Esa carpeta está fuera de git y es la despensa del
+editor: al quitar un icono propio del croquis, la imagen **no se pierde**, baja
+a la lista **Guardados** y se vuelve a poner con un clic, sin tener que buscarla
+otra vez en el disco y **con los mismos ajustes con los que se subió**.
+
+Cada fila de **Guardados** lleva una **×** para borrar la imagen de verdad. Es lo
+único del editor que borra algo que no se puede deshacer, así que pregunta
+antes; el botón sale al pasar por encima, porque borrar es raro y recuperar es
+lo de siempre.
 
 El croquis sigue siendo la única fuente de lo que se publica: la biblioteca
 solo sirve para no repetir el trabajo de subir y recortar.
+
+#### El menú al subir una imagen
+
+Al elegir un archivo **no entra directo a la paleta**. Se abre un menú donde se
+elige el nombre, el tamaño, la animación y si lleva círculo, con una **vista
+previa** de la imagen de verdad —recortada, con su círculo y su animación
+puestas— sobre un fondo cuadriculado que deja ver la transparencia.
+
+La imagen original se recorta a lo que no es transparente y se encaja en un
+cuadro, así que hasta verlo no se sabe cómo va a quedar dentro del círculo.
+
+Esos valores **quedan guardados con el icono**: al pulsarlo en la paleta, cada
+clic en el mapa pone uno ya configurado así. Configurar veinte extintores
+iguales es configurarlos una vez y dar veinte clics. Después, cada icono
+colocado se puede cambiar como cualquier otro.
+
+El menú arranca con el **tamaño de los nuevos** que esté puesto en el panel, sin
+animación y con círculo: lo que se estaba usando. Cancelar no deja rastro, y
+mientras se prepara la imagen el botón se apaga y dice «Preparando…», que son
+unos cientos de milisegundos con una imagen grande.
+
+#### Borrar iconos
+
+| Qué | Cómo |
+| --- | --- |
+| Uno del mapa | Elegirlo y **Borrar icono** |
+| Varios del mapa | Marcarlos con Mayús y **Borrar icono**: se van todos |
+| Todos los del mapa | **Borrar los colocados**, con confirmación |
+| Un icono propio del croquis | Pulsarlo en **En el croquis**: baja a Guardados |
+| Una imagen de Guardados | La **×** de su fila, con confirmación |
+
+Los borrados del mapa se deshacen con **Ctrl+Z** (los últimos 20). Se guardan
+copias enteras de la lista de iconos, no diferencias: con un puñado de iconos
+una copia ocupa nada y no hay forma de que el deshacer se desincronice.
+
+**El deshacer es solo para borrados**, a propósito. Mover un icono o cambiarle
+el tamaño se arregla haciéndolo otra vez, y meter eso en la pila haría que
+Ctrl+Z dejara de hacer lo que uno espera cuando lo que quiere es recuperar algo
+que se fue.
 
 ### Al reemplazar el mapa por una versión nueva
 
@@ -653,7 +698,9 @@ interfaz es un HTML suelto.
 | Ponerle información | Los campos de **Información que sale al pulsarlo**; si se dejan vacíos, el icono no se puede pulsar |
 | Guardar el icono entero | **Guardar como modelo** |
 | Poner varios iguales | Pulsar el modelo en **Modelos** y hacer clic en el mapa todas las veces que haga falta |
-| Crear un icono propio | **Subir una imagen…**; queda en la paleta con el borde discontinuo |
+| Crear un icono propio | **Subir una imagen…**: se abre el menú donde se elige tamaño, animación y círculo |
+| Borrar iconos | Ver **Borrar iconos**, más arriba |
+| Deshacer un borrado | `Ctrl+Z` |
 | Volver a poner uno guardado | Pulsarlo en **Guardados** |
 | Quitar un icono propio | Pulsarlo en **En el croquis**; la imagen baja a **Guardados** |
 | Alinear varios | Marcarlos con Mayús y usar **En fila**, **En columna** o **En rejilla** |
@@ -824,6 +871,11 @@ croquis o la página base:
 - **`0` no es «no está».** El círculo se apaga con `"c": 0`, así que hay que
   comprobarlo con `"c" in ic` y nunca con `if ic.get("c")`, que tomaría el cero
   por ausencia y dejaría el círculo puesto. Lo mismo al leerlo en el croquis.
+- **Una prueba que escribe archivos tiene que apuntar a una carpeta temporal.**
+  Las de la biblioteca y los modelos usan `tempfile` y restauran la constante
+  en un `finally`. Una que escribía en `editor/iconos/` de verdad pisó una
+  imagen guardada y luego la borró: los datos de quien edita no son un campo de
+  pruebas.
 - **Un atributo HTML sin comillas se traga la `/` que cierra la etiqueta.**
   `fill=#16241c/>` se parsea como `fill="#16241c/"`, la etiqueta nunca se
   cierra y se traga todo el dibujo: el mapa sale negro y **sin ningún error en
