@@ -94,6 +94,23 @@ body{
 #iconos .conInfo:hover .aro,#iconos .conInfo:focus-visible .aro{
   stroke:var(--verde);stroke-opacity:1;stroke-width:2;fill:#fff}
 
+/* --- La superficie que recibe el toque -------------------------------------
+   Devolverle el pointer-events al grupo del icono NO basta: el grupo no tiene
+   forma propia, asi que el toque lo tiene que recoger algo de dentro. Cuando
+   el icono lleva aro lo recoge el aro, que esta pintado.
+
+   Sin aro no quedaba nada: la imagen tiene el toque desactivado a proposito
+   (para no quitarle la pulsacion a la zona de debajo) y el dibujo de un
+   simbolo son trazos sueltos. El toque se colaba hasta el mapa, asi que
+   pulsar un icono con informacion no abria la ventana: deshacia el zoom.
+
+   Este circulo se dibuja siempre en los iconos con informacion y es la
+   superficie de verdad. Va con `fill:none` para que no se vea y con
+   `pointer-events:fill`, que da por bueno el relleno aunque no se pinte:
+   con `pointer-events:auto` no valdria, porque ese valor exige que la forma
+   este pintada, y con `fill:none` no lo esta. */
+#iconos .toque{fill:none;pointer-events:fill}
+
 /* --- Las animaciones -------------------------------------------------------
    Se aplican a un <g> INTERIOR, nunca al que lleva la posicion. En SVG el
    `transform` de CSS pisa al atributo `transform`, asi que animar el <g> de
@@ -324,6 +341,14 @@ body{
   #chips{flex-wrap:wrap;overflow:visible}
   #enlaces{margin-top:auto}
   #enlaces .enlace{flex:1;justify-content:center}
+  /* El encabezado empieza donde termina el panel. Los dos van anclados
+     arriba a la izquierda, asi que sin esto el panel tapa el titulo: el
+     encabezado empieza en x=20 y el panel llega hasta x=352.
+
+     Se aparta el encabezado en vez de bajar el panel porque el mapa se
+     encuadra a partir de su borde inferior: bajarlo le quitaria alto al
+     mapa, y subirlo no cabe. */
+  #cab{padding-left:372px}
 }
 </style>
 </head>
@@ -678,6 +703,12 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
   var clases = "ic" + (conAro ? "" : " sinAro") + (ic.i ? " conInfo" : "");
   var caja = ic.i ? ' class="' + clases + '" data-info="' + k + '"'
                   : ' class="' + clases + '"';
+  // La superficie que recibe el toque, solo en los que llevan informacion.
+  // El aro la daria si lo llevaran, pero un icono sin aro se queda sin nada
+  // que recoja la pulsacion: la imagen tiene el toque desactivado y el dibujo
+  // de un simbolo son trazos sueltos. Sin este circulo el toque se cuela
+  // hasta el mapa y lo que hace es deshacer el zoom.
+  var toque = ic.i ? '<circle class="toque" r="13.4"/>' : "";
   // La intensidad del movimiento va en un `style` con solo la variable, para
   // que no pise el atributo `transform` de este mismo elemento, que es el que
   // pone el icono en su sitio. Se omite cuando vale 1, que es lo normal.
@@ -690,6 +721,7 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
        + (ic.r ? " rotate(" + ic.r + ")" : "") + '"><title>'
        + escapa(ic.n || nombreDe(ic.t)) + "</title>"
        + (conAro ? '<circle class="aro" r="13.4"/>' : "")
+       + toque
        + '<g class="' + clase + '">'
        + ondas + dentro + "</g></g>";
 }).join("");

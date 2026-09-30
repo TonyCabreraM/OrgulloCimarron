@@ -609,6 +609,125 @@ def test_animaciones_e_intensidad() -> bool:
     return True
 
 
+def test_el_toque_y_el_encabezado() -> bool:
+    """El toque llega a los iconos pulsables, y el panel no tapa el titulo.
+
+    Las dos cosas se ven solo en pantalla y las dos se rompen en silencio.
+
+    **El toque.** Un icono con informacion necesita algo que recoja la
+    pulsacion, y no vale cualquier cosa: el grupo no tiene forma propia, la
+    imagen la tiene desactivada a proposito (para no quitarle la pulsacion a
+    la zona de debajo) y un simbolo son trazos sueltos. Cuando lleva aro, el
+    aro recoge el toque, porque esta pintado. **Sin aro no quedaba nada** y el
+    toque se colaba hasta el mapa, que al tocarlo deshace el zoom: pulsar el
+    icono no abria la ventana, la deshacia. Y como el mapa deshace el zoom al
+    tocarlo, el fallo parecia «el icono no hace nada».
+
+    El circulo `.toque` es la superficie. Se comprueba que exista, que no se
+    pinte, y que su `pointer-events` sea de los que dan por bueno el relleno
+    aunque no este pintado: `auto` (que es `visiblePainted`) y `painted`
+    exigen que la forma este pintada, y con `fill:none` no lo esta. Poner
+    `auto` ahi pareceria razonable y no funcionaria.
+
+    **El encabezado.** En apaisado el panel es lateral y el encabezado va
+    anclado arriba a la izquierda, asi que el panel le pasa por encima y el
+    titulo desaparece detras. Aqui se comprueba que el encabezado empiece
+    despues de donde termina el panel. Asi, si alguien ensancha el panel, la
+    prueba avisa en vez de que el titulo desaparezca en silencio.
+    """
+    texto = CROQUIS.read_text(encoding="utf-8")
+    problemas = []
+
+    # --- 1. La superficie que recibe el toque --------------------------------
+    regla = re.search(r"#iconos \.toque\{([^}]*)\}", texto)
+    if not regla:
+        problemas.append(
+            "no hay regla para `#iconos .toque`: un icono sin aro y con "
+            "informacion se queda sin nada que recoja la pulsacion")
+    else:
+        cuerpo = regla.group(1).replace(" ", "")
+        if "fill:none" not in cuerpo:
+            problemas.append(
+                "#iconos .toque se pinta: se veria un circulo encima del icono")
+        permite = re.search(r"pointer-events:(\w+)", cuerpo)
+        # Solo los valores que no exigen que la forma este pintada.
+        if not permite or permite.group(1) not in ("fill", "all", "stroke"):
+            problemas.append(
+                f"`#iconos .toque` usa pointer-events:{permite.group(1) if permite else '?'}"
+                f" y con fill:none no recibe el toque; tiene que ser `fill`")
+
+    # --- 2. Que el render lo dibuje, y solo en los que llevan informacion ----
+    ini = texto.find("ICN.innerHTML")
+    fin = texto.find('}).join("");', ini)
+    if ini < 0 or fin < 0:
+        problemas.append("(no se encuentra el bloque ICN.innerHTML en el croquis)")
+    else:
+        render = texto[ini:fin]
+        prepara = re.search(r"var toque = ([^;]+);", render)
+        if not prepara:
+            problemas.append("el render no prepara el circulo del toque")
+        else:
+            linea = " ".join(prepara.group(1).split())
+            # Tiene que depender de `ic.i`: en un icono sin informacion el
+            # toque tiene que seguir siendo de la zona de debajo. Si se le
+            # pusiera a todos, los iconos se comerian la pulsacion de las
+            # zonas, que es justo lo que el diseno evita.
+            if "ic.i" not in linea:
+                problemas.append(
+                    f"el circulo del toque no depende de que el icono lleve "
+                    f"informacion: {linea}")
+            if 'class="toque"' not in linea:
+                problemas.append(f"el circulo del toque no lleva su clase: {linea}")
+        if "+ toque" not in render:
+            problemas.append("el circulo del toque se prepara pero no se dibuja")
+
+    # --- 3. Que la prueba no pase en balde -----------------------------------
+    # Solo comprueba algo si hay algun icono con informacion Y sin aro, que es
+    # el caso que se rompia. Con aro, el aro ya recogia el toque.
+    iconos = leer_bloque(texto, "ICONOS") or []
+    desprotegidos = [ic for ic in iconos if ic.get("i") and not ic.get("c")]
+    if not desprotegidos:
+        problemas.append(
+            "(no hay ningun icono con informacion y sin aro en el croquis: la "
+            "prueba no estaria comprobando el caso que se rompio)")
+
+    # --- 4. El encabezado, a la derecha del panel ----------------------------
+    # Hay varios bloques de pantalla ancha en el archivo (el de la ventana y el
+    # del panel), asi que se busca el que lleva el panel por su regla y no el
+    # primero que aparezca.
+    bloques = re.findall(
+        r"@media \(min-width:760px\) and \(orientation:landscape\)\{(.*?)\n\}",
+        texto, flags=re.S)
+    css = next((b for b in bloques if "#ficha{left:" in b), None)
+    if css is None:
+        problemas.append(
+            "(no se encuentra el bloque de pantalla ancha que coloca el panel)")
+    else:
+        panel = re.search(r"#ficha\{left:(\d+)px;right:auto;top:14px;"
+                          r"bottom:14px;width:(\d+)px", css)
+        cabecera = re.search(r"#cab\{padding-left:(\d+)px\}", css)
+        if not panel or not cabecera:
+            problemas.append(
+                "en pantalla ancha hacen falta el `left` y el `width` del panel y "
+                "el `padding-left` del encabezado, para poder comprobar que no "
+                "se pisan")
+        else:
+            borde_panel = int(panel.group(1)) + int(panel.group(2))
+            desde = int(cabecera.group(1))
+            if desde < borde_panel:
+                problemas.append(
+                    f"el encabezado empieza en {desde}px y el panel llega hasta "
+                    f"{borde_panel}px: el titulo queda debajo del panel")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    los iconos con informacion tienen su superficie de toque y el "
+          "encabezado empieza donde termina el panel")
+    return True
+
+
 def _sin_comentarios(texto: str) -> str:
     """El croquis sin comentarios, que es donde puede haber codigo.
 
@@ -1605,6 +1724,7 @@ def main() -> int:
         ("croquis con zonas coherentes", test_croquis_zonas_coherentes),
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
         ("animaciones e intensidad", test_animaciones_e_intensidad),
+        ("el toque y el encabezado", test_el_toque_y_el_encabezado),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),

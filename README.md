@@ -424,6 +424,15 @@ efecto invisible.
 - **El panel es barra inferior en vertical y lateral en apaisado**
   (`@media (min-width:760px) and (orientation:landscape)`). En pantalla ancha
   una barra inferior desperdicia el ancho y deja el mapa chico y centrado.
+- **En apaisado el encabezado se aparta a la derecha del panel**
+  (`#cab{padding-left: 372px}`, que es el `left` del panel más su ancho). Los
+  dos van anclados arriba a la izquierda, así que sin eso el panel le pasa por
+  encima y se come el título. Se aparta el encabezado en vez de bajar el panel
+  porque el mapa se encuadra a partir del borde inferior del encabezado:
+  bajarlo le quitaría alto al mapa, y subirlo no cabe. La prueba
+  `el toque y el encabezado` lee las dos medidas del CSS y comprueba que el
+  encabezado empiece después del panel, así que ensanchar el panel sin tocar
+  esto avisa en vez de dejar el título escondido.
 - **Accesos rápidos**: los botones del panel. El mapa es apaisado y en un móvil
   vertical queda chico, así que tocar una banda diagonal con el dedo es difícil;
   el panel sirve para navegar además de para informar.
@@ -493,6 +502,24 @@ va con `pointer-events: none`, que heredan los hijos, así que un icono plantado
 en medio de un estacionamiento no se come esa parte del estacionamiento. Los
 que llevan ventana se lo devuelven uno por uno: son pocos y pequeños, y a
 cambio de un trozo mínimo de zona se puede consultar algo.
+
+**Pero devolvérselo al grupo no basta.** Un `<g>` no tiene forma propia, así
+que el toque lo tiene que recoger algo de dentro, y ahí no vale cualquiera:
+
+- el **aro** vale cuando lo lleva, porque está pintado;
+- la **imagen propia** tiene el toque desactivado a propósito, para no
+  quitarle la pulsación a la zona de debajo;
+- un **símbolo** son trazos sueltos, así que solo responde justo encima del
+  trazo, no en el hueco de dentro.
+
+Por eso cada icono con información lleva un círculo `.toque`: la superficie de
+verdad, transparente y del tamaño del aro. Va con `fill: none` y
+`pointer-events: fill`, que es la pareja que importa — **`pointer-events: auto`
+no valdría**, porque ese valor (que es `visiblePainted`) exige que la forma esté
+pintada, y con `fill: none` no lo está. Es el fallo que tuvo el mapa: los
+iconos sin aro se quedaban sin superficie, el toque se colaba hasta el mapa, y
+como el mapa deshace el zoom al tocarlo, pulsar el icono no abría la ventana:
+la deshacía. Desde fuera parecía «el icono no hace nada».
 
 ### Los modelos
 
@@ -990,6 +1017,14 @@ croquis o la página base:
 - **`0` no es «no está».** El círculo se apaga con `"c": 0`, así que hay que
   comprobarlo con `"c" in ic` y nunca con `if ic.get("c")`, que tomaría el cero
   por ausencia y dejaría el círculo puesto. Lo mismo al leerlo en el croquis.
+- **`pointer-events: auto` no basta para una forma sin pintar.** El valor
+  `auto` equivale a `visiblePainted`, que exige que la forma tenga relleno o
+  trazo pintado; para una superficie invisible hay que usar `fill` o `all`.
+  Y devolverle el `pointer-events` a un `<g>` no sirve de nada, porque un `<g>`
+  no tiene forma propia: el toque lo tiene que recoger un hijo. Los dos
+  errores juntos dejaban los iconos sin aro del croquis **sin poder pulsarse**,
+  y como el mapa deshace el zoom al tocarlo, el síntoma era «el icono no hace
+  nada» en vez de un error.
 - **Una variable CSS sí funciona dentro de un `@keyframes`.** Lo natural es
   pensar que no, porque en un keyframe no hay cascada que valga; pero el
   `calc()` se resuelve con el valor que la variable tiene **en ese elemento**,
