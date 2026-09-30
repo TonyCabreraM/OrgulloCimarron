@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import gzip
+import hashlib
 import io
 import json
 import os
@@ -346,12 +347,37 @@ def test_croquis_zonas_coherentes() -> bool:
     if not mapa:
         print("    (no se encuentra el <image> con el mapa de fondo)")
         return False
-    ruta_mapa = Path("plantilla") / mapa.group(1)
+
+    # La dirección lleva un `?v=` con el sha1 del propio archivo, para que al
+    # cambiar el arte cambie la dirección y nadie siga viendo la copia vieja.
+    #
+    # Hace falta de verdad: GitHub Pages sirve la imagen con
+    # `Cache-Control: max-age=600`, así que durante diez minutos después de
+    # subir un cambio se sigue viendo el mapa anterior, recargando inclusive.
+    # Y un `?v=` que se queda viejo no da ningún error: solo un mapa que no
+    # cambia, que es justo el fallo que parece «no se subió». Por eso el número
+    # no se escribe a mano y se comprueba aquí.
+    href = mapa.group(1)
+    archivo, _, version = href.partition("?v=")
+    ruta_mapa = Path("plantilla") / archivo
     if not ruta_mapa.is_file():
         print(f"    (el mapa {ruta_mapa} no existe junto al HTML)")
         return False
+
+    sha = hashlib.sha1(ruta_mapa.read_bytes()).hexdigest()[:8]
+    if not version:
+        print(f"    (el <image> no lleva «?v=»: los navegadores seguirán")
+        print(f"     diez minutos con el mapa viejo. Ponle href=\"{archivo}?v={sha}\")")
+        return False
+    if version != sha:
+        print(f"    (cambió rectoria.webp y la dirección sigue con el número de")
+        print(f"     antes: el navegador seguirá enseñando el mapa viejo aunque")
+        print(f"     se recargue. En croquis.html pon href=\"{archivo}?v={sha}\")")
+        return False
+
     print(f"    {len(zonas)} zonas y {len(iconos)} iconos "
-          f"({len(propios)} propios), mapa de {ruta_mapa.stat().st_size // 1024} KB")
+          f"({len(propios)} propios), mapa de {ruta_mapa.stat().st_size // 1024} KB"
+          f" (v{version})")
     return True
 
 

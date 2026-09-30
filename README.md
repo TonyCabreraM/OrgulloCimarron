@@ -369,6 +369,25 @@ Ningún teléfono va a bajar eso al escanear un QR. El WebP conserva el dibujo a
 resolución de sobra (3400 px de ancho para una pantalla de 400) y pesa 90
 veces menos.
 
+**Al cambiar el arte hay que subir el `?v=` de la dirección.** En `croquis.html`
+la imagen se pide como `rectoria.webp?v=00120440`, y ese número es el sha1 del
+propio archivo en corto.
+
+Hace falta de verdad: GitHub Pages sirve la imagen con
+`Cache-Control: max-age=600`, así que **durante diez minutos después de subir un
+cambio se sigue viendo el mapa anterior, recargando inclusive**. Con la
+dirección cambiada no queda nada que reutilizar y el cambio se ve al instante.
+
+Y es de los fallos que peor se leen: un `?v=` que se queda viejo no da ningún
+error, solo un mapa que no cambia — que desde fuera parece «no se subió el
+cambio» o «se subió mal». Por eso el número **no se escribe a mano**: una prueba
+lo compara con el sha1 real del archivo y, si no cuadra, dice exactamente qué
+poner. Para calcularlo:
+
+```bash
+python -c "import hashlib,pathlib;print(hashlib.sha1(pathlib.Path('plantilla/rectoria.webp').read_bytes()).hexdigest()[:8])"
+```
+
 **El texto del mapa son contornos, no texto.** Al convertir las tipografías,
 los rótulos dejaron de ser texto extraíble: la única cadena legible en el PDF
 es «Zona recreativa». Por eso los nombres de las zonas viven en `croquis.html`
@@ -1001,6 +1020,12 @@ hecho y el aviso lo dice: se puede reintentar sin perder nada. Después hay que
 esperar uno o dos minutos a que GitHub Pages reconstruya, y el QR ya abre la
 versión nueva.
 
+> **Ojo con el fondo.** GitHub Pages sirve la imagen con
+> `Cache-Control: max-age=600`, así que un cambio en `rectoria.webp` **tarda
+> diez minutos en verse, recargando inclusive**. Para que no pase, la dirección
+> lleva un `?v=` con el sha1 del archivo: al cambiar el arte hay que subirlo, y
+> una prueba avisa si se te olvida. Los detalles están en la sección del mapa.
+
 ### Cómo reescribe el croquis
 
 El croquis lleva marcadores alrededor de los dos bloques que el editor toca:
@@ -1102,6 +1127,15 @@ croquis o la página base:
   `(ox, oy)` del origen es el que se queda quieto. Medir posiciones en pantalla
   no sirve: el zoom y el paneo del mapa las mueven y el ruido tapa la señal
   (una medición dio 54 px de «movimiento» que era el mapa reencuadrándose).
+- **Un recurso con la misma dirección y contenido nuevo no se ve.** GitHub
+  Pages sirve las imágenes con `Cache-Control: max-age=600`, así que al cambiar
+  `rectoria.webp` el navegador **y el CDN** siguen enseñando la copia vieja
+  durante diez minutos, aunque se recargue. El fallo se lee como «no se subió el
+  cambio» o «se subió mal», y no hay ningún error en ninguna parte: el servidor
+  tiene el archivo nuevo y lo que pasa es que nadie lo pide. La solución es que
+  la dirección cambie con el contenido — `rectoria.webp?v=<sha1 corto>` — y que
+  una prueba compare ese número con el sha1 de verdad, porque un número que se
+  queda viejo falla exactamente igual de callado.
 - **Un salto de línea de más en un comentario rompe el archivo entero.** En
   `editor.html`, un texto de ayuda quedó partido en dos líneas en medio de un
   `//`, así que la segunda mitad quedó como código suelto: error de sintaxis, el
