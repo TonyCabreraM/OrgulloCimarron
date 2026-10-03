@@ -1094,6 +1094,130 @@ def test_el_sello_y_el_boton_de_la_ventana() -> bool:
     return True
 
 
+def test_las_animaciones_se_paran_cuando_no_se_ven() -> bool:
+    """Las animaciones no corren cuando nadie las mira, y se reanudan igual.
+
+    Es la optimizacion mas importante del croquis en un movil de gama baja, y
+    no se ve en ningun sitio: si alguien la quita sin querer, no falla nada,
+    solo vuelve a trabarse en los telefonos.
+
+    Lo que se midio en el navegador, que es el motivo de todo esto: en cuanto
+    hay UNA animacion corriendo, el compositor produce un fotograma a la
+    frecuencia de la pantalla y no para. Cuesta casi lo mismo con un icono
+    animado que con cuarenta (1.69 ms por fotograma con uno, 2.32 ms con
+    cuarenta): el gasto esta en el fotograma, no en los iconos. Con cero
+    animaciones no produce ninguno.
+
+    Asi que lo unico que sirve de verdad es no producir fotogramas cuando no
+    hacen falta. Aqui se comprueba que existan las tres formas de pararlo y
+    que ninguna quite la animacion: `animation-play-state` la deja donde
+    estaba, asi que al reanudar no dan un salto.
+    """
+    texto = CROQUIS.read_text(encoding="utf-8")
+    problemas = []
+
+    # --- 1. La regla que las para -------------------------------------------
+    regla = re.search(r"#iconos\.frenado \.an,\s*\n?#iconos \.an\.fuera\{([^}]*)\}",
+                      texto)
+    if not regla:
+        problemas.append(
+            "no existe la regla que para las animaciones (`#iconos.frenado .an` "
+            "y `#iconos .an.fuera`): el mapa volveria a animar 48 iconos aunque "
+            "no se vea ninguno")
+    else:
+        cuerpo = regla.group(1).replace(" ", "")
+        if "animation-play-state:paused" not in cuerpo:
+            problemas.append(
+                f"la regla de parar no usa `animation-play-state:paused`: {cuerpo}")
+        # Parar NO es quitar. Quitar la animacion la reinicia desde el
+        # principio, y al reanudar el icono daria un salto.
+        if re.search(r"animation:\s*none", cuerpo):
+            problemas.append(
+                "la regla de parar quita la animacion (`animation:none`) en vez "
+                "de pausarla: al reanudar los iconos darian un salto al "
+                "principio")
+
+    # --- 2. Los tres motivos para parar -------------------------------------
+    # 2a. Mientras el mapa se mueve.
+    ini = texto.find("function encuadra(")
+    fin = texto.find("\n}", ini)
+    if ini < 0:
+        problemas.append("(no se encuentra encuadra en el croquis)")
+    else:
+        cuerpo = texto[ini:fin]
+        if "frenaUnRato(" not in cuerpo:
+            problemas.append(
+                "`encuadra` no para las animaciones: durante el zoom el mapa "
+                "entero se reencuadra en cada fotograma y ademas los iconos "
+                "siguen animandose, y las dos cosas se pelean por el mismo sitio")
+        # Y solo si el encuadre cambia de verdad. En un movil, `resize` salta
+        # al esconderse la barra del navegador; sin esta comprobacion, mover el
+        # dedo por la pantalla dejaria las animaciones congeladas un rato largo.
+        if "=== puesto) return" not in cuerpo and "== puesto) return" not in cuerpo:
+            problemas.append(
+                "`encuadra` para las animaciones aunque el encuadre no cambie: "
+                "en un movil, cada asomo de la barra del navegador las "
+                "congelaria sin que nada se mueva")
+
+    # 2b. Con la pagina escondida.
+    if "visibilitychange" not in texto:
+        problemas.append(
+            "no se escucha `visibilitychange`: un mapa abierto en una pestana "
+            "de fondo seguiria animandose y gastando bateria")
+    elif "document.hidden" not in texto:
+        problemas.append(
+            "se escucha `visibilitychange` pero no se mira `document.hidden`")
+
+    # 2c. Los iconos que han quedado fuera de la pantalla.
+    if "IntersectionObserver" not in texto:
+        problemas.append(
+            "no hay `IntersectionObserver`: los iconos fuera de la pantalla "
+            "seguirian animandose. Ampliado en un movil se ven cuatro o cinco "
+            "de los 48, y los otros gastaban lo mismo")
+    else:
+        # Tiene que haber un margen: sin el, los iconos que asoman por el borde
+        # estarian parados y darian un salto al entrar.
+        if "rootMargin" not in texto:
+            problemas.append(
+                "el `IntersectionObserver` no lleva `rootMargin`: los iconos "
+                "que asoman por el borde entrarian ya moviendose de golpe")
+        if "toggle(\"fuera\"" not in texto:
+            problemas.append(
+                "el `IntersectionObserver` no pone ni quita la clase «fuera»")
+
+    # --- 3. Que la clase se quite de verdad ---------------------------------
+    # Un icono que se queda marcado «fuera» para siempre no se anima nunca mas.
+    # Se comprueba que la clase se ponga y se quite segun el resultado, y que
+    # al volver a la vista general no quede ninguno marcado.
+    if "isIntersecting" not in texto:
+        problemas.append(
+            "el `IntersectionObserver` no mira `isIntersecting`: no hay forma de "
+            "saber si el icono ha vuelto a la pantalla")
+    if "sueltaAnimaciones" not in texto:
+        problemas.append(
+            "no hay forma de soltar el freno: las animaciones se quedarian "
+            "paradas para siempre")
+
+    # --- 4. Y que la prueba no pase en balde --------------------------------
+    # Todo esto solo sirve si hay animaciones que parar. Sin ninguna, la prueba
+    # daria el visto bueno sin comprobar nada.
+    iconos = leer_bloque(texto, "ICONOS") or []
+    animados = [ic for ic in iconos if ic.get("a")]
+    if len(animados) < 10:
+        problemas.append(
+            f"(solo {len(animados)} iconos animados: la prueba no estaria "
+            f"comprobando el caso que importa, que es el mapa lleno)")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print(f"    {len(animados)} animaciones que se paran al esconderse la "
+          f"pagina, al moverse el mapa y al quedar fuera de la pantalla, sin "
+          f"perderse ninguna")
+    return True
+
+
 def _sin_comentarios(texto: str) -> str:
     """El croquis sin comentarios, que es donde puede haber codigo.
 
@@ -2092,6 +2216,8 @@ def main() -> int:
         ("animaciones e intensidad", test_animaciones_e_intensidad),
         ("el toque y el encabezado", test_el_toque_y_el_encabezado),
         ("el sello y el boton de la ventana", test_el_sello_y_el_boton_de_la_ventana),
+        ("las animaciones se paran cuando no se ven",
+         test_las_animaciones_se_paran_cuando_no_se_ven),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),

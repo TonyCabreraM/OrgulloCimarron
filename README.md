@@ -725,6 +725,48 @@ el pivote abajo, el mismo ángulo mueve mucho menos la punta.
 Si el sistema pide menos movimiento (`prefers-reduced-motion`), se quedan
 quietos.
 
+### Cuando no hace falta animar
+
+Las animaciones son **lo único de esta página que trabaja sin parar**, y eso es
+lo que traba el mapa en un teléfono de gama baja. Lo que se midió en el
+navegador, que es lo que decide el diseño:
+
+| Iconos animando | Coste por fotograma |
+| --- | --- |
+| 0 | **0 fotogramas** — el compositor se apaga |
+| 1 | 1,69 ms |
+| 40 | 2,32 ms |
+
+**El gasto está en el fotograma, no en los iconos.** En cuanto hay una sola
+animación corriendo, el compositor produce un fotograma a la frecuencia de la
+pantalla y no para; cuesta casi lo mismo con un icono que con cuarenta. Y con
+cero no produce ninguno. En un ordenador eso no se nota; en un teléfono de gama
+baja son entre 15 y 30 ms por fotograma de forma continua, y ahí es donde se
+traba: no por un icono de más, sino por no parar nunca.
+
+Por eso lo único que sirve de verdad es **no producir fotogramas cuando no hacen
+falta**, y se para en los tres casos en que nadie las mira:
+
+| Cuándo | Cómo | Qué se gana |
+| --- | --- | --- |
+| La página está escondida | `visibilitychange` + `document.hidden` | Todo. Un mapa abierto en una pestaña de fondo no gasta nada |
+| El mapa se está moviendo | `frenaUnRato(800)` al empezar el zoom | El zoom no compite con 44 animaciones por el mismo sitio |
+| El icono quedó fuera de la pantalla | `IntersectionObserver`, clase `.fuera` | Ampliado en un móvil se ven 4 o 5 de los 48; los otros 43 se paran |
+
+Se para con **`animation-play-state: paused`, no quitando la animación.** La
+diferencia importa: quitar la animación la reinicia desde el principio, así que
+al volver a mirar los iconos darían un salto; pausarla la deja donde estaba.
+
+El `IntersectionObserver` lleva un `rootMargin` de 160 px para que los iconos
+que asoman por el borde ya estén moviéndose al entrar, en vez de arrancar de
+golpe.
+
+Y `encuadra()` **solo para las animaciones si el encuadre cambia de verdad.** En
+un móvil, `resize` salta cada vez que se esconde o se asoma la barra del
+navegador, y `encuadra()` se llama también ahí: sin esa comprobación, mover el
+dedo por la pantalla dejaría las animaciones congeladas un rato largo sin que
+nada se hubiera movido.
+
 ### La intensidad
 
 La clave `m` dice **cuánto** se mueve un icono, no a qué velocidad. Va de 0.2
@@ -1184,6 +1226,22 @@ croquis o la página base:
   de arriba y **no se puede alcanzar con el dedo**, porque el scroll solo llega
   hacia abajo. `align-items: safe center` lo pega al borde en ese caso, y si el
   navegador no lo entiende se queda con el `center` de la línea anterior.
+- **Una animación continua cuesta por fotograma, no por elemento.** Medido:
+  con 1 icono animado el compositor ya produce un fotograma cada vez que la
+  pantalla se refresca, y cuesta 1,69 ms; con 40, 2,32 ms. Con cero, no produce
+  ninguno. Así que añadir o quitar animaciones apenas cambia el gasto: lo que lo
+  cambia es **dejar de producir fotogramas**. En un móvil de gama baja eso es la
+  diferencia entre ir fluido y trabarse, y no se ve en ninguna parte: hay que
+  medirlo con una traza del compositor, porque el hilo principal está ocioso y
+  un `requestAnimationFrame` normal sigue dando 60 fps aunque el compositor no
+  llegue.
+- **Parar una animación no es quitarla.** `animation: none` la reinicia desde el
+  principio, así que al reanudar el elemento da un salto. `animation-play-state:
+  paused` la deja donde estaba y sigue por ahí.
+- **`resize` salta mucho más de lo que parece en un móvil.** Cada vez que se
+  esconde o se asoma la barra del navegador. Si algo caro se dispara desde
+  `resize`, hay que comprobar antes que el resultado cambie de verdad, o se
+  dispara con cada movimiento del dedo.
 - **Un recurso con la misma dirección y contenido nuevo no se ve.** GitHub
   Pages sirve las imágenes con `Cache-Control: max-age=600`, así que al cambiar
   `rectoria.webp` el navegador **y el CDN** siguen enseñando la copia vieja
