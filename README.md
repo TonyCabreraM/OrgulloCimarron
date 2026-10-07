@@ -426,6 +426,92 @@ reescribir. Se explican más abajo.
   quedaría inalcanzable justo ahí. Hay una prueba que lo comprueba con el
   teorema de los ejes separadores, y otra que verifica que todas quepan en el
   mapa.
+
+### Los adornos de las zonas
+
+Una zona **nace invisible**: es un polígono transparente que solo existe para
+recibir el toque, para no tapar el dibujo del artista. Los adornos son
+opcionales y son lo que la hace visible en el mapa publicado.
+
+Van en un **objeto aparte, en quinto lugar** dentro de la zona:
+
+```javascript
+["Teatro al aire libre", "Teatro",
+ [[404,154],[578,158],[544,287],[361,211]],
+ "El foro del evento, con el escenario al aire libre.",
+ {"f": "#c8e6c9", "l": "#00723f", "b": "camina"}]
+```
+
+| Clave | Qué es | ¿Hace falta? |
+| --- | --- | --- |
+| `f` | El color de relleno, en `#rrggbb` | No, sin relleno |
+| `l` | El color de la línea, en `#rrggbb` | No, sin línea |
+| `p` | `1` para la línea punteada | No, línea seguida |
+| `a` | La animación de la zona: mueve el fondo y la línea | No, quieta |
+| `b` | La animación del borde: mueve solo la línea | No, quieta |
+| `m` | La intensidad, de 0.2 a 2.5 | No, 1 |
+
+**Los cuatro primeros campos siguen siendo posicionales y no se tocan.** Los
+adornos van en un objeto con nombres en lugar de seguir alargando la tupla: con
+un `z[5]` para el color y un `z[6]` para la animación habría que contar comas
+con la vista al leer el archivo, que es justo el problema que se quitó de los
+iconos.
+
+**Y son opcionales de verdad.** Una zona sin adornos se escribe con sus cuatro
+campos de siempre y se dibuja igual que antes de que existieran: el servidor
+quita el quinto campo cuando queda vacío. Si no, cambiar los adornos de una
+zona reescribiría las diez del mapa y el diff de git no se podría leer.
+
+**El toque y lo que se ve van en el mismo polígono.** No hay uno encima del
+otro: con el relleno transparente el navegador ya lo da por pintado y recibe la
+pulsación, que es como funcionaba antes. Un segundo polígono solo para pintar
+sería duplicar los puntos y tener dos cosas que se pueden desincronizar.
+
+#### Las animaciones de las zonas
+
+Se mueven `opacity` (la zona) y `stroke-opacity` y `stroke-dashoffset` (el
+borde). Son propiedades distintas, así que **se pueden llevar las dos a la
+vez**: una zona puede latir mientras su borde avanza.
+
+| Animación | Dónde | Qué hace |
+| --- | --- | --- |
+| `late` | zona y borde | La opacidad sube y baja, sin llegar a desaparecer |
+| `brilla` | zona y borde | Aparece y desaparece del todo |
+| `destello` | zona | Un aviso: baja rápido y se queda quieta el resto |
+| `camina` | borde | Los guiones avanzan por todo el borde, como una carretera |
+
+**`camina` es la de la carretera.** Los guiones van avanzando por el borde:
+
+```css
+#zonas .g.zb-camina{
+  stroke-dasharray:calc(9 * var(--m, 1)) calc(7 * var(--m, 1));
+  animation:bordeCamina 1.6s linear infinite}
+@keyframes bordeCamina{
+  to{stroke-dashoffset:calc(-16 * var(--m, 1))}}
+```
+
+Dos detalles que tienen que cuadrar o el efecto se rompe sin dar ningún error:
+
+- **El desplazamiento tiene que ser exactamente un periodo de guiones** (9 + 7 =
+  16). Con 15 o 17, cada vuelta daría un tirón visible al reiniciarse.
+- **Va en negativo.** El patrón se mueve al revés que el desplazamiento: en
+  positivo, la línea parecería ir hacia atrás.
+
+`camina` **pone sus propios guiones**, más largos que el punteado normal, así
+que no hace falta marcar «línea punteada»: esa casilla es para una línea
+quieta. Y la intensidad **alarga las rayas**, que es lo que en una carretera
+significa «más». La prueba comprueba que los números del `keyframes` y los del
+`dasharray` sigan cuadrando: si alguien cambia uno sin el otro, el borde da un
+salto en cada vuelta y no hay ningún error que lo diga.
+
+#### El color va por variables
+
+En el editor, el color de una zona se pasa como `--zf` y `--zl` en lugar de
+ponerse directamente en el `fill` y el `stroke`. Así el color elegido manda
+sobre el aspecto de fábrica de las zonas (el verde translúcido de edición),
+pero **el filo de la zona seleccionada y el de la que tiene un problema siguen
+mandando por encima**. Al revés, el resaltado no se vería y no habría forma de
+saber cuál se está moviendo.
 - **El encuadre se calcula en JavaScript**, no se deja al `viewBox`: el mapa se
   centra y se amplía dentro del hueco libre que dejan el encabezado y el panel,
   midiéndolos con `getBoundingClientRect()`. Dejar el encuadre al `viewBox`
@@ -1242,6 +1328,24 @@ croquis o la página base:
   esconde o se asoma la barra del navegador. Si algo caro se dispara desde
   `resize`, hay que comprobar antes que el resultado cambie de verdad, o se
   dispara con cada movimiento del dedo.
+- **Una regla de accesibilidad puede no hacer nada y parecer que sí.**
+  `@media (prefers-reduced-motion:reduce){ #iconos .an{animation:none} }` no
+  paraba nada: las reglas que dan animación a cada clase (`#iconos .an.late`)
+  tienen más fuerza que una que solo nombre el grupo y empatan con ella, así que
+  ganaban ellas. Estuvo así desde que existen las animaciones y no se notó
+  nunca porque no da ningún error. Se arregla con `!important`, y hay que
+  acordarse de mirarlo cuando se añada un elemento animado nuevo.
+- **Dos reglas con la misma fuerza las decide el orden, y eso es una trampa.**
+  La regla que pausa las animaciones (`.frenado`) tiene la misma fuerza que las
+  que animan cada clase. Puesta antes de las de las zonas, las de las zonas
+  ganaban y el mapa seguía animándose durante el zoom aunque los iconos ya
+  estuvieran parados. Sin ningún error: solo un teléfono que se sigue trabando.
+  Cuando la posición de una regla importa, hay que escribir al lado por qué.
+- **Un `calc()` con una variable dentro de `stroke-dasharray` funciona** en
+  Chrome, y la clave es que el desplazamiento y el patrón usen la misma cuenta:
+  `dasharray: calc(9 * var(--m)) calc(7 * var(--m))` con
+  `dashoffset: calc(-16 * var(--m))`. Si los dos números se separan, el bucle
+  da un salto en cada vuelta.
 - **Un recurso con la misma dirección y contenido nuevo no se ve.** GitHub
   Pages sirve las imágenes con `Cache-Control: max-age=600`, así que al cambiar
   `rectoria.webp` el navegador **y el CDN** siguen enseñando la copia vieja

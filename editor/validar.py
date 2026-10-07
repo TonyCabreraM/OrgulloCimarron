@@ -105,11 +105,77 @@ INTENSIDAD = 1.0
 MIN_INTENSIDAD = 0.2
 MAX_INTENSIDAD = 2.5
 
+# --- Los adornos de una zona ------------------------------------------------
+# Una zona nace invisible: es un poligono transparente que solo existe para
+# recibir el toque, para no tapar el dibujo del mapa. A partir de aqui se le
+# puede dar relleno, linea y movimiento, y sigue siendo opcional: sin adornos
+# se comporta como siempre.
+#
+# Las animaciones van en dos listas separadas porque son dos cosas distintas:
+# la de la zona mueve el relleno Y la linea, y la del borde mueve SOLO la
+# linea. Por eso hay nombres que estan en las dos.
+ANIMACIONES_ZONA = {
+    "": "Quieta",
+    "late": "Late",
+    "brilla": "Brilla",
+    "destello": "Destello",
+}
+
+# La del borde. `camina` es la de la carretera: la linea va avanzando por todo
+# el borde. Necesita guiones, asi que la pone ella misma aunque no se haya
+# pedido la linea punteada.
+ANIMACIONES_BORDE = {
+    "": "Quieta",
+    "camina": "Camina",
+    "late": "Late",
+    "brilla": "Brilla",
+}
+
+# Las claves de los adornos, que van en un objeto aparte dentro de la zona:
+#
+#   f  el color de relleno, "#rrggbb", o nada si no lleva
+#   l  el color de la linea, "#rrggbb", o nada si no lleva
+#   p  la linea punteada (solo tiene sentido con linea)
+#   a  la animacion de la zona entera
+#   b  la animacion del borde
+#   m  la intensidad, la misma cuenta que en los iconos
+#
+# Van con nombres y no sueltos al final de la tupla de la zona a proposito: la
+# tupla ya tiene cuatro campos de siempre —nombre, corto, poligono y
+# descripcion— y meterle seis mas seria volver a contar comas con la vista,
+# que es justo el problema que se quito de los iconos.
+CLAVES_ZONA = {"f", "l", "p", "a", "b", "m"}
+
+# El patron de los guiones de la linea, en puntos.
+#
+# El punteado normal es corto y apretado, para que se lea como un filo
+# punteado. El de `camina` es mas largo y con mas hueco, que es lo que hace que
+# se lea como la linea de una carretera en movimiento.
+GUIONES_PUNTEADA = "3 4"
+GUIONES_CAMINA = "9 7"
+
 # El aro: el circulo claro con filo que llevan los iconos detras. Por defecto
 # SI se lleva, que es como estaban todos antes de que se pudiera elegir, asi
 # que en el archivo solo aparece cuando se quita, como `"c": 0`.
 CON_ARO = 1
 SIN_ARO = 0
+
+
+def es_color(valor) -> bool:
+    """Si un valor es un color utilizable, en la forma `#rrggbb`.
+
+    Se exige la forma larga y en hexadecimal a proposito, aunque el navegador
+    entienda `red` o `#abc`: el color lo elige un selector del editor, que
+    siempre da `#rrggbb`, y aceptar mas formas es aceptar mas sitios por donde
+    colar algo que no es un color. En un `fill` de SVG, ademas, un valor raro
+    no da error: el navegador lo ignora y la zona sale sin pintar.
+
+    No se admite `none` ni la cadena vacia: para "sin relleno" esta no poner la
+    clave, que es lo que hace que el archivo quede corto.
+    """
+    if not isinstance(valor, str) or len(valor) != 7 or valor[0] != "#":
+        return False
+    return all(c in "0123456789abcdefABCDEF" for c in valor[1:])
 
 # Los modelos: iconos guardados enteros, con su tamano, su giro, su animacion
 # y su informacion, para poder estampar varios iguales de un clic. Viven en
@@ -226,11 +292,112 @@ def solapan(a: list, b: list) -> bool:
     return _eje_separador(a, b) is None
 
 
+def revisar_adornos(adornos, sitio: str) -> list[str]:
+    """Los problemas de los adornos de una zona. Vacia es que todo bien.
+
+    Los adornos son el objeto opcional que puede ir en quinto lugar dentro de
+    la zona. Se valida aparte de `revisar_zonas` porque son dos cosas
+    distintas: una zona sin adornos es de fabrica y perfectamente valida, y
+    ademas el editor los valida por su cuenta mientras se escriben, sin esperar
+    a guardar.
+    """
+    problemas: list[str] = []
+    if not isinstance(adornos, dict):
+        return [f"{sitio}: los adornos tienen que ser un objeto como "
+                f'{{"f": "#c8e6c9", "l": "#00723f"}}']
+
+    raros = sorted(set(adornos) - CLAVES_ZONA)
+    if raros:
+        return [f"{sitio}: en los adornos no conozco {' ni '.join(raros)}. "
+                f"Las claves son {', '.join(sorted(CLAVES_ZONA))} "
+                f"(f=relleno, l=linea, p=punteada, a=animacion, b=borde, "
+                f"m=intensidad)"]
+
+    for clave, cual in (("f", "el relleno"), ("l", "la linea")):
+        if clave in adornos and not es_color(adornos[clave]):
+            problemas.append(
+                f"{sitio}: {cual} tiene que ser un color en la forma #rrggbb, "
+                f"y viene {adornos[clave]!r}")
+
+    if "p" in adornos:
+        # El punteado no es un adorno por si solo: es como se pinta la linea.
+        # Sin linea no hay nada que puntear, y dejarlo pasar seria guardar un
+        # ajuste que no hace nada.
+        if adornos["p"] != 1 and adornos["p"] is not True:
+            problemas.append(
+                f"{sitio}: «p» solo puede ser 1 (punteada) y viene "
+                f"{adornos['p']!r}")
+        elif not adornos.get("l"):
+            problemas.append(
+                f"{sitio}: la linea esta puesta como punteada pero no tiene "
+                f"color, asi que no hay linea que puntear")
+
+    for clave, lista, cual in (("a", ANIMACIONES_ZONA, "la zona"),
+                               ("b", ANIMACIONES_BORDE, "el borde")):
+        if clave not in adornos:
+            continue
+        if adornos[clave] not in lista:
+            problemas.append(
+                f"{sitio}: «{adornos[clave]}» no es una animacion de {cual} de "
+                f"las que hay. Las que hay: "
+                f"{', '.join(k for k in lista if k) or 'ninguna'}")
+        # Una animacion de borde sin linea no se ve: el borde es la linea.
+        if clave == "b" and adornos[clave] and not adornos.get("l"):
+            problemas.append(
+                f"{sitio}: el borde tiene animacion pero la linea no tiene "
+                f"color, asi que no hay nada que animar")
+
+    if "m" in adornos:
+        inte = adornos["m"]
+        if not isinstance(inte, (int, float)) or isinstance(inte, bool):
+            problemas.append(f"{sitio}: la intensidad tiene que ser un numero")
+        elif not MIN_INTENSIDAD <= inte <= MAX_INTENSIDAD:
+            problemas.append(
+                f"{sitio}: la intensidad {inte:.2f} se sale de "
+                f"{MIN_INTENSIDAD} a {MAX_INTENSIDAD}")
+        elif not (adornos.get("a") or adornos.get("b")):
+            # La intensidad modula un movimiento: sin movimiento no modula
+            # nada, y seria un ajuste que se guarda y no se ve.
+            problemas.append(
+                f"{sitio}: hay intensidad pero no hay ninguna animacion que "
+                f"ajustar")
+
+    return problemas
+
+
+def limpiar_adornos(adornos) -> dict:
+    """Los adornos sin lo que sobra, para que el archivo quede corto.
+
+    Se llama al guardarlos desde el editor, que manda lo que tiene en pantalla
+    y no siempre esta todo. Se descarta lo vacio y lo que vale por defecto, por
+    el mismo motivo que en los ajustes de los iconos: una zona sin adornos
+    tiene que seguir guardandose igual que antes de que esto existiera.
+    """
+    if not isinstance(adornos, dict):
+        return {}
+    limpio: dict = {}
+    for clave in ("f", "l", "a", "b"):
+        valor = adornos.get(clave)
+        if valor not in ("", None):
+            limpio[clave] = valor
+    # El punteado solo se escribe cuando esta puesto, y el 0 no vale: es lo de
+    # siempre. Se mira por lo que vale y no con `in` porque aqui el 0 y la
+    # ausencia significan lo mismo, al reves que en el circulo de los iconos.
+    if adornos.get("p"):
+        limpio["p"] = 1
+    if adornos.get("m") and adornos["m"] != INTENSIDAD:
+        limpio["m"] = adornos["m"]
+    return limpio
+
+
 def revisar_zonas(zonas: list) -> list[str]:
     """Devuelve la lista de problemas de las zonas. Vacia es que todo bien.
 
     Cada zona es [nombre, nombre corto, poligono, descripcion], con el
-    poligono como lista de puntos [x, y].
+    poligono como lista de puntos [x, y]. Opcionalmente puede llevar un quinto
+    elemento con los adornos (relleno, linea y animaciones); las zonas que no
+    lo llevan son las de siempre y se comportan igual que antes de que
+    existiera.
     """
     problemas: list[str] = []
 
@@ -240,12 +407,16 @@ def revisar_zonas(zonas: list) -> list[str]:
     poligonos = []
     for k, z in enumerate(zonas):
         sitio = f"zona {k + 1}"
-        if not isinstance(z, (list, tuple)) or len(z) != 4:
-            problemas.append(f"{sitio}: tiene que ser [nombre, corto, poligono, descripcion]")
+        if not isinstance(z, (list, tuple)) or len(z) not in (4, 5):
+            problemas.append(
+                f"{sitio}: tiene que ser [nombre, corto, poligono, descripcion] "
+                f"y, si lleva adornos, un quinto elemento")
             poligonos.append(None)
             continue
 
-        nombre, corto, poligono, desc = z
+        nombre, corto, poligono, desc = z[:4]
+        if len(z) == 5:
+            problemas.extend(revisar_adornos(z[4], sitio))
         if not isinstance(corto, str) or not corto.strip():
             problemas.append(f"{sitio}: le falta el nombre corto, que es el del boton")
         elif len(corto) > 22:

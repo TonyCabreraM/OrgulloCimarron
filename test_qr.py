@@ -1117,25 +1117,38 @@ def test_las_animaciones_se_paran_cuando_no_se_ven() -> bool:
     problemas = []
 
     # --- 1. La regla que las para -------------------------------------------
-    regla = re.search(r"#iconos\.frenado \.an,\s*\n?#iconos \.an\.fuera\{([^}]*)\}",
+    regla = re.search(r"#m\.frenado \.pausa,\s*\n#m \.pausa\.fuera\{([^}]*)\}",
                       texto)
     if not regla:
         problemas.append(
-            "no existe la regla que para las animaciones (`#iconos.frenado .an` "
-            "y `#iconos .an.fuera`): el mapa volveria a animar 48 iconos aunque "
-            "no se vea ninguno")
+            "no existe la regla que para las animaciones (`#m.frenado .pausa` y "
+            "`#m .pausa.fuera`): el mapa volveria a animar 58 cosas aunque no "
+            "se vea ninguna")
     else:
         cuerpo = regla.group(1).replace(" ", "")
         if "animation-play-state:paused" not in cuerpo:
             problemas.append(
                 f"la regla de parar no usa `animation-play-state:paused`: {cuerpo}")
         # Parar NO es quitar. Quitar la animacion la reinicia desde el
-        # principio, y al reanudar el icono daria un salto.
+        # principio, y al reanudar el elemento daria un salto.
         if re.search(r"animation:\s*none", cuerpo):
             problemas.append(
                 "la regla de parar quita la animacion (`animation:none`) en vez "
-                "de pausarla: al reanudar los iconos darian un salto al "
-                "principio")
+                "de pausarla: al reanudar daria un salto al principio")
+
+        # La regla tiene que ir DESPUES de las que dan animacion a cada clase.
+        # Las dos tienen la misma fuerza, asi que decide el orden: puesta antes,
+        # las de las zonas la pisaban y el mapa seguia animandose durante el
+        # zoom aunque los iconos ya estuvieran parados. Es un fallo que no da
+        # ningun error, solo un telefono que se sigue trabando.
+        puesto = texto.find("#m.frenado .pausa")
+        for cual in ("#zonas .g.za-late", "#zonas .g.zb-camina",
+                     "#iconos .an.late", "#iconos .an.viento"):
+            if cual in texto and texto.find(cual) > puesto:
+                problemas.append(
+                    f"la regla de parar esta antes que «{cual}»: como las dos "
+                    f"tienen la misma fuerza, gana la animacion y esa no se "
+                    f"pararia nunca")
 
     # --- 2. Los tres motivos para parar -------------------------------------
     # 2a. Mientras el mapa se mueve.
@@ -1215,6 +1228,186 @@ def test_las_animaciones_se_paran_cuando_no_se_ven() -> bool:
     print(f"    {len(animados)} animaciones que se paran al esconderse la "
           f"pagina, al moverse el mapa y al quedar fuera de la pantalla, sin "
           f"perderse ninguna")
+    return True
+
+
+def test_los_adornos_de_las_zonas() -> bool:
+    """Una zona puede llevar color, linea y movimiento, y sigue siendo opcional.
+
+    Las zonas nacen invisibles: son poligonos transparentes que solo existen
+    para recibir el toque, para no tapar el dibujo del mapa. Los adornos son lo
+    que las hace visibles en el croquis publicado, y son OPCIONALES: una zona
+    sin adornos tiene que quedar escrita y dibujada exactamente igual que antes
+    de que existieran. Eso es lo que mas facil se rompe, porque no se nota
+    hasta que alguien mira el diff de git y ve las diez zonas cambiadas.
+
+    Se comprueban las tres partes que tienen que decir lo mismo: las reglas del
+    servidor, lo que se escribe en el archivo y lo que dibuja el croquis.
+    """
+    problemas = []
+    texto = CROQUIS.read_text(encoding="utf-8")
+    val = VALIDAR.read_text(encoding="utf-8")
+    edit = EDITOR_HTML.read_text(encoding="utf-8")
+
+    # --- 1. Las listas de animaciones, y que el croquis las dibuje ----------
+    # Son dos listas distintas porque son dos cosas distintas: la de la zona
+    # mueve el fondo y la linea, y la del borde solo la linea.
+    if not v.ANIMACIONES_ZONA or not v.ANIMACIONES_BORDE:
+        problemas.append("faltan las listas de animaciones de zona o de borde")
+    if "camina" not in v.ANIMACIONES_BORDE:
+        problemas.append("`camina` no esta entre las animaciones del borde: es "
+                         "la de la linea que avanza, como una carretera")
+    # Cada animacion tiene que tener su regla en el croquis, o se elige y no
+    # pasa nada.
+    for lista, prefijo, cual in ((v.ANIMACIONES_ZONA, "za", "la zona"),
+                                 (v.ANIMACIONES_BORDE, "zb", "el borde")):
+        for a in lista:
+            if a and f"#zonas .g.{prefijo}-{a}" not in texto:
+                problemas.append(
+                    f"el croquis no tiene regla para la animacion «{a}» de {cual}")
+
+    # --- 2. Los keyframes, y que `camina` cierre el bucle -------------------
+    # El desplazamiento de los guiones tiene que ser EXACTAMENTE un periodo
+    # (9 + 7 = 16) para que al repetir no de un tiron. Con 15 o 17, cada vuelta
+    # daria un salto visible.
+    cuerpo = _cuerpo_de_keyframe(texto, "bordeCamina")
+    if cuerpo is None:
+        problemas.append("no esta definido el keyframe `bordeCamina`: la linea "
+                         "no avanzaria")
+    else:
+        if "stroke-dashoffset" not in cuerpo:
+            problemas.append("`bordeCamina` no mueve `stroke-dashoffset`: los "
+                             "guiones no avanzarian por el borde")
+        # En negativo: el patron se mueve al reves que el desplazamiento, asi
+        # que en positivo la linea pareceria ir hacia atras.
+        if not re.search(r"stroke-dashoffset:\s*calc\(\s*-16", cuerpo):
+            problemas.append(
+                "el desplazamiento de `bordeCamina` no es un periodo exacto en "
+                f"negativo: {cuerpo.strip()[:80]}")
+    # Y que los guiones de `camina` sean 9 y 7, que es de donde sale el 16.
+    if not re.search(r"stroke-dasharray:\s*calc\(9 \* var\(--m", texto):
+        problemas.append(
+            "los guiones de `camina` no son `9 7` escalados por la intensidad; "
+            "el keyframe da por hecho ese periodo, asi que tienen que cuadrar")
+
+    # --- 3. Que una zona sin adornos se escriba como siempre ----------------
+    # Es la comprobacion que de verdad importa para no romper lo que ya hay.
+    #
+    # La zona entra con CINCO campos y el quinto vacio, que es como la manda el
+    # editor: siempre manda los mismos campos, rellenos o no. Tiene que salir
+    # con cuatro, o guardar desde el editor reescribiria las diez zonas del
+    # mapa aunque no se hubiera tocado ninguna. Probar con una zona de cuatro
+    # no valdria: esa ya sale bien sola, y el caso que importa es el otro.
+    zona = ["Teatro", "Teatro", [[10, 10], [200, 10], [200, 200], [10, 200]],
+            "Una descripcion que pasa del minimo.", {}]
+    limpia = editor._limpia_zonas([list(zona)])
+    if len(limpia[0]) != 4:
+        problemas.append(
+            f"una zona que llega con los adornos vacios se queda con "
+            f"{len(limpia[0])} campos en vez de 4: guardar sin tocar los adornos "
+            f"reescribiria las diez zonas del mapa")
+    escrito = editor._texto_zonas(limpia)
+    if "{" in escrito.split("Una descripcion")[1]:
+        problemas.append(f"una zona sin adornos escribe un objeto vacio: {escrito}")
+    # Y con adornos, si se escriben. Se parte de los cuatro campos de siempre,
+    # no de la zona con el quinto vacio, que si no quedaria con seis.
+    con = [list(zona[:4]) + [{"f": "#c8e6c9", "l": "#00723f", "p": 1, "a": "late",
+                              "b": "camina", "m": 2}]]
+    escrito2 = editor._texto_zonas(editor._limpia_zonas(con))
+    for trozo in ('"f": "#c8e6c9"', '"l": "#00723f"', '"p": 1', '"a": "late"',
+                  '"b": "camina"', '"m": 2'):
+        if trozo not in escrito2:
+            problemas.append(f"al escribir los adornos falta {trozo}")
+
+    # --- 4. Lo que se rechaza ----------------------------------------------
+    base = ["Teatro", "Teatro", [[10, 10], [200, 10], [200, 200], [10, 200]],
+            "Una descripcion que pasa del minimo."]
+    malos = [
+        ({"f": "rojo"}, "un color con nombre en vez de #rrggbb"),
+        ({"f": "#abc"}, "un color de tres cifras"),
+        ({"f": "#gggggg"}, "un color con letras que no son hexadecimales"),
+        ({"l": "url(#x)"}, "una url en vez de un color"),
+        ({"l": "#00723f", "p": 1, "x": 1}, "una clave que no existe"),
+        ({"l": "#00723f", "a": "vuela"}, "una animacion de zona que no existe"),
+        ({"l": "#00723f", "b": "vuela"}, "una animacion de borde que no existe"),
+        ({"a": "late", "b": "camina"}, "una animacion de borde sin linea"),
+        ({"p": 1}, "un punteado sin linea"),
+        ({"l": "#00723f", "m": 2}, "una intensidad sin animacion"),
+        ({"l": "#00723f", "m": 9}, "una intensidad fuera de rango"),
+    ]
+    for adornos, nota in malos:
+        salida = v.revisar_zonas([base + [adornos]])
+        if not salida:
+            problemas.append(f"acepto unos adornos con {nota}")
+        elif "zona 1" not in " ".join(salida):
+            problemas.append(
+                f"{nota} se rechazo, pero no por la zona: {salida}")
+    buenos = [
+        ({"f": "#c8e6c9"}, "solo relleno"),
+        ({"l": "#00723f"}, "solo linea"),
+        ({"l": "#00723f", "p": 1}, "linea punteada"),
+        ({"l": "#00723f", "b": "camina"}, "linea que avanza"),
+        ({"l": "#00723f", "b": "camina", "m": 2.5}, "la carretera al maximo"),
+        ({"a": "destello"}, "una zona que destella, sin linea"),
+        ({}, "adornos vacios"),
+    ]
+    for adornos, nota in buenos:
+        salida = v.revisar_zonas([base + [adornos]])
+        if salida:
+            problemas.append(f"rechazo unos adornos con {nota}: {salida}")
+
+    # --- 5. Y que el croquis dibuje lo que se guarda ------------------------
+    # De nada sirve guardar el color si el croquis no lo pinta. Se mira que el
+    # poligono de la zona coja el relleno, la linea y el punteado, y que el
+    # toque siga funcionando: el poligono de una zona con color NO puede perder
+    # la pulsacion, o se quedaria sin poder tocarla.
+    ini = texto.find("ZON.innerHTML")
+    if ini < 0:
+        problemas.append("(no se encuentra el render de las zonas en el croquis)")
+    else:
+        render = texto[ini:texto.find('}).join("");', ini)]
+        for pieza, nota in (("a.f", "el relleno"), ("a.l", "la linea"),
+                            ("a.p", "el punteado"), ("a.a", "la animacion de la zona"),
+                            ("a.b", "la animacion del borde"),
+                            ("points=", "los puntos, que son lo que recibe el toque")):
+            if pieza not in render:
+                problemas.append(f"el render de las zonas no usa {nota}")
+        # Sin color, el relleno tiene que seguir siendo transparente: si
+        # quedara en negro, las diez zonas taparian el mapa entero.
+        if '"transparent"' not in render:
+            problemas.append(
+                "el render de las zonas no deja el relleno transparente cuando "
+                "no hay color: las zonas taparian el mapa")
+        # Y que no se dupliquen los puntos en dos poligonos: el toque y lo que
+        # se ve van en el mismo.
+        if render.count("<polygon") > 1:
+            problemas.append(
+                "el render de las zonas hace mas de un poligono por zona: el "
+                "toque y el color tienen que ir en el mismo, o los puntos se "
+                "pueden desincronizar")
+
+    # --- 6. Que la prueba no pase en balde ----------------------------------
+    if not v.CLAVES_ZONA:
+        problemas.append("`CLAVES_ZONA` esta vacia: no se validaria nada")
+    # Las dos listas tienen que llegar al editor desde el servidor: si el editor
+    # tuviera su propia copia, un dia diria cosas distintas que las que valida
+    # el servidor y se podria elegir una animacion que luego rebota.
+    if "animacionesZona" not in edit or "animacionesBorde" not in edit:
+        problemas.append(
+            "(el editor no lee las animaciones de zona del servidor: se estaria "
+            "eligiendo de una lista que puede no coincidir con la que valida)")
+    if '"animacionesZona"' not in editor.__dict__.get("__doc__", "") and \
+            "animacionesZona" not in editor.leer_croquis.__doc__ and \
+            "animacionesZona" not in Path("editor/editor.py").read_text(encoding="utf-8"):
+        problemas.append("el servidor no manda las animaciones de zona al editor")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print(f"    {len(v.ANIMACIONES_ZONA) - 1} animaciones de zona y "
+          f"{len(v.ANIMACIONES_BORDE) - 1} de borde, con el relleno, la linea y "
+          f"el punteado opcionales: una zona sin adornos se queda como estaba")
     return True
 
 
@@ -2218,6 +2411,7 @@ def main() -> int:
         ("el sello y el boton de la ventana", test_el_sello_y_el_boton_de_la_ventana),
         ("las animaciones se paran cuando no se ven",
          test_las_animaciones_se_paran_cuando_no_se_ven),
+        ("los adornos de las zonas", test_los_adornos_de_las_zonas),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),

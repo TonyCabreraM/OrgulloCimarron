@@ -161,17 +161,16 @@ body{
 
    Asi que se para en los dos casos en que nadie las esta mirando:
 
-     .frenado  todo el grupo, mientras el mapa se mueve o la pagina no se ve
-     .fuera    un icono concreto que ha quedado fuera de la pantalla
+     .frenado  todo el mapa, mientras se mueve o la pagina no se ve
+     .fuera    un elemento concreto que ha quedado fuera de la pantalla
 
    Lo segundo se nota sobre todo ampliado: en un movil, mirando una zona de
    cerca, de los 48 iconos se ven cuatro o cinco. Los otros cuarenta estaban
    gastando lo mismo sin que nadie los viera.
 
-   `animation-play-state` en vez de quitar la animacion: al reanudar sigue por
-   donde iba, asi que los iconos no dan un salto al volver a mirarlos. */
-#iconos.frenado .an,
-#iconos .an.fuera{animation-play-state:paused}
+   La regla que de verdad los para esta mas abajo, despues de las animaciones
+   de las zonas, y no aqui: se explica alli por que el sitio importa. */
+
 
 /* Un latido: crece y vuelve. */
 @keyframes icLate{
@@ -253,11 +252,111 @@ body{
 #iconos .onda{fill:none;stroke:var(--verde);stroke-width:1.6;stroke-opacity:.9;
               vector-effect:non-scaling-stroke}
 
-/* Los colores del sistema tambien valen aqui: si alguien pide menos
-   movimiento en su telefono, los iconos se quedan quietos. */
+/* Los colores del sistema tambien valen aqui: si alguien pide menos movimiento
+   en su telefono, no se mueve nada.
+
+   El `!important` NO es un adorno: sin el, esta regla no hace nada. Las reglas
+   que dan animacion a cada clase tienen mas fuerza que una que solo nombre el
+   grupo, asi que ganaban ellas y el ajuste del sistema se ignoraba en
+   silencio. Estuvo asi desde que existen las animaciones. */
 @media (prefers-reduced-motion:reduce){
-  #iconos .an{animation:none}
+  #iconos .an,#zonas .g{animation:none !important}
 }
+
+/* --- Los adornos de las zonas ----------------------------------------------
+   Una zona nace invisible: es un poligono transparente que solo existe para
+   recibir el toque. Los adornos son opcionales y no cambian eso: sin relleno y
+   sin linea, la zona se comporta igual que antes de que existieran.
+
+   El toque y lo que se ve van en el MISMO poligono. No hace falta uno aparte
+   encima: con el relleno transparente el navegador ya lo da por pintado y
+   recibe la pulsacion, que es como funcionaba antes. Poner un segundo poligono
+   solo para pintar seria duplicar los puntos y tener dos cosas que se pueden
+   desincronizar.
+
+   El `vector-effect` mantiene la linea del mismo grosor al ampliar. Vale
+   tambien para los guiones: al no escalar, la raya de la carretera mide lo
+   mismo de cerca que de lejos, en vez de engordar con el zoom. */
+#zonas .g{stroke-width:2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+/* El punteado de la linea quieta: corto y apretado, para que se lea como un
+   filo punteado y no como una carretera. */
+#zonas .g.punteada{stroke-dasharray:3 4}
+
+/* --- Las animaciones de las zonas ------------------------------------------
+   Dos familias, porque son dos cosas distintas y se pueden combinar:
+
+     .za-*  la zona entera, relleno y linea
+     .zb-*  solo el borde, o sea la linea
+
+   Se mueven `opacity` (la zona) y `stroke-opacity` / `stroke-dashoffset` (el
+   borde). Son propiedades distintas, asi que se pueden animar a la vez sin
+   pisarse: una zona puede latir mientras su borde avanza.
+
+   La intensidad va en la misma variable `--m` que los iconos, puesta en el
+   propio poligono. Por defecto 1, que es el movimiento de fabrica. */
+#zonas .g.za-late{animation:zonaLate 3s ease-in-out infinite}
+#zonas .g.za-brilla{animation:zonaBrilla 2.8s ease-in-out infinite}
+#zonas .g.za-destello{animation:zonaDestello 4s ease-out infinite}
+/* `camina` se pone DESPUES de `.punteada` a proposito: las dos reglas tienen
+   la misma fuerza, asi que gana la ultima. Una linea que avanza necesita
+   guiones mas largos que un punteado quieto, y si el punteado ganara, la
+   carretera saldria con rayitas de hormiga. */
+#zonas .g.zb-camina{
+  stroke-dasharray:calc(9 * var(--m, 1)) calc(7 * var(--m, 1));
+  animation:bordeCamina 1.6s linear infinite}
+#zonas .g.zb-late{animation:bordeLate 3s ease-in-out infinite}
+#zonas .g.zb-brilla{animation:bordeBrilla 2.8s ease-in-out infinite}
+
+/* La zona late: se aclara y vuelve, sin llegar a desaparecer nunca. */
+@keyframes zonaLate{
+  0%,100%{opacity:1}
+  50%{opacity:calc(1 - .45 * var(--m, 1))}}
+/* Aparece y desaparece del todo. */
+@keyframes zonaBrilla{
+  0%,100%{opacity:1}
+  50%{opacity:0}}
+/* Un aviso: sube y baja rapido, y se queda quieta el resto del ciclo. */
+@keyframes zonaDestello{
+  0%,12%,100%{opacity:1}
+  5%{opacity:calc(1 - .75 * var(--m, 1))}}
+@keyframes bordeLate{
+  0%,100%{stroke-opacity:.95}
+  50%{stroke-opacity:calc(.95 - .6 * var(--m, 1))}}
+@keyframes bordeBrilla{
+  0%,100%{stroke-opacity:1}
+  50%{stroke-opacity:0}}
+/* La carretera: los guiones van avanzando por todo el borde.
+   
+   El desplazamiento tiene que ser EXACTAMENTE un periodo de guiones para que
+   el bucle no de un salto. El periodo es 9 + 7 = 16, y por eso el numero de
+   aqui abajo tiene que ser 16 y no otro: con 15 o 17, cada vuelta daria un
+   tiron visible. Y va en negativo porque el patron se mueve al reves que el
+   desplazamiento: en positivo, la linea pareceria ir hacia atras. */
+@keyframes bordeCamina{
+  to{stroke-dashoffset:calc(-16 * var(--m, 1))}}
+
+/* --- La regla que para las animaciones -------------------------------------
+   Va AQUI, al final de todas las animaciones, y el sitio no es casual: las
+   reglas que dan animacion a cada clase y esta tienen la misma fuerza, asi que
+   decide el orden. Puesta antes, las de las zonas la pisaban y el mapa seguia
+   animandose durante el zoom aunque los iconos ya estuvieran parados: un fallo
+   que no da ningun error, solo un telefono que se sigue trabando.
+
+   El freno va en #m, que es el padre comun de las zonas y de los iconos, asi
+   que una sola clase los para todos. Y `.pausa` marca lo que de verdad anima,
+   que no es lo mismo en los dos casos: en un icono es el grupo de dentro y en
+   una zona es el propio poligono. El `#m` del segundo selector tambien hace
+   falta: sin el, la regla seria mas debil que las de las animaciones y no
+   pararia nada.
+
+   `animation-play-state` en vez de quitar la animacion: al reanudar sigue por
+   donde iba, asi que los elementos no dan un salto al volver a mirarlos. */
+#m.frenado .pausa,
+#m .pausa.fuera{animation-play-state:paused}
+
+/* La del sistema ya no hace falta repetirla aqui: la de arriba, que lleva
+   `!important`, cubre tambien las zonas. Tener dos reglas para lo mismo era
+   parte del problema. */
 
 /* --- La ventana de informacion ---------------------------------------------
    Mismo lenguaje que el panel: mismo fondo, mismo filo, mismo radio y el
@@ -772,12 +871,45 @@ function escapa(t) {
   return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// Los poligonos son transparentes: existen solo para recibir el toque, sin
-// dibujar nada encima del arte del mapa.
+// Los adornos de una zona: su relleno, su linea y sus animaciones. Vacio si la
+// zona no lleva ninguno, que es como nacen todas.
+//
+// Van en un objeto aparte, en quinto lugar, para no seguir alargando la tupla
+// de la zona: los cuatro primeros campos son de siempre y meter los adornos
+// detras seria volver a contar comas con la vista.
+function adornosDe(z) {
+  var a = (z.length > 4 && z[4]) ? z[4] : null;
+  return (a && typeof a === "object") ? a : {};
+}
+
+// Los poligonos existen para recibir el toque. De fabrica son transparentes,
+// para no dibujar nada encima del arte del mapa; si la zona lleva adornos, se
+// pintan con ellos en el MISMO poligono.
+//
+// No hace falta un segundo poligono encima para pintar: con el relleno
+// transparente el navegador ya lo da por pintado y recibe la pulsacion, que es
+// como funcionaba antes. Duplicarlo seria tener dos listas de puntos que se
+// pueden desincronizar.
 ZON.innerHTML = ZONAS.map(function (z, k) {
-  return '<polygon class="g" data-i="' + k + '" points="'
+  var a = adornosDe(z), clases = ["g"], pintas = "";
+  // La animacion de la zona mueve el relleno y la linea; la del borde, solo la
+  // linea. Son dos clases distintas y se pueden llevar las dos a la vez.
+  if (a.a) clases.push("za-" + a.a);
+  if (a.b) clases.push("zb-" + a.b);
+  if (a.p) clases.push("punteada");
+  // `pausa` marca lo que de verdad anima, para poder pararlo cuando no se ve.
+  if (a.a || a.b) clases.push("pausa");
+  // La intensidad, en el propio poligono y en la misma variable que los
+  // iconos. Se omite cuando vale 1, que es el movimiento de fabrica.
+  if (a.m && a.m !== 1) pintas += ' style="--m:' + a.m + '"';
+  // Sin color de relleno el poligono queda transparente, como siempre. El
+  // color de la linea solo se pone si lo hay: sin `stroke`, el navegador no
+  // dibuja ninguna linea.
+  pintas += ' fill="' + (a.f || "transparent") + '"';
+  if (a.l) pintas += ' stroke="' + a.l + '"';
+  return '<polygon class="' + clases.join(" ") + '" data-i="' + k + '" points="'
        + z[2].map(function (p) { return p.join(",") }).join(" ")
-       + '" fill="transparent"/>';
+       + '"' + pintas + "/>";
 }).join("");
 CH.innerHTML = ZONAS.map(function (z, k) {
   return '<button class="chip" data-i="' + k + '">' + z[1] + "</button>";
@@ -842,7 +974,11 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
   // El <g> de dentro es el que anima. El de fuera lleva la posicion y no se
   // puede tocar: en SVG el transform de CSS pisa al atributo transform, asi
   // que animar el de fuera mandaria el icono a la esquina de la hoja.
-  var clase = "an" + (ic.a ? " " + ic.a : "");
+  //
+  // `pausa` marca lo que de verdad anima, para poder pararlo cuando no se ve.
+  // Solo se pone si hay animacion: en un icono quieto la clase no haria nada y
+  // solo ensuciaria el DOM.
+  var clase = "an" + (ic.a ? " " + ic.a + " pausa" : "");
   var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
   var clases = "ic" + (conAro ? "" : " sinAro") + (ic.i ? " conInfo" : "");
   var caja = ic.i ? ' class="' + clases + '" data-info="' + k + '"'
@@ -965,7 +1101,9 @@ function todo() {
 var relojFreno = 0;
 
 function frenaUnRato(ms) {
-  ICN.classList.add("frenado");
+  // El freno va en #m, que es el padre comun de las zonas y de los iconos: una
+  // sola clase los para todos.
+  M.classList.add("frenado");
   clearTimeout(relojFreno);
   relojFreno = setTimeout(sueltaAnimaciones, ms);
 }
@@ -974,34 +1112,43 @@ function sueltaAnimaciones() {
   clearTimeout(relojFreno);
   // Con la pagina escondida no se sueltan: no hay nada que mirar y el
   // navegador no deberia estar componiendo fotogramas.
-  if (!document.hidden) ICN.classList.remove("frenado");
+  if (!document.hidden) M.classList.remove("frenado");
 }
 
 // 2. Con la pagina escondida (otra pestana delante, o el movil bloqueado). Un
 //    mapa abierto detras no tiene por que seguir gastando bateria.
 addEventListener("visibilitychange", function () {
-  if (document.hidden) ICN.classList.add("frenado");
+  if (document.hidden) M.classList.add("frenado");
   else sueltaAnimaciones();
 });
 
-// 3. Los iconos que han quedado fuera de la pantalla. Se nota sobre todo
-//    ampliado: en un movil, mirando una zona de cerca, de los 48 iconos se ven
-//    cuatro o cinco, y los otros cuarenta estaban costando lo mismo sin que
-//    nadie los viera.
+// 3. Lo que ha quedado fuera de la pantalla. Se nota sobre todo ampliado: en un
+//    movil, mirando una zona de cerca, se ven cuatro o cinco cosas de las 58
+//    que hay, y el resto estaba costando lo mismo sin que nadie las viera.
 //
-// Se hace con un IntersectionObserver y no calculando a mano que iconos caen
-// dentro: asi vale tambien al girar el movil, al cambiar de zona y al
-// redimensionar, sin repetir la cuenta en cada sitio. El `rootMargin` deja
-// animandose los que estan un poco fuera, para que al asomar por el borde ya
-// esten moviendose y no den un salto.
+// Se hace con un IntersectionObserver y no calculando a mano que cae dentro:
+// asi vale tambien al girar el movil, al cambiar de zona y al redimensionar,
+// sin repetir la cuenta en cada sitio. El `rootMargin` deja animandose lo que
+// esta un poco fuera, para que al asomar por el borde ya vaya moviendose.
+//
+// Se observan los dos grupos: las zonas se pausan en su propio poligono y los
+// iconos en su grupo de dentro, asi que se busca quien lleve la clase `pausa`.
+function elQueSePausa(nodo) {
+  return nodo.classList.contains("pausa") ? nodo : nodo.querySelector(".pausa");
+}
+
 if (window.IntersectionObserver) {
   var vigia = new IntersectionObserver(function (entradas) {
     for (var j = 0; j < entradas.length; j++) {
-      var an = entradas[j].target.querySelector(".an");
-      if (an) an.classList.toggle("fuera", !entradas[j].isIntersecting);
+      var pausable = elQueSePausa(entradas[j].target);
+      if (pausable) pausable.classList.toggle("fuera", !entradas[j].isIntersecting);
     }
   }, {rootMargin: "160px"});
-  for (var j = 0; j < ICN.children.length; j++) vigia.observe(ICN.children[j]);
+  var vigilar = function (grupo) {
+    for (var j = 0; j < grupo.children.length; j++) vigia.observe(grupo.children[j]);
+  };
+  vigilar(ICN);
+  vigilar(ZON);
 }
 
 // --- La ventana de informacion ---------------------------------------------

@@ -72,7 +72,9 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     ALTO,
     ANCHO,
     ANIMACIONES,
+    ANIMACIONES_BORDE,
     ANIMACIONES_SIN_INTENSIDAD,
+    ANIMACIONES_ZONA,
     INTENSIDAD,
     MAX_BOTON,
     MAX_ICONO,
@@ -91,6 +93,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     MIN_TAM_ICONO,
     NOMBRE_PROPIO,
     SIMBOLOS,
+    limpiar_adornos,
     limpiar_ajustes,
     revisar,
     revisar_ajustes,
@@ -244,16 +247,64 @@ def _texto_zonas(zonas: list) -> str:
     Los puntos van pegados con coma y sin espacio ([[330,108],[592,108]], no
     [[330,108], [592,108]]) para que al guardar sin mover una zona su linea no
     cambie y el diff de git ensene solo lo que de verdad se toco.
+
+    Los adornos solo se escriben cuando la zona tiene alguno. Una zona sin
+    relleno, sin linea y sin animacion se escribe con sus cuatro campos de
+    siempre, igual que antes de que los adornos existieran, asi que guardar sin
+    tocar nada no ensucia el diff.
     """
     trozos = []
-    for nombre, corto, poligono, desc in zonas:
+    for z in zonas:
+        nombre, corto, poligono, desc = z[:4]
         pts = ",".join(f"[{_n(x)},{_n(y)}]" for x, y in poligono)
+        cola = ""
+        if len(z) > 4 and z[4]:
+            cola = ", " + _texto_adornos(z[4])
         trozos.append(
             f"  [{json.dumps(nombre, ensure_ascii=False)}, "
             f"{json.dumps(corto, ensure_ascii=False)},\n"
             f"   [{pts}],\n"
-            f"   {json.dumps(desc, ensure_ascii=False)}]")
+            f"   {json.dumps(desc, ensure_ascii=False)}{cola}]")
     return "var ZONAS = [\n" + ",\n\n".join(trozos) + "\n];"
+
+
+def _texto_adornos(adornos: dict) -> str:
+    """El objeto de adornos de una zona, en el orden en que se lee.
+
+    El orden es f, l, p, a, b, m: primero lo que se ve (relleno y linea),
+    despues como se pinta la linea, y al final el movimiento. Se omite lo que
+    no esta, para que una zona con solo un color ocupe lo minimo.
+    """
+    trozos = []
+    for clave in ("f", "l"):
+        if adornos.get(clave):
+            trozos.append(f'"{clave}": {json.dumps(adornos[clave], ensure_ascii=False)}')
+    if adornos.get("p"):
+        trozos.append('"p": 1')
+    for clave in ("a", "b"):
+        if adornos.get(clave):
+            trozos.append(f'"{clave}": {json.dumps(adornos[clave], ensure_ascii=False)}')
+    if adornos.get("m"):
+        trozos.append(f'"m": {round(float(adornos["m"]), 2):g}')
+    return "{" + ", ".join(trozos) + "}"
+
+
+def _limpia_zonas(zonas: list) -> list:
+    """Las zonas con los adornos ya limpios, y sin el quinto campo si sobra.
+
+    Se limpia antes de validar y antes de escribir, por el mismo motivo que en
+    los iconos: el editor manda lo que tiene en pantalla, que incluye los
+    campos vacios de los formularios. Una zona a la que no se le ha puesto nada
+    tiene que quedar exactamente como estaba.
+    """
+    salida = []
+    for z in zonas:
+        if not isinstance(z, (list, tuple)) or len(z) < 5:
+            salida.append(z)
+            continue
+        adornos = limpiar_adornos(z[4])
+        salida.append(list(z[:4]) + [adornos] if adornos else list(z[:4]))
+    return salida
 
 
 def _campos_icono(ic: dict) -> list[str]:
@@ -640,7 +691,12 @@ def guardar_croquis(zonas: list, iconos: list, propios: dict) -> dict:
     escribe NADA: ni las zonas, ni los iconos, ni las imagenes. A medias
     seria peor que no escribir, porque el croquis quedaria publicado con la
     mitad del cambio y sin forma de saber cual falta.
+
+    Los adornos de las zonas se limpian antes de validar: lo que llega del
+    editor trae los campos vacios de los formularios, y una zona sin adornos
+    tiene que quedar escrita igual que antes de que existieran.
     """
+    zonas = _limpia_zonas(zonas)
     problemas = revisar(zonas, iconos, propios)
     if problemas:
         raise ErrorEditor("\n".join(problemas))
@@ -842,6 +898,13 @@ class Manejador(BaseHTTPRequestHandler):
                                   "totalPropios": MAX_ICONOS_PROPIOS}
                 datos["animaciones"] = ANIMACIONES
                 datos["sinIntensidad"] = sorted(ANIMACIONES_SIN_INTENSIDAD)
+                # Las animaciones de las zonas, que son otras: la de la zona
+                # mueve el relleno y la linea, y la del borde solo la linea.
+                # Las manda el servidor por el mismo motivo que las de los
+                # iconos: es el que valida, y dos listas separadas acabarian
+                # diciendo cosas distintas.
+                datos["animacionesZona"] = ANIMACIONES_ZONA
+                datos["animacionesBorde"] = ANIMACIONES_BORDE
                 datos["biblioteca"] = lista_biblioteca(datos["propios"])
                 # Los ajustes de cada icono propio, para que la paleta los
                 # dibuje como son y al ponerlos salgan ya configurados.

@@ -115,6 +115,15 @@ select{
 .campo.apagado{opacity:.45}
 .campo.apagado label,.campo.apagado .pista{cursor:default}
 input[type=range]:disabled{cursor:not-allowed}
+/* El selector de color, del tamano de un campo de texto. El que trae el
+   navegador es pequeno y con el filo biselado de siempre; aqui se le quita el
+   bisel para que pegue con los demas campos. */
+input[type=color]{width:100%;height:30px;padding:2px;margin-top:6px;
+                  border:1px solid var(--linea);border-radius:8px;
+                  background:#fcfdfc;cursor:pointer}
+/* Una casilla que no aplica (la linea punteada sin linea) se apaga, como los
+   campos: sin linea no hay nada que puntear. */
+.marca.apagada{opacity:.45;cursor:default}
 
 /* lista de zonas */
 #listaZonas{display:flex;flex-direction:column;gap:4px;max-height:210px;overflow-y:auto}
@@ -300,6 +309,28 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 #gZonas polygon:hover{fill:#00723f33}
 #gZonas polygon.sel{fill:#00723f33;stroke-width:2.5}
 #gZonas polygon.mal{fill:#b3261e26;stroke:var(--alerta);stroke-width:2.5}
+
+/* --- Los adornos de las zonas ---------------------------------------------
+   El mismo aspecto que tendran en el mapa publicado, para poder verlo mientras
+   se edita y no despues de guardar.
+
+   El color va por variables y no a pelo, y estas reglas van ANTES de las de
+   `.sel` y `.mal`: asi el color de la zona es el que se eligio, pero el filo
+   de la zona elegida y el de la que tiene un problema siguen mandando por
+   encima. Al reves, el resaltado no se veria. */
+#gZonas polygon.conRelleno{fill:var(--zf)}
+#gZonas polygon.conLinea{stroke:var(--zl);stroke-width:2.5}
+#gZonas polygon.punteada{stroke-dasharray:3 4}
+/* `camina` va despues de `.punteada` a proposito: las dos tienen la misma
+   fuerza, y la carretera necesita rayas mas largas que un punteado quieto. */
+#gZonas polygon.zb-camina{
+  stroke-dasharray:calc(9 * var(--m, 1)) calc(7 * var(--m, 1));
+  animation:bordeCamina 1.6s linear infinite}
+#gZonas polygon.za-late{animation:zonaLate 3s ease-in-out infinite}
+#gZonas polygon.za-brilla{animation:zonaBrilla 2.8s ease-in-out infinite}
+#gZonas polygon.za-destello{animation:zonaDestello 4s ease-out infinite}
+#gZonas polygon.zb-late{animation:bordeLate 3s ease-in-out infinite}
+#gZonas polygon.zb-brilla{animation:bordeBrilla 2.8s ease-in-out infinite}
 #gZonas circle{
   fill:#fff;stroke:var(--verde);stroke-width:2;cursor:grab;
   vector-effect:non-scaling-stroke;
@@ -433,6 +464,32 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
      skewX(calc(-3.6deg * var(--m, 1)))}
   84%{transform:rotate(calc(2deg * var(--m, 1)))
      skewX(calc(-1.3deg * var(--m, 1)))}}
+
+/* Y las de las zonas, que son de otra familia: no mueven `transform` sino
+   `opacity` y el trazo. La de la zona entera usa `opacity` (fondo y linea a la
+   vez) y la del borde usa `stroke-opacity` y `stroke-dashoffset` (solo la
+   linea). Son propiedades distintas, asi que las dos se pueden llevar a la vez
+   sin pisarse. */
+@keyframes zonaLate{
+  0%,100%{opacity:1}
+  50%{opacity:calc(1 - .45 * var(--m, 1))}}
+@keyframes zonaBrilla{
+  0%,100%{opacity:1}
+  50%{opacity:0}}
+@keyframes zonaDestello{
+  0%,12%,100%{opacity:1}
+  5%{opacity:calc(1 - .75 * var(--m, 1))}}
+@keyframes bordeLate{
+  0%,100%{stroke-opacity:.95}
+  50%{stroke-opacity:calc(.95 - .6 * var(--m, 1))}}
+@keyframes bordeBrilla{
+  0%,100%{stroke-opacity:1}
+  50%{stroke-opacity:0}}
+/* El desplazamiento tiene que ser EXACTAMENTE un periodo de guiones (9+7=16,
+   escalado por la intensidad) para que el bucle no de un tiron. Y en negativo,
+   porque el patron se mueve al reves que el desplazamiento. */
+@keyframes bordeCamina{
+  to{stroke-dashoffset:calc(-16 * var(--m, 1))}}
 /* Aqui no se quitan las animaciones al reducir el movimiento: en el editor son
    la vista previa, y sin ellas no habria forma de elegir cual queda mejor. */
 #gAyudas{pointer-events:none}
@@ -511,6 +568,50 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <div class="campo">
         <label for="fDesc">Descripción</label>
         <textarea id="fDesc" rows="2" placeholder="La exposición del CGECDC…"></textarea>
+      </div>
+      <div class="campo">
+        <label class="marca" for="fRelleno">
+          <input type="checkbox" id="fRelleno">
+          <span>Con color de fondo</span>
+        </label>
+        <input type="color" id="cRelleno" value="#c8e6c9">
+        <div class="pista">
+          Sin esto la zona es invisible, como hasta ahora: solo sirve para
+          tocar. Con color se ve en el mapa publicado.
+        </div>
+      </div>
+      <div class="campo">
+        <label class="marca" for="fLinea">
+          <input type="checkbox" id="fLinea">
+          <span>Con línea de color</span>
+        </label>
+        <input type="color" id="cLinea" value="#00723f">
+      </div>
+      <div class="campo" id="campoPunteada">
+        <label class="marca" for="fPunteada">
+          <input type="checkbox" id="fPunteada">
+          <span>Línea punteada</span>
+        </label>
+        <div class="pista">
+          Un punteado corto y apretado, para una línea quieta. La animación
+          <b>Camina</b> pone sus propias rayas, más largas y con más hueco, para
+          que se lean como la línea de una carretera en movimiento.
+        </div>
+      </div>
+      <div class="campo">
+        <label for="fAnimZona">Animación de la zona</label>
+        <select id="fAnimZona"></select>
+        <div class="pista">Mueve el fondo y la línea a la vez.</div>
+      </div>
+      <div class="campo">
+        <label for="fAnimBorde">Animación del borde</label>
+        <select id="fAnimBorde"></select>
+        <div class="pista">Mueve solo la línea, sin tocar el fondo.</div>
+      </div>
+      <div class="campo" id="campoIntZona">
+        <label for="fIntZona">Intensidad del movimiento · <b id="vIntZona">1.0</b></label>
+        <input type="range" id="fIntZona" min="0.2" max="2.5" step="0.1" value="1">
+        <div class="pista" id="pistaIntZona"></div>
       </div>
     </div>
 
@@ -705,6 +806,10 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 // ---------------------------------------------------------------------------
 var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [],
          biblioteca: [], modelos: [], animaciones: {}, sinIntensidad: [],
+         // Las animaciones de las zonas, que son otras que las de los iconos:
+         // la de la zona mueve el fondo y la linea, y la del borde solo la
+         // linea. Las manda el servidor, que es quien las valida.
+         animacionesZona: {}, animacionesBorde: {},
          // Los ajustes con los que se subio cada icono propio: tamano,
          // animacion, intensidad y circulo. Es lo que hace que al ponerlo en el
          // mapa salga como se dejo. Lo manda el servidor, que los guarda al
@@ -747,6 +852,14 @@ var s = document.getElementById("s"),
     fNombre = document.getElementById("fNombre"),
     fCorto = document.getElementById("fCorto"),
     fDesc = document.getElementById("fDesc"),
+    fRelleno = document.getElementById("fRelleno"),
+    cRelleno = document.getElementById("cRelleno"),
+    fLinea = document.getElementById("fLinea"),
+    cLinea = document.getElementById("cLinea"),
+    fPunteada = document.getElementById("fPunteada"),
+    fAnimZona = document.getElementById("fAnimZona"),
+    fAnimBorde = document.getElementById("fAnimBorde"),
+    fIntZona = document.getElementById("fIntZona"),
     fTam = document.getElementById("fTam"),
     fTamNuevo = document.getElementById("fTamNuevo"),
     fRot = document.getElementById("fRot"),
@@ -955,6 +1068,10 @@ var TAM_MIN = 16, TAM_MAX = 160, ROT_MIN = -180, ROT_MAX = 180;
 var TIT_MAX = 60, TEX_MAX = 600;
 // Los topes del boton con enlace de la ventana.
 var BOT_MAX = 40, URL_MAX = 300;
+// Los colores de los adornos de una zona, en la forma #rrggbb. Tiene que ser la
+// misma que exige el servidor: aqui se adelanta el aviso para no llegar al
+// guardado con un color que va a rebotar.
+var COLOR = /^#[0-9a-fA-F]{6}$/;
 
 function problemas() {
   var mal = E.zonas.map(function () { return [] });
@@ -970,6 +1087,30 @@ function problemas() {
       mal[k].push("Se sale del mapa.");
     if (c[2] < 20 || c[3] < 20) mal[k].push("Es muy pequeña para tocarla con el dedo.");
     else if (areaDe(p) < 400) mal[k].push("El área es muy pequeña.");
+
+    // Los adornos: el color del fondo, el de la linea, el punteado y las dos
+    // animaciones. Se adelantan aqui para que el boton de Guardar se apague
+    // antes de intentarlo, en vez de que el servidor rebote el guardado entero
+    // y haya que buscar cual de las diez zonas es la del problema.
+    var ad = (z.length > 4 && z[4]) ? z[4] : {};
+    if (ad.f && !COLOR.test(ad.f))
+      mal[k].push("El color de fondo no es un color válido.");
+    if (ad.l && !COLOR.test(ad.l))
+      mal[k].push("El color de la línea no es un color válido.");
+    if (ad.a && !E.animacionesZona[ad.a])
+      mal[k].push("La animación de la zona «" + ad.a + "» no existe.");
+    if (ad.b && !E.animacionesBorde[ad.b])
+      mal[k].push("La animación del borde «" + ad.b + "» no existe.");
+    // El punteado y la animacion del borde necesitan linea: sin ella no hay
+    // nada que puntear ni que animar.
+    if (ad.p && !ad.l)
+      mal[k].push("La línea está punteada pero no tiene color.");
+    if (ad.b && !ad.l)
+      mal[k].push("El borde tiene animación pero la línea no tiene color.");
+    if (ad.m !== undefined && !(ad.a || ad.b))
+      mal[k].push("Hay intensidad pero ninguna animación que ajustar.");
+    if (ad.m !== undefined && (ad.m < 0.2 || ad.m > 2.5))
+      mal[k].push("La intensidad " + ad.m + " se sale de 0.2 a 2.5.");
   });
   for (var a = 0; a < E.zonas.length; a++)
     for (var b = a + 1; b < E.zonas.length; b++)
@@ -1083,9 +1224,24 @@ function dibuja() {
   var mal = problemas();
 
   gZonas.innerHTML = E.zonas.map(function (z, k) {
+    var a = adornosDe(z);
     var clase = "z" + (sel && sel.tipo === "zona" && sel.i === k ? " sel" : "")
               + (mal.zonas[k].length ? " mal" : "");
-    var poli = '<polygon class="' + clase.trim() + '" data-zona="' + k + '" points="'
+    // Los adornos van como variables y no como colores a pelo: si se pusiera el
+    // color directamente, ganaria al del resaltado y la zona elegida no se
+    // distinguiria de las demas. Asi el filo de seleccion manda sobre el color
+    // y el color sobre el aspecto de fabrica.
+    var pintas = [];
+    if (a.f) { clase += " conRelleno"; pintas.push("--zf:" + a.f); }
+    if (a.l) { clase += " conLinea"; pintas.push("--zl:" + a.l); }
+    if (a.p) clase += " punteada";
+    if (a.a) clase += " za-" + a.a;
+    if (a.b) clase += " zb-" + a.b;
+    if (a.m && a.m !== 1) pintas.push("--m:" + a.m);
+    var estilo = pintas.length ? ' style="' + pintas.join(";") + '"' : "";
+    var poli = '<polygon class="' + clase.trim() + '" data-zona="' + k + '"'
+             + estilo
+             + ' points="'
              + z[2].map(function (p) { return p[0] + "," + p[1] }).join(" ") + '"/>';
     if (sel && sel.tipo === "zona" && sel.i === k) {
       poli += z[2].map(function (p, v) {
@@ -1186,6 +1342,7 @@ function pintaPanel(mal) {
     if (document.activeElement !== fNombre) fNombre.value = z[0];
     if (document.activeElement !== fCorto) fCorto.value = z[1];
     if (document.activeElement !== fDesc) fDesc.value = z[3];
+    pintaAdornos(z.length > 4 ? z[4] : null);
   }
   document.getElementById("btnBorrarZona").disabled = !hay;
 
@@ -1339,6 +1496,84 @@ function pintaBiblioteca() {
            + '" title="Borrar ' + escapa(b.nombre) + ' de Guardados">×</button>'
            + "</div>";
     }).join("");
+}
+
+// --- los adornos de una zona ----------------------------------------------
+// Los adornos son lo que hace VISIBLE una zona en el mapa publicado: el color
+// de fondo, el de la linea, si la linea va punteada y las dos animaciones. Una
+// zona sin adornos sigue siendo invisible, que es como nacen todas.
+//
+// Van en un objeto aparte, en quinto lugar, para no seguir alargando la tupla
+// de cuatro campos de siempre. Un `z[5]` para el color y un `z[6]` para la
+// animacion obligarian a contar comas con la vista al leer el archivo, que es
+// justo el problema que se quito de los iconos.
+function adornosDe(z) {
+  if (z.length < 5 || !z[4] || typeof z[4] !== "object") z[4] = {};
+  return z[4];
+}
+
+// Escribe en los adornos de la zona elegida y repinta.
+//
+// Se llama con un cambio y limpia despues lo que ya no vale, para que el
+// archivo no se llene de campos vacios: una zona sin tocar tiene que quedar
+// escrita igual que antes de que los adornos existieran.
+function tocaZona(cambio) {
+  if (!sel || sel.tipo !== "zona" || !E.zonas[sel.i]) return;
+  var a = adornosDe(E.zonas[sel.i]);
+  cambio(a);
+  if (!a.f) delete a.f;
+  if (!a.l) delete a.l;
+  // El punteado y la animacion del borde son cosas de la linea: sin linea no
+  // hay nada que puntear ni que animar, y el servidor los rechazaria.
+  if (!a.l) { delete a.p; delete a.b; }
+  // La intensidad modula un movimiento: sin movimiento no modula nada.
+  if (!a.a && !a.b) delete a.m;
+  sucio = true;
+  dibuja();
+}
+
+// Deja los controles como toque: lo que no aplica se apaga, con una pista que
+// diga por que. Un control que se puede tocar pero no hace nada es peor que no
+// tenerlo, porque parece que el editor esta roto.
+function refrescaAdornos() {
+  var hay = sel && sel.tipo === "zona" && E.zonas[sel.i];
+  var a = hay ? adornosDe(E.zonas[sel.i]) : {};
+  var conLinea = !!a.l, conMovimiento = !!(a.a || a.b);
+
+  // El punteado y la animacion del borde sin linea no aplican.
+  fPunteada.disabled = !conLinea;
+  document.getElementById("campoPunteada").classList.toggle("apagado", !conLinea);
+  fAnimBorde.disabled = !conLinea;
+  document.getElementById("campoIntZona").classList.toggle("apagado", !conMovimiento);
+  fIntZona.disabled = !conMovimiento;
+
+  var pista = document.getElementById("pistaIntZona");
+  if (!conMovimiento) {
+    pista.textContent = "Se aprieta cuando haya una animación: la intensidad "
+      + "modula un movimiento, y sin movimiento no modula nada.";
+  } else if (a.b === "camina") {
+    pista.textContent = "Con Camina, la intensidad alarga las rayas de la "
+      + "línea: más alta, rayas más gordas y más separadas.";
+  } else {
+    pista.textContent = "Cuánto se mueve, no a qué velocidad. Con 0.2 apenas "
+      + "se nota y con 2.5 se ve desde lejos.";
+  }
+}
+
+// Rellena los controles con los adornos de la zona elegida.
+function pintaAdornos(z) {
+  z = z || {};
+  fRelleno.checked = !!z.f;
+  if (z.f) cRelleno.value = z.f;
+  fLinea.checked = !!z.l;
+  if (z.l) cLinea.value = z.l;
+  fPunteada.checked = !!z.p;
+  fAnimZona.value = z.a || "";
+  fAnimBorde.value = z.b || "";
+  var m = (typeof z.m === "number") ? z.m : 1;
+  fIntZona.value = m;
+  document.getElementById("vIntZona").textContent = m.toFixed(1);
+  refrescaAdornos();
 }
 
 function elige(tipo, i, sumar) {
@@ -2099,6 +2334,67 @@ listaIconos.addEventListener("click", function (ev) {
   });
 });
 
+// Los adornos de la zona. Cada control escribe en el icono y repinta el mapa,
+// para ver el resultado mientras se elige y no despues de guardar.
+//
+// Las dos casillas de color guardan el color del selector: al marcarlas se
+// queda con el que ya tenia puesto, que es el de la ultima vez que se uso, y
+// al desmarcarlas el color desaparece del icono. Un color a medias no existe:
+// o hay color o no hay nada.
+fRelleno.addEventListener("change", function () {
+  tocaZona(function (a) {
+    if (fRelleno.checked) a.f = cRelleno.value;
+    else delete a.f;
+  });
+  refrescaAdornos();
+});
+cRelleno.addEventListener("input", function () {
+  if (!fRelleno.checked) fRelleno.checked = true;
+  tocaZona(function (a) { a.f = cRelleno.value });
+  refrescaAdornos();
+});
+fLinea.addEventListener("change", function () {
+  tocaZona(function (a) {
+    if (fLinea.checked) a.l = cLinea.value;
+    else delete a.l;
+  });
+  refrescaAdornos();
+});
+cLinea.addEventListener("input", function () {
+  if (!fLinea.checked) fLinea.checked = true;
+  tocaZona(function (a) { a.l = cLinea.value });
+  refrescaAdornos();
+});
+fPunteada.addEventListener("change", function () {
+  tocaZona(function (a) {
+    if (fPunteada.checked) a.p = 1;
+    else delete a.p;
+  });
+  refrescaAdornos();
+});
+fAnimZona.addEventListener("change", function () {
+  tocaZona(function (a) {
+    if (fAnimZona.value) a.a = fAnimZona.value;
+    else delete a.a;
+  });
+  refrescaAdornos();
+});
+fAnimBorde.addEventListener("change", function () {
+  tocaZona(function (a) {
+    if (fAnimBorde.value) a.b = fAnimBorde.value;
+    else delete a.b;
+  });
+  refrescaAdornos();
+});
+fIntZona.addEventListener("input", function () {
+  document.getElementById("vIntZona").textContent = (+fIntZona.value).toFixed(1);
+  tocaZona(function (a) {
+    if (+fIntZona.value === 1) delete a.m;
+    else a.m = +fIntZona.value;
+  });
+  refrescaAdornos();
+});
+
 function borrar() {
   if (!sel) return;
   if (sel.tipo === "zona") E.zonas.splice(sel.i, 1);
@@ -2413,6 +2709,15 @@ fetch("/api/estado").then(function (r) {
   }).join("");
   fAnim.innerHTML = opciones;
   dAnim.innerHTML = opciones;
+  // Y las de las zonas, que son otras listas. La de la zona mueve el fondo y
+  // la linea; la del borde solo la linea.
+  var listaDe = function (dic) {
+    return Object.keys(dic).map(function (k) {
+      return '<option value="' + escapa(k) + '">' + escapa(dic[k]) + "</option>";
+    }).join("");
+  };
+  fAnimZona.innerHTML = listaDe(E.animacionesZona);
+  fAnimBorde.innerHTML = listaDe(E.animacionesBorde);
   document.getElementById("commit").value = "Croquis: ";
   pintaGit(d.git);
   pintaPaleta();
