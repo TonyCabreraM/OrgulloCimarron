@@ -333,22 +333,34 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 #gZonas .z.conRelleno{fill:var(--zf)}
 #gZonas .z.conLinea{stroke:var(--zl);stroke-width:2.5}
 #gZonas .z.punteada{stroke-dasharray:3 4}
+/* Las dos animaciones van en variables y las junta una sola regla, igual que
+   en el croquis: `animation` es una taquigrafia y la ultima regla que la toca
+   borra la anterior, asi que con una declaracion por clase una zona con
+   animacion de zona Y de borde solo se quedaba con la del borde. */
+#gZonas .z{animation:var(--az, none), var(--ab, none)}
 /* `camina` va despues de `.punteada` a proposito: las dos tienen la misma
    fuerza, y la carretera necesita rayas mas largas que un punteado quieto. */
 #gZonas .z.zb-camina{
   stroke-dasharray:calc(9 * var(--m, 1) * 1px) calc(7 * var(--m, 1) * 1px);
-  animation:bordeCamina 1.6s linear infinite}
-#gZonas .z.za-late{animation:zonaLate 3s ease-in-out infinite}
-#gZonas .z.za-brilla{animation:zonaBrilla 2.8s ease-in-out infinite}
-#gZonas .z.za-destello{animation:zonaDestello 4s ease-out infinite}
-#gZonas .z.zb-late{animation:bordeLate 3s ease-in-out infinite}
-#gZonas .z.zb-brilla{animation:bordeBrilla 2.8s ease-in-out infinite}
+  --ab:bordeCamina 1.6s linear infinite}
+/* La carretera al reves. Es la misma animacion con `reverse`, no un keyframe
+   aparte: el viaje es el mismo y lo unico que cambia es el sentido. */
+#gZonas .z.zb-camina.zd-reves{--ab:bordeCamina 1.6s linear infinite reverse}
+#gZonas .z.za-late{--az:zonaLate 3s ease-in-out infinite}
+#gZonas .z.za-brilla{--az:zonaBrilla 2.8s ease-in-out infinite}
+#gZonas .z.za-destello{--az:zonaDestello 4s ease-out infinite}
+#gZonas .z.zb-late{--ab:bordeLate 3s ease-in-out infinite}
+#gZonas .z.zb-brilla{--ab:bordeBrilla 2.8s ease-in-out infinite}
 #gZonas circle{
   fill:#fff;stroke:var(--verde);stroke-width:2;cursor:grab;
   vector-effect:non-scaling-stroke;
 }
 #gZonas circle:hover{fill:var(--oro)}
 #gZonas circle.mal{stroke:var(--alerta)}
+/* La esquina marcada, que es la que se lleva el boton de quitar. Va DESPUES de
+   `.mal` a proposito: en una zona con problemas hay que poder ver cual esta
+   marcada, y el filo rojo lo llevan todas las esquinas por igual. */
+#gZonas circle.acto{fill:var(--oro);stroke:#8a6a00;stroke-width:2.5}
 #gIconos g{cursor:move}
 #gIconos .aro{fill:#ffffffdd;stroke:#0a484266;stroke-width:1.2;
               vector-effect:non-scaling-stroke}
@@ -563,9 +575,11 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <button class="boton" id="btnMas" title="Acercar">+</button>
       <button class="boton" id="btnTodo">Ver todo</button>
       <button class="boton" id="btnVertice">Añadir vértice</button>
+      <button class="boton" id="btnQuitarVertice"
+              title="Quita la esquina marcada en dorado">Quitar vértice</button>
     </div>
     <div id="ayuda">
-      <b>Arrastra</b> los puntos blancos para mover las esquinas, o el interior de una zona para moverla entera · <b>Rueda</b> para acercar · <b>Flechas</b> mueven lo seleccionado (con Mayús, más rápido) · <b>Supr</b> borra
+      <b>Arrastra</b> los puntos blancos para mover las esquinas, o el interior de una zona para moverla entera · <b>Pulsa</b> un punto para marcarlo y quitarlo con el botón (o <b>doble clic</b>) · <b>Rueda</b> para acercar · <b>Flechas</b> mueven lo seleccionado (con Mayús, más rápido) · <b>Supr</b> borra
     </div>
   </div>
 
@@ -651,6 +665,11 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
           Mueve solo la línea, sin tocar el fondo. Al elegir una se enciende la
           línea si estaba apagada, porque el borde <b>es</b> la línea.
         </div>
+      </div>
+      <div class="campo" id="campoSentido">
+        <label for="fSentido">Sentido del avance</label>
+        <select id="fSentido"></select>
+        <div class="pista" id="pistaSentido"></div>
       </div>
       <div class="campo" id="campoIntZona">
         <label for="fIntZona">Intensidad del movimiento · <b id="vIntZona">1.0</b></label>
@@ -854,6 +873,10 @@ var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [
          // la de la zona mueve el fondo y la linea, y la del borde solo la
          // linea. Las manda el servidor, que es quien las valida.
          animacionesZona: {}, animacionesBorde: {},
+         // Hacia donde avanza la linea de `camina`. Lo manda el servidor, que
+         // es quien valida: aqui no puede haber una lista propia que un dia
+         // diga algo distinto.
+         sentidosCamina: {},
          // El servidor avisa si arranco antes del ultimo cambio de codigo. Un
          // editor viejo y uno al dia responden igual desde dentro, asi que
          // esta es la unica señal que puede dar de que se quedo atras.
@@ -874,6 +897,11 @@ var multi = [];          // indices de iconos marcados para alinear
 var vb = {x: 0, y: 0, w: 1224, h: 792};
 var sucio = false;       // hay cambios sin guardar
 var modoVertice = false; // el siguiente clic mete una esquina nueva
+// Cual de las esquinas de la zona elegida esta marcada, o null si ninguna.
+// Es la que se lleva el boton de quitar, y el indice vale DENTRO de esa zona:
+// de ahi que se borre al cambiar de zona, o quitar se llevaria por delante un
+// punto de otra.
+var verticeSel = null;
 
 // Lo que se estampa al hacer clic en el mapa, o null si no se esta estampando
 // nada. Es un objeto con la configuracion COMPLETA del icono (tipo, tamano,
@@ -908,6 +936,7 @@ var s = document.getElementById("s"),
     fRedondeo = document.getElementById("fRedondeo"),
     fAnimZona = document.getElementById("fAnimZona"),
     fAnimBorde = document.getElementById("fAnimBorde"),
+    fSentido = document.getElementById("fSentido"),
     fIntZona = document.getElementById("fIntZona"),
     fTam = document.getElementById("fTam"),
     fTamNuevo = document.getElementById("fTamNuevo"),
@@ -1160,6 +1189,11 @@ function problemas() {
       mal[k].push("La línea está punteada pero no tiene color.");
     if (ad.b && !ad.l)
       mal[k].push("El borde tiene animación pero la línea no tiene color.");
+    // El sentido solo lo tiene `camina`, que es la unica que recorre el borde.
+    if (ad.d !== undefined && ad.d !== -1)
+      mal[k].push("El sentido «" + ad.d + "» no existe: o normal, o al revés.");
+    if (ad.d !== undefined && ad.b !== "camina")
+      mal[k].push("El sentido del avance es cosa de la animación «Camina».");
     if (ad.m !== undefined && !(ad.a || ad.b))
       mal[k].push("Hay intensidad pero ninguna animación que ajustar.");
     if (ad.m !== undefined && (ad.m < 0.2 || ad.m > 2.5))
@@ -1290,6 +1324,7 @@ function dibuja() {
     if (a.p) clase += " punteada";
     if (a.a) clase += " za-" + a.a;
     if (a.b) clase += " zb-" + a.b;
+    if (a.d === -1) clase += " zd-reves";
     if (a.m && a.m !== 1) pintas.push("--m:" + a.m);
     var estilo = pintas.length ? ' style="' + pintas.join(";") + '"' : "";
     var poli = '<path class="' + clase.trim() + '" data-zona="' + k + '"'
@@ -1297,7 +1332,10 @@ function dibuja() {
              + ' d="' + contorno(z[2], a.rd) + '"/>';
     if (sel && sel.tipo === "zona" && sel.i === k) {
       poli += z[2].map(function (p, v) {
-        return '<circle class="' + (mal.zonas[k].length ? "mal" : "") + '" data-zona="' + k
+        var clases = [];
+        if (mal.zonas[k].length) clases.push("mal");
+        if (v === verticeSel) clases.push("acto");
+        return '<circle class="' + clases.join(" ") + '" data-zona="' + k
              + '" data-vert="' + v + '" cx="' + p[0] + '" cy="' + p[1]
              + '" r="' + VERTICE + '"/>';
       }).join("");
@@ -1451,6 +1489,11 @@ function pintaPanel(mal) {
       multi.length + " iconos marcados. Elige cómo colocarlos.";
   }
   document.getElementById("btnVertice").classList.toggle("principal", modoVertice);
+  // El boton de quitar solo tiene sentido con una zona elegida. Con la zona
+  // delante NO se apaga aunque no se pueda quitar nada: asi, al pulsarlo,
+  // explica que falta en vez de quedarse mudo.
+  document.getElementById("btnQuitarVertice").disabled =
+    !(sel && sel.tipo === "zona" && E.zonas[sel.i]);
 }
 
 // Le dice a quien edita qué va a pasar al tocar el icono en el mapa, que es
@@ -1619,6 +1662,8 @@ function tocaZona(cambio) {
   // color, y eso hacia que la animacion pareciera no existir.
   if (!a.l && (a.p || a.b)) a.l = cLinea.value;
   if (!a.l) { delete a.p; delete a.b; }
+  // El sentido es cosa de `camina`, la unica que recorre el borde entero.
+  if (a.b !== "camina") delete a.d;
   if (!a.rd) delete a.rd;
   // La intensidad modula un movimiento: sin movimiento no modula nada.
   if (!a.a && !a.b) delete a.m;
@@ -1651,6 +1696,18 @@ function refrescaAdornos() {
   document.getElementById("campoIntZona").classList.toggle("apagado", !conMovimiento);
   fIntZona.disabled = !conMovimiento;
 
+  // El sentido solo vale para `camina`: las otras van y vienen en el sitio, asi
+  // que no hay nada que invertir. Se apaga con una pista que diga por que, en
+  // vez de dejarlo tocable y que no haga nada.
+  var camina = a.b === "camina";
+  document.getElementById("campoSentido").classList.toggle("apagado", !camina);
+  fSentido.disabled = !camina;
+  document.getElementById("pistaSentido").innerHTML = camina
+    ? "<b>Normal</b> recorre el borde en el orden en que están puestas las "
+      + "esquinas. <b>Al revés</b> lo recorre al contrario."
+    : "Se elige cuando el borde está en <b>Camina</b>, que es la única que "
+      + "recorre el borde de punta a punta.";
+
   var pista = document.getElementById("pistaIntZona");
   if (!conMovimiento) {
     pista.textContent = "Se aprieta cuando haya una animación: la intensidad "
@@ -1674,6 +1731,9 @@ function pintaAdornos(z) {
   fPunteada.checked = !!z.p;
   fAnimZona.value = z.a || "";
   fAnimBorde.value = z.b || "";
+  // El sentido se guarda solo cuando va al reves; el normal es el que sale
+  // solo, asi que el desplegable ensena «Normal» cuando no hay nada.
+  fSentido.value = (z.d === -1) ? "-1" : "1";
   var rd = (typeof z.rd === "number") ? z.rd : 0;
   fRedondeo.value = rd;
   document.getElementById("vRedondeo").textContent = Math.round(rd);
@@ -1687,6 +1747,13 @@ function elige(tipo, i, sumar) {
   var antes = sel;
   sel = (i === undefined ? null : {tipo: tipo, i: i});
   modoVertice = modoVertice && tipo === "zona";
+  // La esquina marcada pertenece a UNA zona: al cambiar de zona el indice
+  // apuntaria a otro punto, y quitar se llevaria por delante uno que nadie
+  // eligio.
+  if (!sel || sel.tipo !== "zona" || !antes || antes.tipo !== "zona"
+      || antes.i !== sel.i) {
+    verticeSel = null;
+  }
   // Con Mayús el clic suma o quita de la selección múltiple, sin cambiar el
   // que está elegido. Es lo de siempre en cualquier editor: Mayús para
   // agrupar, clic normal para empezar de cero.
@@ -1807,6 +1874,9 @@ s.addEventListener("pointerdown", function (ev) {
       if (d.dist < menor) { menor = d.dist; mejor = i; }
     }
     pts.splice(mejor + 1, 0, p);
+    // La marca apunta a un indice, y al meter una esquina los de detras se
+    // corren: la que estaba marcada ya no es la misma.
+    verticeSel = null;
     hayCambios();
     return;
   }
@@ -1817,6 +1887,12 @@ s.addEventListener("pointerdown", function (ev) {
 
   if (vertice) {
     elige("zona", +vertice.dataset.zona);
+    // Despues de elegir, porque `elige` limpia la marca al cambiar de zona y
+    // al pulsar una esquina de otra zona la marca tiene que ser la nueva. Se
+    // repinta aqui porque, si no, el dorado no saldria hasta el siguiente
+    // repintado: pulsar y soltar sin mover no repinta nada.
+    verticeSel = +vertice.dataset.vert;
+    dibuja();
     arrastre = {que: "vertice", k: +vertice.dataset.zona, v: +vertice.dataset.vert,
                 desde: p, original: E.zonas[+vertice.dataset.zona][2].map(function (q) { return q.slice() })};
   } else if (zona) {
@@ -1866,13 +1942,42 @@ function suelta(ev) {
 s.addEventListener("pointerup", suelta);
 s.addEventListener("pointercancel", suelta);
 
+// Quita la esquina marcada de la zona elegida.
+//
+// Es lo mismo que hacia el doble clic sobre un punto, pero con un boton a la
+// vista: el doble clic no se le ocurre a nadie, y sin el no habia forma de
+// deshacer una esquina puesta de mas.
+//
+// Se pide marcar la esquina antes -un clic en el punto- a proposito: son dos
+// acciones deliberadas, y eso es lo que evita que un clic de mas se lleve por
+// delante un vertice. El deshacer de momento solo cubre los iconos, asi que una
+// esquina quitada hay que volver a ponerla a mano.
+function quitaVertice() {
+  if (!sel || sel.tipo !== "zona" || !E.zonas[sel.i]) return;
+  var pts = E.zonas[sel.i][2];
+  if (verticeSel === null || verticeSel >= pts.length) {
+    aviso("Pulsa antes la esquina que quieres quitar: se marca en dorado.",
+          "aviso");
+    return;
+  }
+  if (pts.length <= 3) {
+    aviso("Una zona no puede tener menos de 3 esquinas. Si sobran todas, "
+          + "borra la zona entera.", "aviso");
+    return;
+  }
+  pts.splice(verticeSel, 1);
+  verticeSel = null;
+  hayCambios();
+  aviso("Esquina quitada. Quedan " + pts.length + ".", "ok");
+}
+
 s.addEventListener("dblclick", function (ev) {
   var vertice = ev.target.closest("circle[data-vert]");
   if (!vertice) return;
-  var pts = E.zonas[+vertice.dataset.zona][2];
-  if (pts.length <= 3) { aviso("Una zona no puede tener menos de 3 esquinas.", "aviso"); return; }
-  pts.splice(+vertice.dataset.vert, 1);
-  hayCambios();
+  // El doble clic marca y quita de una vez: es el atajo, y el boton existe
+  // justo porque este atajo no se descubre solo.
+  verticeSel = +vertice.dataset.vert;
+  quitaVertice();
 });
 
 s.addEventListener("wheel", function (ev) {
@@ -2497,6 +2602,16 @@ fAnimBorde.addEventListener("change", function () {
   });
   refrescaAdornos();
 });
+// Hacia donde avanza la linea de `camina`. El -1 es el unico que se guarda: el
+// 1 es el sentido en que estan escritos los puntos y sale solo, asi que
+// escribirlo llenaria el archivo de ajustes que no hacen nada.
+fSentido.addEventListener("change", function () {
+  tocaZona(function (a) {
+    if (+fSentido.value === -1) a.d = -1;
+    else delete a.d;
+  });
+  refrescaAdornos();
+});
 fIntZona.addEventListener("input", function () {
   document.getElementById("vIntZona").textContent = (+fIntZona.value).toFixed(1);
   tocaZona(function (a) {
@@ -2718,6 +2833,8 @@ document.getElementById("btnVertice").addEventListener("click", function () {
   if (modoVertice) aviso("Haz clic en el borde de la zona: la esquina se mete ahí.", "");
   else aviso("", "");
 });
+document.getElementById("btnQuitarVertice")
+  .addEventListener("click", quitaVertice);
 document.getElementById("btnTodo").addEventListener("click", verTodo);
 document.getElementById("btnMas").addEventListener("click", function () { zoomAlCentro(1 / 1.4) });
 document.getElementById("btnMenos").addEventListener("click", function () { zoomAlCentro(1.4) });
@@ -2858,6 +2975,7 @@ fetch("/api/estado").then(function (r) {
   };
   fAnimZona.innerHTML = listaDe(E.animacionesZona);
   fAnimBorde.innerHTML = listaDe(E.animacionesBorde);
+  fSentido.innerHTML = listaDe(E.sentidosCamina);
   document.getElementById("commit").value = "Croquis: ";
   pintaGit(d.git);
   pintaPaleta();

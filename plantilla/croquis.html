@@ -309,20 +309,35 @@ body{
    borde). Son propiedades distintas, asi que se pueden animar a la vez sin
    pisarse: una zona puede latir mientras su borde avanza.
 
+   Pero para que de verdad convivan hay que declararlas como VARIABLES y
+   juntarlas en una sola regla. `animation` es una propiedad de taquigrafia, y
+   eso quiere decir que la ultima regla que la toca BORRA la anterior: con una
+   declaracion por clase, una zona con las dos animaciones solo se quedaba con
+   la del borde -que va despues- y la de la zona desaparecia sin dar ningun
+   error. Con las variables, cada familia pone la suya y la regla comun las
+   suma.
+
    La intensidad va en la misma variable `--m` que los iconos, puesta en el
    propio poligono. Por defecto 1, que es el movimiento de fabrica. */
-#zonas .g.za-late{animation:zonaLate 3s ease-in-out infinite}
-#zonas .g.za-brilla{animation:zonaBrilla 2.8s ease-in-out infinite}
-#zonas .g.za-destello{animation:zonaDestello 4s ease-out infinite}
+#zonas .g{animation:var(--az, none), var(--ab, none)}
+#zonas .g.za-late{--az:zonaLate 3s ease-in-out infinite}
+#zonas .g.za-brilla{--az:zonaBrilla 2.8s ease-in-out infinite}
+#zonas .g.za-destello{--az:zonaDestello 4s ease-out infinite}
 /* `camina` se pone DESPUES de `.punteada` a proposito: las dos reglas tienen
    la misma fuerza, asi que gana la ultima. Una linea que avanza necesita
    guiones mas largos que un punteado quieto, y si el punteado ganara, la
    carretera saldria con rayitas de hormiga. */
 #zonas .g.zb-camina{
   stroke-dasharray:calc(9 * var(--m, 1) * 1px) calc(7 * var(--m, 1) * 1px);
-  animation:bordeCamina 1.6s linear infinite}
-#zonas .g.zb-late{animation:bordeLate 3s ease-in-out infinite}
-#zonas .g.zb-brilla{animation:bordeBrilla 2.8s ease-in-out infinite}
+  --ab:bordeCamina 1.6s linear infinite}
+/* Y la misma carretera al reves. Se le da la vuelta con `reverse` en vez de
+   escribir un segundo keyframe: el viaje es el mismo y lo unico que cambia es
+   el sentido, asi que `reverse` dice exactamente eso y no deja dos numeros que
+   se puedan separar. Recorrido al reves, de -16 a 0, que es el mismo periodo:
+   el bucle sigue siendo continuo. */
+#zonas .g.zb-camina.zd-reves{--ab:bordeCamina 1.6s linear infinite reverse}
+#zonas .g.zb-late{--ab:bordeLate 3s ease-in-out infinite}
+#zonas .g.zb-brilla{--ab:bordeBrilla 2.8s ease-in-out infinite}
 
 /* La zona late: se aclara y vuelve, sin llegar a desaparecer nunca. */
 @keyframes zonaLate{
@@ -705,7 +720,7 @@ var ZONAS = [
    "Puestos de comida y bebida.", {"l": "#f17b1f", "p": 1, "rd": 20, "b": "camina"}],
 
   ["Escenario", "Escenario",
-   [[581,513],[669,513],[667,637],[580,637],[580,587],[596,589],[595,580],[596,573],[595,566],[589,566],[581,553]],
+   [[581,513],[669,513],[667,637],[580,637]],
    "Describe aqui que hay en esta zona del evento.", {"l": "#f17b1f", "p": 1, "rd": 20, "b": "camina"}]
 ];
 /* === FIN ZONAS === */
@@ -941,6 +956,9 @@ ZON.innerHTML = ZONAS.map(function (z, k) {
   if (a.a) clases.push("za-" + a.a);
   if (a.b) clases.push("zb-" + a.b);
   if (a.p) clases.push("punteada");
+  // El sentido de `camina`, cuando va al reves. La clase sola no hace nada sin
+  // la animacion del borde: son dos cosas de la misma linea.
+  if (a.d === -1) clases.push("zd-reves");
   // `pausa` marca lo que de verdad anima, para poder pararlo cuando no se ve.
   if (a.a || a.b) clases.push("pausa");
   // La intensidad, en el propio contorno y en la misma variable que los

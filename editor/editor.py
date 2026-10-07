@@ -94,6 +94,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     MIN_ROT,
     MIN_TAM_ICONO,
     NOMBRE_PROPIO,
+    SENTIDOS_CAMINA,
     SIMBOLOS,
     limpiar_adornos,
     limpiar_ajustes,
@@ -301,10 +302,10 @@ def _texto_zonas(zonas: list) -> str:
 def _texto_adornos(adornos: dict) -> str:
     """El objeto de adornos de una zona, en el orden en que se lee.
 
-    El orden es f, l, p, rd, a, b, m: primero lo que se ve (relleno y linea),
-    despues como se pinta la linea (punteada y redondeo), y al final el
-    movimiento. Se omite lo que no esta, para que una zona con solo un color
-    ocupe lo minimo.
+    El orden es f, l, p, rd, a, b, d, m: primero lo que se ve (relleno y linea),
+    despues como se pinta la linea (punteada y redondeo), luego el movimiento y
+    al final hacia donde va. Se omite lo que no esta, para que una zona con
+    solo un color ocupe lo minimo.
     """
     trozos = []
     for clave in ("f", "l"):
@@ -317,6 +318,10 @@ def _texto_adornos(adornos: dict) -> str:
     for clave in ("a", "b"):
         if adornos.get(clave):
             trozos.append(f'"{clave}": {json.dumps(adornos[clave], ensure_ascii=False)}')
+    # El sentido va pegado a la animacion del borde, que es la unica que lo
+    # tiene: asi se lee «camina, al reves» y no hay que buscarlo mas abajo.
+    if adornos.get("d"):
+        trozos.append(f'"d": {round(float(adornos["d"]), 2):g}')
     if adornos.get("m"):
         trozos.append(f'"m": {round(float(adornos["m"]), 2):g}')
     return "{" + ", ".join(trozos) + "}"
@@ -960,6 +965,9 @@ class Manejador(BaseHTTPRequestHandler):
                 # diciendo cosas distintas.
                 datos["animacionesZona"] = ANIMACIONES_ZONA
                 datos["animacionesBorde"] = ANIMACIONES_BORDE
+                # Los sentidos de `camina`, por el mismo motivo que las listas
+                # de animaciones: los manda el servidor, que es quien valida.
+                datos["sentidosCamina"] = SENTIDOS_CAMINA
                 # Si este proceso arranco antes del ultimo cambio de codigo, la
                 # pagina lo dice y apaga el boton de guardar. Es la unica señal
                 # que puede dar: desde dentro, un editor viejo y uno al dia

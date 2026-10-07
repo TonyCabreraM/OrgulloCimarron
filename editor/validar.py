@@ -131,6 +131,18 @@ ANIMACIONES_BORDE = {
     "brilla": "Brilla",
 }
 
+# Hacia donde avanza la linea de `camina`.
+#
+# Solo la tiene `camina`, porque es la unica que RECORRE el borde: `late` y
+# `brilla` van y vienen en el sitio, asi que no hay nada que invertir.
+#
+# El sentido normal es aquel en el que estan escritos los puntos del poligono,
+# que es lo que sale solo. El de al reves se guarda; el normal no, para que una
+# zona sin tocar siga escribiendose igual que antes.
+SENTIDO_NORMAL = 1
+SENTIDO_REVES = -1
+SENTIDOS_CAMINA = {SENTIDO_NORMAL: "Normal", SENTIDO_REVES: "Al revés"}
+
 # Las claves de los adornos, que van en un objeto aparte dentro de la zona:
 #
 #   f   el color de relleno, "#rrggbb", o nada si no lleva
@@ -139,13 +151,14 @@ ANIMACIONES_BORDE = {
 #   rd  cuanto se redondean las esquinas, en puntos del mapa
 #   a   la animacion de la zona entera
 #   b   la animacion del borde
+#   d   hacia donde avanza el borde, solo con `camina`
 #   m   la intensidad, la misma cuenta que en los iconos
 #
 # Van con nombres y no sueltos al final de la tupla de la zona a proposito: la
-# tupla ya tiene cuatro campos de siempre —nombre, corto, poligono y
-# descripcion— y meterle siete mas seria volver a contar comas con la vista,
+# tupla ya tiene cuatro campos de siempre -nombre, corto, poligono y
+# descripcion- y meterle ocho mas seria volver a contar comas con la vista,
 # que es justo el problema que se quito de los iconos.
-CLAVES_ZONA = {"f", "l", "p", "rd", "a", "b", "m"}
+CLAVES_ZONA = {"f", "l", "p", "rd", "a", "b", "d", "m"}
 
 # El redondeo de las esquinas, en puntos del mapa.
 #
@@ -321,7 +334,7 @@ def revisar_adornos(adornos, sitio: str) -> list[str]:
         return [f"{sitio}: en los adornos no conozco {' ni '.join(raros)}. "
                 f"Las claves son {', '.join(sorted(CLAVES_ZONA))} "
                 f"(f=relleno, l=linea, p=punteada, a=animacion, b=borde, "
-                f"m=intensidad)"]
+                f"d=sentido, m=intensidad)"]
 
     for clave, cual in (("f", "el relleno"), ("l", "la linea")):
         if clave in adornos and not es_color(adornos[clave]):
@@ -367,6 +380,20 @@ def revisar_adornos(adornos, sitio: str) -> list[str]:
                 f"{sitio}: el borde tiene animacion pero la linea no tiene "
                 f"color, asi que no hay nada que animar")
 
+    if "d" in adornos:
+        # El sentido solo vale para `camina`: es la unica que recorre el borde
+        # de punta a punta. En las demas no hay nada que invertir, y guardarlo
+        # seria un ajuste que no hace nada.
+        sentido = adornos["d"]
+        if isinstance(sentido, bool) or sentido not in SENTIDOS_CAMINA:
+            problemas.append(
+                f"{sitio}: «{sentido!r}» no es un sentido valido. Los que hay: "
+                f"{', '.join(str(k) for k in SENTIDOS_CAMINA)}")
+        elif adornos.get("b") != "camina":
+            problemas.append(
+                f"{sitio}: el sentido es cosa de la animacion «Camina», y el "
+                f"borde esta en «{adornos.get('b') or 'Quieta'}»")
+
     if "m" in adornos:
         inte = adornos["m"]
         if not isinstance(inte, (int, float)) or isinstance(inte, bool):
@@ -408,6 +435,10 @@ def limpiar_adornos(adornos) -> dict:
     # El redondeo, igual: 0 es «esquinas en angulo recto», o sea lo de siempre.
     if adornos.get("rd"):
         limpio["rd"] = adornos["rd"]
+    # Y el sentido, solo cuando va al reves: el normal es el que sale solo, el
+    # mismo motivo por el que no se escribe el punteado ni el redondeo en 0.
+    if adornos.get("d") == SENTIDO_REVES:
+        limpio["d"] = SENTIDO_REVES
     if adornos.get("m") and adornos["m"] != INTENSIDAD:
         limpio["m"] = adornos["m"]
     return limpio
