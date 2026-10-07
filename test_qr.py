@@ -988,29 +988,35 @@ def test_el_sello_y_el_boton_de_la_ventana() -> bool:
     # --- 3. Que el croquis la use ANTES de poner el href --------------------
     # Es la comprobación que de verdad importa: la función puede estar escrita
     # y no llamarse, y entonces no valida nada.
-    i = texto.find("function pintaBoton(")
+    #
+    # Se mira en `montaEnlace` y no en `pintaBoton` porque ese es ahora el
+    # ÚNICO sitio que pone un `href`, así que la comprobación de ahí vale para
+    # los dos botones -el de la ventana y el del panel- y no hay ninguna otra
+    # puerta por la que se pueda colar una dirección. Comprobarlo en cada botón
+    # era justo lo que se podía olvidar en el segundo.
+    i = texto.find("function montaEnlace(")
     if i < 0:
-        problemas.append("(no se encuentra pintaBoton en el croquis)")
+        problemas.append("(no se encuentra montaEnlace en el croquis)")
     else:
         cuerpo = texto[i:texto.find("\n}", i)]
         if "enlaceSeguro" not in cuerpo:
             problemas.append(
-                "pintaBoton no comprueba el enlace antes de pintarlo")
+                "montaEnlace no comprueba la dirección antes de poner el href")
         elif cuerpo.find("enlaceSeguro") > cuerpo.find("href"):
             problemas.append(
-                "pintaBoton pone el `href` antes de comprobar el enlace: la "
+                "montaEnlace pone el `href` antes de comprobar la dirección: la "
                 "comprobación no sirve de nada ahí")
-        if 'rel = "noopener' not in cuerpo and "rel =" not in cuerpo:
+        if "noopener" not in cuerpo:
             problemas.append(
-                "el botón abre en pestaña nueva y no lleva `rel` con `noopener`: "
+                "el botón de fuera abre en pestaña nueva y no lleva `noopener`: "
                 "la página de destino podría manipular esta desde window.opener")
-        # Se arma con createElement y no con innerHTML, para que la dirección
-        # se trate como dirección y no como HTML.
-        if "createElement" not in cuerpo:
-            problemas.append(
-                "el botón no se arma con `createElement`: con `innerHTML` habría "
-                "que escapar la dirección a mano y un despiste la convertiría en "
-                "una etiqueta")
+    # Y los dos botones se arman con createElement y no con innerHTML, para que
+    # la dirección se trate como dirección y no como HTML.
+    if texto.count('document.createElement("a")') < 2:
+        problemas.append(
+            "los botones no se arman con `createElement`: con `innerHTML` "
+            "habría que escapar la dirección a mano y un despiste la "
+            "convertiría en una etiqueta")
 
     # --- 4. Que el croquis no lleve el `<a>` escrito en el marcado ----------
     # Si estuviera escrito, la prueba `el croquis publicado no edita nada` lo
@@ -2824,6 +2830,257 @@ def test_quitar_vertices_de_una_zona() -> bool:
     return True
 
 
+def test_la_ventana_solo_se_abre_con_el_mapa_acercado() -> bool:
+    """La ventana de informacion solo sale con una zona ampliada.
+
+    Con el mapa entero delante los iconos son marcas de referencia: si
+    respondieran al toque, una ventana encima taparia justo lo que se estaba
+    mirando, y ademas no se podria acercar la zona que hay debajo porque el
+    icono se comeria la pulsacion. Se apagan las dos cosas a la vez -el toque y
+    el filo verde que lo promete-, porque un adorno que anuncia algo que no
+    pasa es peor que no tenerlo.
+    """
+    problemas = []
+    texto = CROQUIS.read_text(encoding="utf-8")
+
+    # --- 1. El mapa dice si esta acercado --------------------------------
+    ini = texto.find("function pinta(")
+    if ini < 0:
+        problemas.append("(no se encuentra `pinta` en el croquis)")
+    else:
+        cuerpo = texto[ini:texto.find("\n}", ini)]
+        if "deCerca" not in cuerpo:
+            problemas.append(
+                "`pinta` no avisa de si el mapa esta acercado: los iconos con "
+                "informacion no tendrian forma de saberlo")
+        if "k >= 0" not in cuerpo:
+            problemas.append("`pinta` no mira si hay una zona elegida")
+
+    # --- 2. Y el toque se apaga de verdad --------------------------------
+    # El filo verde, el cursor y el `pointer-events` tienen que depender de la
+    # misma clase: si el `pointer-events` no se apaga, el icono se come la
+    # pulsacion y no se puede acercar la zona de debajo.
+    if "#iconos .conInfo{pointer-events:auto" in texto:
+        problemas.append(
+            "los iconos con informacion reciben el toque SIEMPRE: con el mapa "
+            "entero delante no se podria acercar la zona que tienen debajo")
+    if "#iconos.deCerca .conInfo{pointer-events:auto}" not in texto:
+        problemas.append(
+            "el toque de los iconos con informacion no depende de `deCerca`")
+    if "#iconos.deCerca .conInfo .aro{" not in texto:
+        problemas.append(
+            "el filo verde de los iconos con informacion se ve siempre: estaria "
+            "prometiendo un toque que con el mapa entero no hace nada")
+
+    # --- 3. Y aunque el toque llegara, la ventana no se abre --------------
+    # Doble red: el CSS puede fallar -un navegador raro, una regla que se
+    # pierde-, y lo que no puede pasar es que salga la ventana sin zoom.
+    i = texto.find('ICN.addEventListener("click"')
+    if i < 0:
+        problemas.append("(no se encuentra el manejador del clic de los iconos)")
+    else:
+        cuerpo = texto[i:texto.find("\n});", i)]
+        if "A < 0" not in cuerpo and "A >= 0" not in cuerpo:
+            problemas.append(
+                "el clic de un icono abre la ventana sin mirar si el mapa esta "
+                "acercado: con el mapa entero taparia lo que se estaba mirando")
+    # Y el que corta el toque para que no llegue al mapa tiene que mirarlo
+    # tambien: sin zoom el toque tiene que ACERCAR la zona de debajo.
+    i = texto.find('ICN.addEventListener("pointerdown"')
+    if i >= 0:
+        cuerpo = texto[i:texto.find("\n});", i)]
+        if "A >= 0" not in cuerpo:
+            problemas.append(
+                "el icono se come el toque aunque no haya zoom: pulsarlo no "
+                "acercaria la zona que tiene debajo")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el filo, el cursor y el toque de los iconos con informacion "
+          "dependen del zoom, y la ventana no se abre sin el")
+    return True
+
+
+def test_los_recursos_y_el_boton_del_mapa() -> bool:
+    """Un boton puede llevar a un archivo de RecursosExtra, y hay dos botones.
+
+    El de la ventana de un icono y el del panel del mapa se eligen igual. Lo
+    que hay que vigilar es que la carpeta no sea una puerta abierta -una ruta
+    con `..` apuntaria a cualquier sitio del repositorio-, que el croquis y el
+    servidor opinen lo mismo sobre lo que es una imagen, y que el texto y la
+    direccion no acaben escritos en dos sitios que se puedan separar.
+    """
+    problemas = []
+    texto = CROQUIS.read_text(encoding="utf-8")
+    edit = EDITOR_HTML.read_text(encoding="utf-8")
+
+    # --- 1. La carpeta no es una puerta abierta ---------------------------
+    for bueno in ("RecursosExtra/plan.pdf", "RecursosExtra/plano final.jpg",
+                  "RecursosExtra/a.png"):
+        if not v.es_destino(bueno):
+            problemas.append(f"rechazo un recurso que vale: {bueno}")
+    for malo in ("RecursosExtra/../../etc/passwd", "RecursosExtra/a/b.png",
+                 "RecursosExtra/", "RecursosExtra/.oculto",
+                 "RecursosExtra/plan.exe?x=1", "../RecursosExtra/plan.pdf",
+                 "javascript:alert(1)", "plan.pdf", "", None):
+        if v.es_destino(malo):
+            problemas.append(f"acepto un destino que no vale: {malo!r}")
+    # Y lo de fuera sigue valiendo.
+    for url in ("https://owncloud.rec.uabc.mx/x", "http://a.b/c"):
+        if not v.es_destino(url):
+            problemas.append(f"rechazo una direccion que vale: {url}")
+
+    # --- 2. El boton del mapa: sus reglas ---------------------------------
+    bien = {"t": "Programa del evento", "u": "RecursosExtra/plan.pdf"}
+    if v.revisar_enlace(bien):
+        problemas.append(f"rechazo un boton bueno: {v.revisar_enlace(bien)}")
+    if v.revisar_enlace(None) or v.revisar_enlace({}):
+        problemas.append("un croquis sin boton tiene que ser valido")
+    for malo, nota in (({"t": "", "u": "https://a.b"}, "sin texto"),
+                       ({"t": "x" * 60, "u": "https://a.b"}, "con texto larguisimo"),
+                       ({"t": "x", "u": "javascript:alert(1)"}, "con codigo de destino"),
+                       ({"t": "x", "u": "RecursosExtra/../a"}, "apuntando fuera"),
+                       ({"t": "x"}, "sin destino"),
+                       ({"t": "x", "u": "https://a.b", "z": 1}, "con una clave rara")):
+        if not v.revisar_enlace(malo):
+            problemas.append(f"acepto un boton {nota}")
+    # Y a medias no se guarda nada: o entero o nada.
+    if v.limpiar_enlace({"t": "x"}) is not None:
+        problemas.append("un boton sin destino se guarda a medias")
+    if v.limpiar_enlace({"t": " x ", "u": " RecursosExtra/a.png "}) != \
+            {"t": "x", "u": "RecursosExtra/a.png"}:
+        problemas.append("el boton no se limpia de espacios al guardarlo")
+
+    # --- 3. Ida y vuelta por el archivo -----------------------------------
+    # Es lo que hace que el editor pueda volver a abrir lo que escribio.
+    escrito = editor._texto_enlace(bien)
+    if '"t": "Programa del evento"' not in escrito or '"u": "RecursosExtra/plan.pdf"' not in escrito:
+        problemas.append(f"el boton no se escribe entero: {escrito}")
+    if editor._texto_enlace(None) != "var ENLACE = null;":
+        problemas.append(f"un croquis sin boton no escribe `null`: "
+                         f"{editor._texto_enlace(None)}")
+
+    # --- 4. Y el croquis lo lee -------------------------------------------
+    if "/* === INICIO ENLACE === */" not in texto:
+        problemas.append("falta el bloque ENLACE en el croquis: el editor no "
+                         "tendria donde escribir el boton")
+    # La lista de lo que es una imagen tiene que ser la MISMA en los tres
+    # sitios. El croquis decide que hacer al pulsar y el editor lo que dice al
+    # elegir; ninguno puede preguntarle al otro en ese momento, asi que la
+    # unica forma de que no se separen es comprobarlo aqui.
+    lista = re.search(r"var IMAGENES = \[([^\]]*)\]", texto)
+    if not lista:
+        problemas.append("el croquis no tiene la lista de extensiones de imagen")
+    else:
+        en_croquis = tuple(x.strip().strip('"') for x in lista.group(1).split(","))
+        if en_croquis != v.EXTENSIONES_IMAGEN:
+            problemas.append(
+                f"la lista de imagenes del croquis {en_croquis} no es la del "
+                f"servidor {v.EXTENSIONES_IMAGEN}: un archivo se abriria de una "
+                f"forma al elegirlo y de otra al pulsarlo")
+    # Y la carpeta tiene que estar donde el croquis la busca: el croquis vive
+    # en plantilla/, asi que sube un nivel.
+    if '"../" + CARPETA_RECURSOS' not in texto:
+        problemas.append(
+            "el croquis no sube un nivel para llegar a RecursosExtra: la "
+            "carpeta esta en la raiz y el croquis dentro de plantilla/")
+
+    # --- 5. El editor ofrece lo que hay, y solo lo que vale ---------------
+    for aguja, queja in (
+            ('id="mDestino"', "el editor no tiene el selector del boton del mapa"),
+            ('id="mBoton"', "el editor no tiene la casilla del boton del mapa"),
+            ("opcionesDeDestino", "el editor no arma la lista de destinos"),
+            ("PREFIJO_RECURSOS", "el editor no conoce la carpeta de recursos"),
+            ("enlace: E.enlace",
+             "el editor no manda el boton al guardar: se perderia al guardar")):
+        if aguja not in edit:
+            problemas.append(queja)
+    if "recursos" not in editor.leer_recursos.__doc__ and \
+            "recursos" not in Path("editor/editor.py").read_text(encoding="utf-8"):
+        problemas.append("el servidor no manda la lista de RecursosExtra")
+    # Un archivo que no pase `es_recurso` no se puede ofrecer: el editor
+    # dejaria elegir algo que el guardado rechazaria.
+    fuente = Path("editor/editor.py").read_text(encoding="utf-8")
+    if "es_recurso" not in fuente:
+        problemas.append("el servidor ofrece archivos sin comprobar que valgan")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    RecursosExtra con su forma comprobada, el boton del mapa "
+          "editable y la misma lista de imagenes en el croquis y el servidor")
+    return True
+
+
+def test_los_vectores_se_publican_como_pesen_menos() -> bool:
+    """Un vector pasa a PNG al publicarlo, pero solo si el PNG pesa menos.
+
+    La idea de partida era convertir todo a PNG para que el movil trabaje menos
+    al dibujarlo. Medido, sale al reves: los 17 vectores del mapa ocupan 75 KB
+    y pasados a PNG de 256 px serian 271 KB, porque el SVG de un dibujo plano
+    pesa poquisimo y el PNG de un dibujo con curvas suaves pesa mucho -cada
+    borde rebajado es una orla de colores que el formato no sabe resumir-.
+    Convertirlos a ciegas haria el croquis TRES VECES mas pesado, que es justo
+    lo contrario de lo que se buscaba.
+
+    Asi que se prueba y se queda lo que ocupe menos, icono por icono. Con los
+    de ahora no cambia ninguno; el dia que se suba un dibujo complicado se
+    convierte solo.
+    """
+    problemas = []
+    edit = EDITOR_HTML.read_text(encoding="utf-8")
+
+    # --- 1. La conversion existe ------------------------------------------
+    for aguja, queja in (
+            ("function svgAPng(", "no hay forma de convertir un SVG a PNG"),
+            ("async function propiosParaPublicar()",
+             "no hay nada que prepare los iconos antes de publicarlos"),
+            ("propiosParaPublicar()", "`guardar` no convierte antes de mandar"),
+            ("data:image/svg+xml", "la conversion no mira de que tipo es cada icono")):
+        if aguja not in edit:
+            problemas.append(queja)
+
+    # --- 2. Y solo cambia cuando de verdad pesa menos ---------------------
+    # Es LA comprobacion de esta prueba. Sin ella, la conversion se hace
+    # siempre y el croquis engorda en vez de adelgazar.
+    i = edit.find("async function propiosParaPublicar(")
+    if i < 0:
+        problemas.append("(no se encuentra propiosParaPublicar)")
+    else:
+        cuerpo = edit[i:edit.find("\n}", i)]
+        if "png.length < uri.length" not in cuerpo:
+            problemas.append(
+                "no se compara el peso antes de cambiar: convertir a ciegas "
+                "haria el croquis tres veces mas pesado con estos dibujos")
+        if "cambiados.push" not in cuerpo:
+            problemas.append(
+                "no se lleva la cuenta de lo que se convirtio: no se podria "
+                "decir al guardar, y el cambio seria invisible")
+
+    # --- 3. El editor vuelve a trabajar con el archivo original -----------
+    # Si no, un icono subido en SVG volveria al editor convertido a PNG, se
+    # perderia el original y el croquis publicado pasaria a ser la fuente.
+    if "def propios_para_editar(" not in \
+            Path("editor/editor.py").read_text(encoding="utf-8"):
+        problemas.append("el servidor no devuelve los iconos como se editan")
+    if "propios_para_editar(datos[\"propios\"])" not in \
+            Path("editor/editor.py").read_text(encoding="utf-8"):
+        problemas.append(
+            "`/api/estado` manda los iconos tal como estan en el croquis, ya "
+            "convertidos: se perderia el vector original al volver a editar")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el vector se convierte a PNG solo cuando pesa menos, y el "
+          "editor sigue trabajando con el archivo original")
+    return True
+
+
 def main() -> int:
     pruebas = [
         ("minificado conserva estructura", test_minificado_conserva_estructura),
@@ -2845,6 +3102,10 @@ def main() -> int:
         ("los adornos de las zonas", test_los_adornos_de_las_zonas),
         ("las pestanas del editor", test_las_pestanas_del_editor),
         ("quitar vertices de una zona", test_quitar_vertices_de_una_zona),
+        ("la ventana solo con el zoom", test_la_ventana_solo_se_abre_con_el_mapa_acercado),
+        ("los recursos y el boton del mapa", test_los_recursos_y_el_boton_del_mapa),
+        ("los vectores se publican como pesen menos",
+         test_los_vectores_se_publican_como_pesen_menos),
         ("el editor avisa si quedo viejo", test_el_editor_avisa_si_quedo_viejo),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),

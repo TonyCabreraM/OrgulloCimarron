@@ -637,7 +637,7 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <button class="pestana" type="button" role="tab"
               data-panel="modelos">Modelos</button>
       <button class="pestana" type="button" role="tab"
-              data-panel="publicar">Publicar</button>
+              data-panel="mapa">Mapa</button>
     </div>
 
     <div class="hoja" data-panel="zona">
@@ -822,8 +822,10 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <div id="camposBoton" hidden>
           <input type="text" id="fBotonTexto" maxlength="40"
                  placeholder="Texto del botón · Programa del evento">
+          <select id="fBotonDestino" style="margin-top:6px"></select>
           <input type="text" id="fBotonUrl" maxlength="300"
                  placeholder="https://…" style="margin-top:6px">
+          <div class="pista" id="pistaDestino"></div>
           <div class="pista" id="pistaBoton"></div>
         </div>
       </div>
@@ -865,7 +867,36 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 
     </div>
 
-    <div class="hoja" data-panel="publicar">
+    <div class="hoja" data-panel="mapa">
+
+    <div class="bloque">
+      <h2>Botón del panel</h2>
+      <label class="marca" for="mBoton">
+        <input type="checkbox" id="mBoton">
+        <span>Poner un botón debajo de los accesos rápidos</span>
+      </label>
+      <div class="pista">
+        Es el botón que sale al final del panel, debajo de los botones de las
+        zonas. Sirve para el programa del evento, una guía o un plano: se abre
+        en otra pestaña si es una dirección de fuera, y si es un archivo de
+        <b>RecursosExtra</b> se enseña dentro del mapa cuando es una imagen y
+        se descarga cuando no.
+      </div>
+      <div id="camposMapa" hidden>
+        <div class="campo" style="margin-top:10px">
+          <label for="mTexto">Texto del botón</label>
+          <input type="text" id="mTexto" maxlength="40"
+                 placeholder="Programa del evento">
+        </div>
+        <div class="campo">
+          <label for="mDestino">A dónde lleva</label>
+          <select id="mDestino"></select>
+          <input type="text" id="mUrl" maxlength="300"
+                 placeholder="https://…" style="margin-top:6px">
+          <div class="pista" id="mPista"></div>
+        </div>
+      </div>
+    </div>
 
     <div class="bloque">
       <h2>Estado del repositorio</h2>
@@ -971,6 +1002,11 @@ var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [
          // editor viejo y uno al dia responden igual desde dentro, asi que
          // esta es la unica señal que puede dar de que se quedo atras.
          codigoViejo: false,
+         // Los archivos de RecursosExtra que se pueden enlazar. Los manda el
+         // servidor, que es quien lee la carpeta.
+         recursos: [],
+         // El boton del croquis: {t: texto, u: destino}, o null si no hay.
+         enlace: null,
          // Los ajustes con los que se subio cada icono propio: tamano,
          // animacion, intensidad y circulo. Es lo que hace que al ponerlo en el
          // mapa salga como se dejo. Lo manda el servidor, que los guarda al
@@ -1040,6 +1076,15 @@ var s = document.getElementById("s"),
     fInfoTitulo = document.getElementById("fInfoTitulo"),
     fInfoTexto = document.getElementById("fInfoTexto"),
     fBoton = document.getElementById("fBoton"),
+    fBotonDestino = document.getElementById("fBotonDestino"),
+    pistaDestino = document.getElementById("pistaDestino"),
+    mPista = document.getElementById("mPista"),
+    mBoton = document.getElementById("mBoton"),
+    mTexto = document.getElementById("mTexto"),
+    mDestino = document.getElementById("mDestino"),
+    mUrl = document.getElementById("mUrl"),
+    campoMapaUrl = document.getElementById("campoMapaUrl"),
+    camposMapa = document.getElementById("camposMapa"),
     camposBoton = document.getElementById("camposBoton"),
     fBotonTexto = document.getElementById("fBotonTexto"),
     fBotonUrl = document.getElementById("fBotonUrl"),
@@ -1556,12 +1601,13 @@ function pintaPanel(mal) {
     // que en cuanto el foco salia de ella para escribir en el texto, el
     // repintado la devolvia a lo que decia el icono, la desmarcaba y cerraba
     // los campos. Parecia que el boton no se podia activar.
-    var usandoBoton = [fBoton, fBotonTexto, fBotonUrl]
+    var usandoBoton = [fBoton, fBotonTexto, fBotonDestino, fBotonUrl]
       .indexOf(document.activeElement) >= 0;
     if (!usandoBoton) {
       fBoton.checked = !!ic.u;
       fBotonTexto.value = ic.u ? ic.u[0] : "";
-      fBotonUrl.value = ic.u ? ic.u[1] : "";
+      pintaDestino(fBotonDestino, fBotonUrl, pistaDestino,
+                   ic.u ? ic.u[1] : "");
     }
     camposBoton.hidden = !fBoton.checked;
     actualizaPistaInfo(ic);
@@ -1602,6 +1648,13 @@ function pintaPanel(mal) {
       }).length],
       ["Iconos colocados", E.iconos.length],
       ["Iconos propios", Object.keys(E.propios || {}).length],
+      ["De esos, en vector", Object.keys(E.propios || {}).filter(function (n) {
+        return String(E.propios[n]).indexOf("data:image/svg+xml") === 0;
+      }).length],
+      ["Vectores que pasan a PNG", E.publicados
+        ? (E.publicados.cambiados.length + " de "
+           + Object.keys(E.propios || {}).length)
+        : "se ve al guardar"],
       ["Modelos guardados", (E.modelos || []).length]]);
   }
 }
@@ -1624,23 +1677,12 @@ function actualizaPistaInfo(ic) {
 // ponerlo. Sin este aviso, el boton parecia configurado y no salia.
 function actualizaPistaBoton(ic) {
   var pista = document.getElementById("pistaBoton");
-  var u = ic.u;
-  if (!u) {
-    pista.textContent = "Rellena el texto y la dirección para que salga.";
-    return;
-  }
-  var avisos = [];
-  if (!u[0].trim()) avisos.push("le falta el texto del botón");
-  if (!enlaceValido(u[1])) {
-    avisos.push("la dirección tiene que empezar por https:// o http://");
-  }
-  if (!ic.i) {
-    avisos.push("el icono no tiene información, así que no hay ventana donde "
-                + "poner el botón");
-  }
-  pista.textContent = avisos.length
-    ? "No va a salir: " + avisos.join("; ") + "."
-    : "Saldrá dentro de la ventana, con el texto «" + u[0] + "».";
+  // De la dirección y del archivo se encarga `pintaPistaDestino`, que es la
+  // misma pista que la del botón del mapa. Aquí solo queda lo que es cosa del
+  // icono y no del destino.
+  pista.textContent = (!ic.u || ic.i) ? ""
+    : "No va a salir: el icono no tiene información, y el botón sale dentro de "
+      + "esa ventana. Rellena el título para que haya dónde ponerlo.";
 }
 
 // Lo mismo que comprueba el croquis antes de pintar el enlace, y por el mismo
@@ -1649,7 +1691,86 @@ function actualizaPistaBoton(ic) {
 // escribirla; alli se vuelve a mirar, porque el archivo lo puede editar
 // cualquiera a mano.
 function enlaceValido(u) {
-  return /^https?:\/\/[^\s]+$/i.test(String(u || ""));
+  return esRecursoEditor(u) || /^https?:\/\/[^\s]+$/i.test(String(u || ""));
+}
+
+// --- El destino de un boton -------------------------------------------------
+// Los dos botones del croquis -el de un icono y el del mapa- se eligen igual:
+// un texto, y a donde lleva. A donde lleva puede ser una direccion de fuera o
+// un archivo de RecursosExtra, y las dos cosas van en el MISMO desplegable.
+//
+// Juntas y no en dos controles -primero el tipo y luego cual- porque son dos
+// pasos para una sola decision, y en medio se puede quedar a medias. Un
+// archivo que no este en la lista tampoco se puede escribir a mano, asi que no
+// hay forma de apuntar a algo que no exista.
+var PREFIJO_RECURSOS = "RecursosExtra/";
+
+// Un archivo de RecursosExtra. Se comprueba la forma entera y no solo que
+// empiece por el prefijo: `RecursosExtra/../../etc` empieza bien y no vale.
+function esRecursoEditor(u) {
+  var nombre = String(u || "");
+  if (nombre.indexOf(PREFIJO_RECURSOS) !== 0) return false;
+  nombre = nombre.slice(PREFIJO_RECURSOS.length);
+  return !!nombre && nombre.indexOf("/") < 0 && nombre.indexOf("..") < 0
+      && nombre[0] !== "." && nombre.indexOf(".") > 0;
+}
+
+// Las opciones: la direccion de fuera y un archivo por cada cosa que haya en
+// RecursosExtra. La lista la manda el servidor, que es quien lee la carpeta:
+// el editor no puede adivinar que hay dentro.
+function opcionesDeDestino() {
+  var trozos = ['<option value="url">Otro sitio · escribir la dirección</option>'];
+  (E.recursos || []).forEach(function (r) {
+    trozos.push('<option value="' + escapa(PREFIJO_RECURSOS + r.n) + '">'
+              + escapa(r.n + " · " + (r.imagen ? "se abre en el mapa"
+                                                : "se descarga")
+                       + " · " + r.kb + " KB") + "</option>");
+  });
+  return trozos.join("");
+}
+
+// El archivo de la lista que corresponde a un destino, o null.
+function recursoDe(destino) {
+  var nombre = String(destino || "").slice(PREFIJO_RECURSOS.length);
+  return (E.recursos || []).find(function (r) { return r.n === nombre }) || null;
+}
+
+// Deja un selector de destino como toque: elige la opcion que corresponde y
+// ensena el campo de la direccion solo cuando toca.
+function pintaDestino(sel, url, pista, destino) {
+  // Si el desplegable esta vacio se rellena aqui: `pintaDestino` se llama
+  // tambien desde el repintado del panel, que puede llegar antes que la
+  // respuesta del servidor.
+  if (!sel.options.length) sel.innerHTML = opcionesDeDestino();
+  var dentro = esRecursoEditor(destino);
+  sel.value = dentro ? destino : "url";
+  // Si el destino guardado ya no esta en la carpeta, `value` no encuentra su
+  // opcion y el desplegable se queda en la primera. Lo avisa la pista, para no
+  // ensenar en silencio una direccion que no es la suya.
+  url.hidden = sel.value !== "url";
+  if (sel.value === "url") url.value = destino || "";
+  pintaPistaDestino(pista, destino);
+}
+
+// La pista que dice que va a pasar al pulsar. Va aparte porque se refresca
+// tambien mientras se escribe la direccion, y ahi NO hay que tocar el campo:
+// reescribirlo mientras alguien teclea le borraria lo que lleva escrito.
+function pintaPistaDestino(pista, destino) {
+  if (!pista) return;
+  if (esRecursoEditor(destino) && !recursoDe(destino)) {
+    pista.textContent = "El archivo «" + destino.slice(PREFIJO_RECURSOS.length)
+      + "» ya no está en RecursosExtra. Elige otro: así el botón no llevará a "
+      + "ninguna parte.";
+  } else if (!destino) {
+    pista.textContent = "Elige a dónde lleva para que el botón salga.";
+  } else if (!esRecursoEditor(destino)) {
+    pista.textContent = "Se abre en otra pestaña.";
+  } else {
+    var r = recursoDe(destino);
+    pista.textContent = r && r.imagen
+      ? "Se abre dentro del mapa, en una vista previa."
+      : "Se descarga al pulsarlo.";
+  }
 }
 
 // La lista de los iconos propios: lo que ocupan y como quitarlos. Se dice
@@ -2865,11 +2986,15 @@ fInfoTexto.addEventListener("input", guardaInfo);
 // se quede un enlace a medias en el archivo.
 function guardaBoton() {
   tocaIcono(function (ic) {
-    var texto = fBotonTexto.value.trim(), url = fBotonUrl.value.trim();
-    if (fBoton.checked && texto && url) ic.u = [texto, url];
+    var texto = fBotonTexto.value.trim();
+    var destino = fBotonDestino.value === "url" ? fBotonUrl.value.trim()
+                                                : fBotonDestino.value;
+    if (fBoton.checked && texto && destino) ic.u = [texto, destino];
     else delete ic.u;
   });
   actualizaPistaBoton(E.iconos[sel.i] || {});
+  pintaPistaDestino(pistaDestino, fBotonDestino.value === "url"
+                                  ? fBotonUrl.value.trim() : fBotonDestino.value);
 }
 fBoton.addEventListener("change", function () {
   camposBoton.hidden = !fBoton.checked;
@@ -2878,11 +3003,42 @@ fBoton.addEventListener("change", function () {
     // marcarla recuperaria un enlace que ya se habia borrado del icono.
     fBotonTexto.value = "";
     fBotonUrl.value = "";
+    fBotonDestino.selectedIndex = 0;
   }
   guardaBoton();
 });
 fBotonTexto.addEventListener("input", guardaBoton);
 fBotonUrl.addEventListener("input", guardaBoton);
+// Al cambiar de archivo hay que rehacer el campo de la direccion, que se
+// ensena o se esconde segun lo que se elija.
+fBotonDestino.addEventListener("change", function () {
+  fBotonUrl.hidden = fBotonDestino.value !== "url";
+  guardaBoton();
+});
+
+// --- El boton del mapa ------------------------------------------------------
+// Se elige igual que el de un icono, con la misma pieza. Lo unico que cambia
+// es donde se guarda: en `E.enlace` y no dentro de un icono, porque hay uno
+// solo y no es de nadie.
+function guardaEnlaceMapa() {
+  var texto = mTexto.value.trim();
+  var destino = mDestino.value === "url" ? mUrl.value.trim() : mDestino.value;
+  E.enlace = (mBoton.checked && texto && destino)
+    ? {t: texto, u: destino} : null;
+  sucio = true;
+  pintaPistaDestino(mPista, destino);
+}
+mBoton.addEventListener("change", function () {
+  camposMapa.hidden = !mBoton.checked;
+  if (!mBoton.checked) { mTexto.value = ""; mUrl.value = "" }
+  guardaEnlaceMapa();
+});
+mTexto.addEventListener("input", guardaEnlaceMapa);
+mUrl.addEventListener("input", guardaEnlaceMapa);
+mDestino.addEventListener("change", function () {
+  mUrl.hidden = mDestino.value !== "url";
+  guardaEnlaceMapa();
+});
 
 // El círculo de fondo. Se guarda solo cuando se quita, como `"c": 0`: así los
 // iconos que lo llevan —que son la mayoría— no llenan el archivo de repetir
@@ -2988,6 +3144,87 @@ function filasDeDatos(pares) {
   }).join("");
 }
 
+// --- los iconos propios, tal como se publican -------------------------
+// El croquis lleva los iconos dentro. Un vector se convierte a PNG antes de
+// publicarlo, pero SOLO cuando el PNG de verdad pesa menos.
+//
+// Cuesta creerlo y por eso esta medido: con los iconos que hay ahora mismo en
+// el mapa, en vector ocupan 75 KB y pasados a PNG de 256 px serian 271 KB. El
+// SVG de un dibujo plano pesa poquisimo, y el PNG de un dibujo con curvas
+// suaves y bordes rebajados pesa mucho, porque cada borde suavizado es una
+// orla de colores distintos que el formato PNG no sabe resumir.
+//
+// Asi que no se convierte a ciegas: se prueba y se queda lo que ocupe menos.
+// Hoy no cambiaria ninguno; el dia que se suba un dibujo complicado -el de las
+// carpas son 96 KB de SVG- se convierte solo, y el croquis no engorda.
+//
+// La conversion la hace el navegador y no el servidor por un motivo de peso:
+// un SVG lo entiende el motor que lo dibuja, y el servidor no lleva uno. Los
+// conversores sueltos que hay para Python no aplican el CSS de dentro del SVG
+// -estos dibujos lo llevan, y buena parte del color sale de ahi-, asi que
+// devolvian siluetas negras. Se probo.
+var LADO_PNG = 256;
+
+function svgAPng(uri) {
+  return new Promise(function (listo) {
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var c = document.createElement("canvas");
+        c.width = LADO_PNG; c.height = LADO_PNG;
+        var x = c.getContext("2d");
+        // Encajado en el cuadro y centrado, que es como lo dibuja el croquis:
+        // el `<image>` lleva los dos lados iguales y la proporcion por defecto.
+        var r = (img.naturalWidth / img.naturalHeight) || 1;
+        var w = LADO_PNG, h = LADO_PNG;
+        if (r > 1) h = Math.round(LADO_PNG / r);
+        else w = Math.round(LADO_PNG * r);
+        x.drawImage(img, (LADO_PNG - w) / 2, (LADO_PNG - h) / 2, w, h);
+        listo(c.toDataURL("image/png"));
+      } catch (e) {
+        // Un SVG que llame a algo de fuera deja el lienzo marcado y el
+        // navegador no deja leerlo. Se queda en vector, que es lo que habia.
+        listo(null);
+      }
+    };
+    img.onerror = function () { listo(null) };
+    img.src = uri;
+  });
+}
+
+async function propiosParaPublicar() {
+  var salida = {}, cambiados = [], ahorro = 0;
+  for (var nombre of Object.keys(E.propios)) {
+    var uri = E.propios[nombre];
+    if (uri.indexOf("data:image/svg+xml") !== 0) {
+      salida[nombre] = uri;
+      continue;
+    }
+    var png = await svgAPng(uri);
+    if (png && png.length < uri.length) {
+      salida[nombre] = png;
+      cambiados.push(nombre);
+      ahorro += uri.length - png.length;
+    } else {
+      salida[nombre] = uri;
+    }
+  }
+  E.publicados = {propios: salida, cambiados: cambiados, ahorro: ahorro};
+  return E.publicados;
+}
+
+// Que paso con los vectores, para poder decirlo al guardar.
+function resumenPng() {
+  var r = E.publicados;
+  if (!r) return "";
+  var total = Object.keys(E.propios).length;
+  if (!r.cambiados.length) {
+    return "Ningún vector pasó a PNG: con estos dibujos el PNG pesa más. ";
+  }
+  return r.cambiados.length + " de " + total + " vectores pasaron a PNG y "
+       + "ahorran " + Math.round(r.ahorro / 1024) + " KB. ";
+}
+
 // --- guardar y subir ------------------------------------------------------
 function guardar() {
   // Un editor viejo no sabe que le falta, asi que no puede guardar: escribiria
@@ -3005,9 +3242,12 @@ function guardar() {
     aviso("Hay zonas o iconos con problemas. Mira la lista de la derecha.", "mal");
     return Promise.resolve(false);
   }
-  return fetch("/api/guardar", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({zonas: E.zonas, iconos: E.iconos, propios: E.propios})
+  return propiosParaPublicar().then(function (r) {
+    return fetch("/api/guardar", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({zonas: E.zonas, iconos: E.iconos,
+                            propios: r.propios, enlace: E.enlace})
+    });
   }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
     .then(function (par) {
       var ok = par[0], d = par[1];
@@ -3015,7 +3255,8 @@ function guardar() {
       sucio = false;
       aviso("Guardado: " + d.guardado.zonas + " zonas, " + d.guardado.iconos
             + " iconos y " + d.guardado.propios + " iconos propios. "
-            + "Ya se puede subir.", "ok");
+            + resumenPng() + "Ya se puede subir.", "ok");
+      dibuja();
       pintaGit(d.git);
       return true;
     })
@@ -3095,6 +3336,17 @@ fetch("/api/estado").then(function (r) {
   return r.json();
 }).then(function (d) {
   E = Object.assign(E, d);
+  // Los dos desplegables de destino llevan lo mismo: la direccion de fuera y
+  // un archivo por cada cosa que haya en RecursosExtra. Se rellenan antes que
+  // nada, porque el repintado del panel ya los consulta.
+  fBotonDestino.innerHTML = opcionesDeDestino();
+  mDestino.innerHTML = opcionesDeDestino();
+  pintaDestino(mDestino, mUrl, mPista, (E.enlace && E.enlace.u) || "");
+  if (E.enlace && E.enlace.t) {
+    mBoton.checked = true;
+    mTexto.value = E.enlace.t;
+  }
+  camposMapa.hidden = !mBoton.checked;
   // El servidor dice si arranco antes del ultimo cambio de codigo. Si es asi,
   // se avisa arriba y se apaga el guardado: dejarlo pasar seria peor que
   // fallar, porque el archivo saldria bien formado y sin parte del cambio.

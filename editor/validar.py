@@ -245,6 +245,66 @@ def enlace_seguro(url) -> bool:
     limpia = url.strip().lower()
     return limpia.startswith(ESQUEMAS) and " " not in url.strip()
 
+
+# Los archivos que se pueden enlazar desde el croquis. Viven en RecursosExtra,
+# en la raiz del repositorio, al lado de plantilla/: el croquis esta dentro de
+# plantilla/ y los alcanza con `../RecursosExtra/`.
+#
+# No se meten dentro del propio croquis por un motivo que importa mas de lo que
+# parece: el croquis se descarga ENTERO con el QR, asi que un PDF de unos megas
+# en base64 dentro del HTML dejaria el mapa inservible en un movil. Como
+# archivos sueltos, el navegador solo se baja el que se pide, y solo si se pide.
+CARPETA_RECURSOS = "RecursosExtra"
+MAX_RECURSO = 80
+
+# Lo que no puede llevar un nombre de archivo. Se dejan fuera todos los signos
+# que significan algo en una direccion: la barra y la barra invertida, para
+# que no se pueda apuntar a otra carpeta; los dos puntos, la interrogacion y el
+# almohadilla, para que no se pueda colar un parametro o un fragmento.
+SIGNOS_RAROS = "/\\:?#[]*\"<>|"
+
+
+def es_recurso(valor) -> bool:
+    """Si un destino es un archivo de RecursosExtra.
+
+    Es la mitad interna de `es_destino`: un archivo del propio repositorio, en
+    vez de una direccion de fuera. Se comprueba la forma entera, no que
+    empiece por el prefijo: `RecursosExtra/../../etc` empieza bien y no vale.
+    """
+    if not isinstance(valor, str) or len(valor) > MAX_URL:
+        return False
+    partes = valor.split("/")
+    if len(partes) != 2 or partes[0] != CARPETA_RECURSOS:
+        return False
+    nombre = partes[1]
+    if not nombre or len(nombre) > MAX_RECURSO or nombre.startswith("."):
+        return False
+    if any(c in SIGNOS_RAROS or ord(c) < 32 for c in nombre):
+        return False
+    # Un archivo tiene extension, y la extension es lo que decide si se puede
+    # ver dentro del mapa o se descarga.
+    return "." in nombre[1:]
+
+
+def es_destino(valor) -> bool:
+    """Si un destino se puede poner en un `href` sin riesgo.
+
+    Son dos cosas muy distintas y por eso se distinguen: una direccion de
+    fuera, con su dominio y su esquema, o un archivo del propio RecursosExtra.
+    Cualquier otra cosa -un esquema raro, una ruta relativa suelta- se rechaza.
+    """
+    return enlace_seguro(valor) or es_recurso(valor)
+
+
+# Las extensiones que se ensenan en una vista previa al pulsarlas. Las demas se
+# descargan, porque no hay nada que mirar dentro.
+#
+# La lista esta en los dos sitios: el croquis decide que hacer al pulsar, y el
+# editor decide que decir al elegir el archivo. Es a proposito, porque ninguno
+# de los dos puede preguntarle al otro en el momento del toque; una prueba
+# comprueba que las dos listas dicen lo mismo.
+EXTENSIONES_IMAGEN = ("png", "jpg", "jpeg", "webp", "gif", "avif", "svg", "bmp")
+
 # Los tipos de imagen que se admiten como icono propio.
 #
 # El SVG va aparte de los demas porque no se trata igual: no se reduce ni se
@@ -644,13 +704,13 @@ def _revisar_icono(ic, sitio: str, conocidos: set, con_posicion: bool) -> list[s
             if len(url) > MAX_URL:
                 problemas.append(
                     f"{sitio}: la dirección pasa de {MAX_URL} caracteres")
-            elif not enlace_seguro(url):
+            elif not es_destino(url):
                 problemas.append(
-                    f"{sitio}: la dirección del botón tiene que empezar por "
-                    f"https:// o http://, y viene «{url[:40]}». Un enlace sin "
-                    f"esquema se toma por una ruta de esta misma página, y uno "
-                    f"con otro esquema (javascript:) es código disfrazado de "
-                    f"dirección")
+                    f"{sitio}: «{url[:40]}» no es un destino válido. Tiene que "
+                    f"empezar por https:// o http://, o ser un archivo de "
+                    f"{CARPETA_RECURSOS}. Un enlace sin esquema se toma por "
+                    f"una ruta de esta misma página, y uno con otro esquema "
+                    f"(javascript:) es código disfrazado de dirección")
             if not ic.get("i"):
                 problemas.append(
                     f"{sitio}: tiene un botón con enlace pero no tiene "
@@ -914,7 +974,66 @@ def revisar_propios(propios) -> list[str]:
     return problemas
 
 
-def revisar(zonas: list, iconos: list, propios=None) -> list[str]:
-    """Todos los problemas juntos: zonas, iconos y iconos propios."""
+# --- El boton del croquis ---------------------------------------------------
+# El boton que sale debajo de los accesos rapidos: el programa del evento, una
+# guia, un plano en PDF. Tiene su propio bloque en el archivo porque es otra
+# cosa que las zonas y los iconos: hay uno solo, sale siempre en el mismo sitio
+# y no se coloca en el mapa.
+#
+#   t   el texto que se lee en el boton
+#   u   a donde lleva: una direccion http(s) o un archivo de RecursosExtra
+#
+# Vacio o ausente es un croquis sin boton, y es perfectamente valido.
+CLAVES_ENLACE = {"t", "u"}
+
+
+def revisar_enlace(enlace, sitio: str = "el botón del mapa") -> list[str]:
+    """Los problemas del boton del croquis. Vacia es que todo bien."""
+    if enlace is None or enlace == {}:
+        return []
+    if not isinstance(enlace, dict):
+        return [f"{sitio}: tiene que ser un objeto como "
+                f'{{"t": "Programa del evento", "u": "https://…"}}']
+    problemas = []
+    raros = sorted(set(enlace) - CLAVES_ENLACE)
+    if raros:
+        return [f"{sitio}: no conozco {' ni '.join(raros)}. Las claves son "
+                f"t (el texto) y u (a dónde lleva)"]
+    texto = enlace.get("t")
+    if not isinstance(texto, str) or not texto.strip():
+        problemas.append(f"{sitio}: le falta el texto que se lee en el botón")
+    elif len(texto) > MAX_BOTON:
+        problemas.append(
+            f"{sitio}: el texto pasa de {MAX_BOTON} caracteres y no cabe en "
+            f"el botón")
+    destino = enlace.get("u")
+    if not es_destino(destino):
+        problemas.append(
+            f"{sitio}: «{str(destino)[:40]}» no es un destino válido. Tiene que "
+            f"empezar por https:// o http://, o ser un archivo de "
+            f"{CARPETA_RECURSOS}")
+    return problemas
+
+
+def limpiar_enlace(enlace) -> dict | None:
+    """El boton sin lo que sobra. None si no hay boton que poner.
+
+    Se llama al guardar desde el editor, que manda los campos del formulario
+    rellenos o no. Un boton al que le falte el texto o el destino no se guarda
+    a medias: se guarda entero o no se guarda, porque medio boton no se puede
+    pintar y dejaria un hueco sin explicacion en el croquis.
+    """
+    if not isinstance(enlace, dict):
+        return None
+    limpio = {}
+    for clave in ("t", "u"):
+        valor = enlace.get(clave)
+        if isinstance(valor, str) and valor.strip():
+            limpio[clave] = valor.strip()
+    return limpio if len(limpio) == 2 else None
+
+
+def revisar(zonas: list, iconos: list, propios=None, enlace=None) -> list[str]:
+    """Todos los problemas juntos: zonas, iconos, iconos propios y el boton."""
     return (revisar_zonas(zonas) + revisar_propios(propios)
-            + revisar_iconos(iconos, propios))
+            + revisar_iconos(iconos, propios) + revisar_enlace(enlace))

@@ -89,9 +89,14 @@ body{
    El pointer-events hay que devolverselo uno por uno: el grupo de arriba lo
    tiene en `none` y eso lo heredan los hijos, asi que sin esta linea el icono
    seguiria sin recibir el toque por mucho cursor:pointer que tenga. */
-#iconos .conInfo{pointer-events:auto;cursor:pointer}
-#iconos .conInfo .aro{stroke:var(--verde);stroke-opacity:.55}
-#iconos .conInfo:hover .aro,#iconos .conInfo:focus-visible .aro{
+/* El filo verde de los iconos con informacion solo sale con el mapa acercado:
+   es cuando de verdad se pueden pulsar. Un filo que promete un toque que no
+   hace nada es peor que no tenerlo. */
+#iconos .conInfo{cursor:pointer}
+#iconos.deCerca .conInfo{pointer-events:auto}
+#iconos.deCerca .conInfo .aro{stroke:var(--verde);stroke-opacity:.55}
+#iconos.deCerca .conInfo:hover .aro,
+#iconos.deCerca .conInfo:focus-visible .aro{
   stroke:var(--verde);stroke-opacity:1;stroke-width:2;fill:#fff}
 
 /* --- La superficie que recibe el toque -------------------------------------
@@ -434,6 +439,25 @@ body{
                transition:background .2s ease,border-color .2s ease}
 #cierraVentana:hover{background:var(--lima);border-color:#8fbf9a}
 #cierraVentana svg{width:15px;height:15px;display:block}
+
+/* La vista previa de un archivo de RecursosExtra. Va aparte de la ventana de
+   informacion y no dentro, porque son dos cosas distintas: la ventana cuenta
+   algo de un icono, y esto ensena un archivo entero. Ademas la ventana se
+   cierra al tocar el mapa -esta pensada para leer dos lineas y seguir- y un
+   plano que se esta mirando no deberia irse porque un dedo roce fuera. */
+#vista{position:fixed;inset:0;z-index:10;display:grid;place-items:center;
+       padding:18px;background:#0a4842b8;opacity:0;
+       transition:opacity .2s ease;pointer-events:none}
+#vista.on{opacity:1;pointer-events:auto}
+#vista[hidden]{display:none}
+#vista img{max-width:100%;max-height:100%;border-radius:14px;
+           background:#fff;box-shadow:0 24px 60px #0a484266}
+#cierraVista{position:absolute;top:14px;right:14px;width:42px;height:42px;
+             border:0;border-radius:99px;background:#fff;color:var(--tinta);
+             display:grid;place-content:center;cursor:pointer;
+             box-shadow:0 6px 20px #0a484240}
+#cierraVista:hover{background:var(--lima)}
+#cierraVista svg{width:17px;height:17px;display:block}
 #selloVentana{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 /* El sello mide siempre lo mismo, y el icono se coloca dentro con un margen
    calculado. El hueco NO lo da un `padding`: lo da el `viewBox`, que el script
@@ -527,6 +551,8 @@ body{
    pista, que el mapa no cambie al pulsar desconcierta. */
 #enlaces{display:flex;flex-wrap:wrap;gap:8px;padding-top:13px;
          border-top:1px solid var(--borde)}
+/* Sin boton no hay fila: un filo suelto al final del panel parece un error. */
+#enlaces:empty{display:none}
 .enlace{display:inline-flex;align-items:center;gap:9px;padding:12px 18px;
         border-radius:99px;background:var(--verde);color:#fff;
         text-decoration:none;font:700 12.5px/1 system-ui,sans-serif;
@@ -618,15 +644,26 @@ body{
   </div>
   <div id="chips"></div>
   <div id="enlaces">
-    <a class="enlace" href="https://owncloud.rec.uabc.mx/index.php/s/AWUxeuZCv9XdTPI"
-       target="_blank" rel="noopener">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M14 3.5h6.5V10"/><path d="M20.5 3.5 11 13"/>
-        <path d="M18 14.5v5A1.5 1.5 0 0 1 16.5 21h-12A1.5 1.5 0 0 1 3 19.5v-12A1.5 1.5 0 0 1 4.5 6h5"/>
-      </svg>Programa del evento</a>
+    <!-- El boton no esta escrito aqui: lo arma el script a partir del bloque
+         ENLACE, que es lo que escribe el editor. Escrito en el marcado
+         habria dos sitios diciendo el mismo texto y la misma direccion, y el
+         dia que se cambie uno el otro se queda mintiendo. -->
   </div>
 </footer>
+
+<!-- La vista previa de un archivo de RecursosExtra que sea una imagen. Un
+     documento no pasa por aqui: se descarga, que es lo que se puede hacer con
+     el. Se vacia el `src` al cerrar para que el navegador suelte la imagen y
+     no se quede en memoria un plano que ya no se mira. -->
+<div id="vista" hidden aria-modal="true" role="dialog">
+  <img id="fvista" alt="">
+  <button id="cierraVista" aria-label="Cerrar la vista previa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.6" stroke-linecap="round" aria-hidden="true">
+      <path d="M5.5 5.5 18.5 18.5"/><path d="M18.5 5.5 5.5 18.5"/>
+    </svg>
+  </button>
+</div>
 
 <!-- La ventana que sale al tocar un icono con informacion. Es una sola para
      todos los iconos: se cambia su contenido y se muestra, en vez de tener
@@ -727,6 +764,10 @@ var ZONAS = [
 
 // Vista general: el predio del campus con las dos calles que lo enmarcan.
 var VISTA = [110, 100, 1005, 640];
+
+/* === INICIO ENLACE === */
+var ENLACE = {"t": "Programa del evento", "u": "https://owncloud.rec.uabc.mx/index.php/s/AWUxeuZCv9XdTPI"};
+/* === FIN ENLACE === */
 
 // ===========================================================================
 // Iconos: los simbolos de punto del mapa (banos, primeros auxilios, comida).
@@ -1143,6 +1184,11 @@ function encuadra(x, y, w, h, aire) {
 function pinta(k) {
   A = k;
   for (var j = 0; j < K.length; j++) K[j].classList.toggle("act", j == k);
+  // El mapa avisa de si esta acercado, y los iconos con informacion se agarran
+  // a eso: con el mapa entero delante no reciben el toque, asi que un dedo
+  // encima de uno acerca la zona que tiene debajo, como en cualquier otro
+  // sitio del plano. Con una zona ampliada, el icono manda.
+  ICN.classList.toggle("deCerca", k >= 0);
 }
 
 function sel(k) {
@@ -1251,7 +1297,7 @@ var VENT = document.getElementById("ventana"),
 // esquema, como `owncloud.rec.uabc.mx`, el navegador la toma por una ruta
 // relativa a esta pagina y no lleva a ninguna parte.
 function enlaceSeguro(u) {
-  return /^https?:\/\/[^\s]+$/i.test(String(u || ""));
+  return esRecurso(u) || /^https?:\/\/[^\s]+$/i.test(String(u || ""));
 }
 
 // La flecha de salir fuera, la misma que la del boton del panel. Es una
@@ -1263,23 +1309,165 @@ var FLECHA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
            + '<path d="M18 14.5v5A1.5 1.5 0 0 1 16.5 21h-12A1.5 1.5 0 0 1 3 19.5'
            + 'v-12A1.5 1.5 0 0 1 4.5 6h5"/></svg>';
 
+// La flecha de descarga, para el boton que lleva a un documento. Es la misma
+// idea que la de salir fuera pero al reves: aqui el archivo se queda, no se
+// va a otra pagina, y de un vistazo hay que poder saber cual de las dos cosas
+// hace cada boton.
+var DESCARGA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+             + ' stroke-width="2.4" stroke-linecap="round"'
+             + ' stroke-linejoin="round" aria-hidden="true">'
+             + '<path d="M12 3.5v11"/><path d="M7.5 10 12 14.5 16.5 10"/>'
+             + '<path d="M4.5 19.5h15"/></svg>';
+
+// --- Los archivos de RecursosExtra ------------------------------------------
+// Un boton puede llevar a una direccion de fuera o a un archivo del propio
+// repositorio. Los archivos viven en RecursosExtra, en la raiz, un nivel por
+// encima de esta pagina: el croquis esta dentro de plantilla/.
+//
+// No van dentro del croquis porque el croquis se descarga ENTERO al abrir el
+// QR: un PDF de unos megas en base64 dentro del HTML dejaria el mapa
+// inservible en un movil, y se bajaria aunque nadie lo abriera.
+var CARPETA_RECURSOS = "RecursosExtra/";
+var BASE_RECURSOS = "../" + CARPETA_RECURSOS;
+
+// Las extensiones que se ensenan en una vista previa. Las demas se descargan,
+// porque no hay nada que mirar dentro. La misma lista esta en
+// editor/validar.py, y una prueba comprueba que las dos dicen lo mismo: el
+// croquis decide al pulsar y el editor al elegir, y ninguno de los dos puede
+// preguntarle al otro en ese momento.
+var IMAGENES = ["png", "jpg", "jpeg", "webp", "gif", "avif", "svg", "bmp"];
+
+function esRecurso(u) {
+  return typeof u === "string" && u.indexOf(CARPETA_RECURSOS) === 0;
+}
+
+function direccionDe(u) {
+  return esRecurso(u) ? BASE_RECURSOS + u.slice(CARPETA_RECURSOS.length) : u;
+}
+
+function nombreDeRecurso(u) {
+  return String(u).split("/").pop();
+}
+
+function esImagen(u) {
+  var limpio = String(u).split("?")[0].split("#")[0].toLowerCase();
+  var punto = limpio.lastIndexOf(".");
+  return punto > 0 && IMAGENES.indexOf(limpio.slice(punto + 1)) >= 0;
+}
+
+// Arma un boton: el texto, la direccion y que pasa al pulsarlo.
+//
+// El elemento es un <a> de verdad, con su `href`, y no un boton que llame a
+// window.open: asi funcionan el clic con la rueda, el de en medio y el menu de
+// «abrir en otra pestana», que es lo que espera cualquiera al ver un enlace.
+// Y con `href` puesto, si el JavaScript fallara el boton seguiria llevando a
+// donde tiene que llevar.
+function montaEnlace(a, texto, destino) {
+  a.textContent = "";
+  // La comprobacion va AQUI y no en quien llama: este es el unico sitio que
+  // pone la direccion en el enlace, asi que es el unico por el que se puede
+  // colar una mala, venga de donde venga.
+  if (!texto || !enlaceSeguro(destino)) {
+    a.hidden = true;
+    a.removeAttribute("href");
+    return;
+  }
+  var dentro = esRecurso(destino), archivo = dentro && !esImagen(destino);
+  a.hidden = false;
+  a.href = direccionDe(destino);
+  a.dataset.destino = destino;
+  // Un archivo del propio sitio se descarga con `download`, y eso solo
+  // funciona en el mismo dominio. Estos lo estan: los sirve el mismo GitHub
+  // Pages que sirve esta pagina. Fuera, `download` se ignora y el navegador
+  // abre el archivo, que es lo unico que puede hacer.
+  if (archivo) {
+    a.setAttribute("download", "");
+    a.removeAttribute("target");
+    a.removeAttribute("rel");
+  } else if (dentro) {
+    a.removeAttribute("download");
+    a.removeAttribute("target");
+    a.removeAttribute("rel");
+  } else {
+    a.removeAttribute("download");
+    a.setAttribute("target", "_blank");
+    // `noopener` porque el destino es ajeno: sin el, esa pagina puede
+    // manipular esta desde `window.opener`.
+    a.setAttribute("rel", "noopener noreferrer");
+  }
+  a.innerHTML = archivo ? DESCARGA : FLECHA;
+  a.appendChild(document.createTextNode(texto));
+}
+
+// Lo unico que el <a> no puede hacer solo es ensenar la vista previa, asi que
+// es lo unico que se intercepta. Todo lo demas lo hace el navegador.
+function alPulsarEnlace(e) {
+  var destino = e.currentTarget.dataset.destino;
+  if (esRecurso(destino) && esImagen(destino)) {
+    e.preventDefault();
+    abreVista(destino);
+  }
+}
+
+// --- La vista previa ---------------------------------------------------------
+var VISTA_F = document.getElementById("vista"),
+    FVISTA = document.getElementById("fvista");
+
+function abreVista(destino) {
+  FVISTA.src = direccionDe(destino);
+  FVISTA.alt = nombreDeRecurso(destino);
+  VISTA_F.hidden = false;
+  // Un fotograma con `hidden` ya quitado antes de la clase, o el navegador no
+  // ve el cambio y la vista aparece de golpe sin la transicion.
+  requestAnimationFrame(function () { VISTA_F.classList.add("on") });
+  document.getElementById("cierraVista").focus({preventScroll: true});
+}
+
+function cierraVista() {
+  if (VISTA_F.hidden) return;
+  VISTA_F.classList.remove("on");
+  setTimeout(function () {
+    if (VISTA_F.classList.contains("on")) return;
+    VISTA_F.hidden = true;
+    // Se suelta la imagen: un plano grande se quedaria en memoria sin que
+    // nadie lo mire, y esto se abre en un movil.
+    FVISTA.removeAttribute("src");
+  }, 220);
+}
+
+document.getElementById("cierraVista").addEventListener("click", cierraVista);
+VISTA_F.addEventListener("pointerdown", function (e) {
+  if (e.target === VISTA_F) cierraVista();
+});
+
+// El boton del mapa, el que sale debajo de los accesos rapidos. Se arma aqui
+// entero, texto y direccion, desde el bloque ENLACE: el marcado solo tiene el
+// hueco donde va. Un croquis sin boton -ENLACE en null- se queda con el hueco
+// vacio y el filo no se pinta (lo esconde `#enlaces:empty`).
+var ENLACES = document.getElementById("enlaces");
+if (ENLACE && ENLACE.t && ENLACE.u) {
+  var ENLACE_MAPA = document.createElement("a");
+  ENLACE_MAPA.className = "enlace";
+  ENLACE_MAPA.addEventListener("click", alPulsarEnlace);
+  montaEnlace(ENLACE_MAPA, ENLACE.t, ENLACE.u);
+  ENLACES.appendChild(ENLACE_MAPA);
+}
+
 // El boton que sale dentro de la ventana, si el icono lleva uno. Se vacia
 // siempre antes: la ventana es una sola para todos los iconos, asi que si no
 // se limpiara, el enlace del icono de antes seguiria ahi al abrir otro.
 function pintaBoton(ic) {
   BOTON.textContent = "";
   var u = ic.u;
-  if (!u || !enlaceSeguro(u[1])) return;
+  if (!u) return;
   var a = document.createElement("a");
   a.className = "enlace";
-  a.href = u[1];
-  // Fuera de la pagina y en pestana nueva, con `noopener` porque el destino es
-  // ajeno: sin el, esa pagina puede manipular esta desde `window.opener`.
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  a.innerHTML = FLECHA;
-  a.appendChild(document.createTextNode(u[0]));
-  BOTON.appendChild(a);
+  a.addEventListener("click", alPulsarEnlace);
+  // El texto y la direccion salen del archivo. La direccion la comprueba
+  // `montaEnlace` antes de ponerla en el `href`: lo que no pase la prueba no
+  // llega a ser un enlace.
+  montaEnlace(a, u[0], u[1]);
+  if (!a.hidden) BOTON.appendChild(a);
 }
 
 // Cuanto mide el sello de la ventana y cuantos pixeles se dejan libres a cada
@@ -1377,14 +1565,19 @@ addEventListener("keydown", function (e) {
   if (e.key === "Escape") cierraVentana();
 });
 
-// Un icono con informacion se toca. El toque no puede llegar al <svg>, que
-// es el que hace el zoom: si llegara, ademas de abrir la ventana se
-// desharia el zoom por detras. Por eso se corta en el pointerdown, que es
-// cuando el <svg> escucha.
+// Un icono con informacion se toca, pero SOLO con una zona ampliada. Con el
+// mapa entero no se puede: en esa vista los iconos son marcas de referencia y
+// una ventana encima taparia justo lo que se estaba mirando.
+//
+// El toque no puede llegar al <svg>, que es el que hace el zoom: si llegara,
+// ademas de abrir la ventana se desharia el zoom por detras. Por eso se corta
+// en el pointerdown, que es cuando el <svg> escucha. Sin zoom no se corta
+// nada, y el toque acerca la zona de debajo igual que en el resto del mapa.
 ICN.addEventListener("pointerdown", function (e) {
-  if (e.target.closest(".conInfo")) e.stopPropagation();
+  if (A >= 0 && e.target.closest(".conInfo")) e.stopPropagation();
 });
 ICN.addEventListener("click", function (e) {
+  if (A < 0) return;
   var g = e.target.closest("[data-info]");
   if (g) abreVentana(+g.dataset.info);
 });

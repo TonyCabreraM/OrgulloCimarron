@@ -76,6 +76,8 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     ANIMACIONES_BORDE,
     ANIMACIONES_SIN_INTENSIDAD,
     ANIMACIONES_ZONA,
+    CARPETA_RECURSOS,
+    EXTENSIONES_IMAGEN,
     INTENSIDAD,
     MAX_BOTON,
     MAX_ICONO,
@@ -96,13 +98,20 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     NOMBRE_PROPIO,
     SENTIDOS_CAMINA,
     SIMBOLOS,
+    es_recurso,
     limpiar_adornos,
     limpiar_ajustes,
+    limpiar_enlace,
     revisar,
     revisar_ajustes,
     revisar_modelos,
 )
 import vector  # noqa: E402  (los iconos en SVG)
+
+# Los archivos que se pueden enlazar desde un boton del croquis: el programa
+# del evento, una guia, un plano. Viven en la raiz del repositorio y se suben
+# con git como cualquier otra cosa; aqui solo se leen para poder ofrecerlos.
+RECURSOS = RAIZ / CARPETA_RECURSOS
 
 # ---------------------------------------------------------------------------
 # La huella del codigo
@@ -212,13 +221,48 @@ def leer_croquis() -> dict:
     _, _, cuerpo_propios = _tramos(texto, "PROPIOS")
     vista = re.search(r"var VISTA = \[([-\d,\s]+)\]", texto)
     mapa = re.search(r'<image[^>]+href="([^"]+)"', texto)
+    # El boton del croquis. Se busca con una expresion y no con los marcadores
+    # a proposito: asi tambien se lee en un croquis guardado antes de que el
+    # bloque existiera, y en ese caso sale sin boton en vez de dar un error.
+    enc = re.search(r"var ENLACE = (null|\{[^\n]*\});", texto)
+    enlace = None
+    if enc and enc.group(1) != "null":
+        enlace = _json(enc.group(1), "ENLACE")
     return {
         "zonas": _valor(cuerpo_zonas, "ZONAS"),
         "iconos": _valor(cuerpo_iconos, "ICONOS"),
         "propios": _objeto(cuerpo_propios, "PROPIOS"),
+        "enlace": enlace,
         "vista": [int(v) for v in vista.group(1).split(",")] if vista else [0, 0, ANCHO, ALTO],
         "mapa": mapa.group(1) if mapa else "rectoria.webp",
     }
+
+
+def leer_recursos() -> list:
+    """Los archivos que hay en RecursosExtra, para poder elegirlos.
+
+    De cada uno interesan dos cosas: el nombre, que es lo que se guarda en el
+    croquis, y si es una imagen, porque de eso depende que al pulsarlo se abra
+    una vista previa o se descargue. Se decide aqui y no en el croquis para que
+    las dos partes no puedan opinar distinto.
+
+    Un archivo que no pase `es_recurso` se salta: el editor no puede ofrecer
+    algo que luego el guardado rechazaria.
+    """
+    if not RECURSOS.is_dir():
+        return []
+    salida = []
+    for ruta in sorted(RECURSOS.iterdir(), key=lambda r: r.name.lower()):
+        if not ruta.is_file() or ruta.name.startswith("."):
+            continue
+        if not es_recurso(f"{CARPETA_RECURSOS}/{ruta.name}"):
+            continue
+        salida.append({
+            "n": ruta.name,
+            "kb": max(1, round(ruta.stat().st_size / 1024)),
+            "imagen": ruta.suffix.lower().lstrip(".") in EXTENSIONES_IMAGEN,
+        })
+    return salida
 
 
 def formas_simbolos() -> dict:
@@ -551,6 +595,36 @@ def _archivo_de(nombre: str) -> Path | None:
     return None
 
 
+def propios_para_editar(propios: dict) -> dict:
+    """Los iconos propios como se editan, no como se publican.
+
+    El croquis lleva los iconos en la forma que pesa menos: un SVG se convierte
+    a PNG en el navegador cuando el PNG sale mas corto, que es lo que pasa con
+    los dibujos complicados. La biblioteca, en cambio, guarda el archivo tal
+    como se subio.
+
+    Al abrir el editor se prefiere SIEMPRE el archivo de la biblioteca. Si no,
+    un icono subido en SVG volveria al editor ya convertido a PNG, se perderia
+    el original y no habria forma de volver atras: el croquis publicado pasaria
+    a ser la fuente de la que se edita, y eso es justo al reves.
+
+    Un icono que no este en la biblioteca se deja como venga: puede ser uno
+    viejo, de antes de que la biblioteca existiera.
+    """
+    salida = dict(propios)
+    for nombre in list(salida):
+        ruta = _archivo_de(nombre)
+        if ruta is None:
+            continue
+        crudo = ruta.read_bytes()
+        if ruta.suffix.lower() == ".svg":
+            salida[nombre] = vector.a_data_url(crudo.decode("utf-8"))
+        else:
+            salida[nombre] = ("data:image/png;base64,"
+                              + base64.b64encode(crudo).decode("ascii"))
+    return salida
+
+
 def _ajustes_de(nombre: str) -> dict:
     """Los ajustes guardados de un icono de la biblioteca. Vacio si no hay.
 
@@ -738,7 +812,23 @@ def exige_codigo_al_dia() -> None:
             "No se ha perdido nada: el croquis sigue como estaba.")
 
 
-def guardar_croquis(zonas: list, iconos: list, propios: dict) -> dict:
+def _texto_enlace(enlace: dict) -> str:
+    """El bloque del boton del croquis.
+
+    Va en su propio trozo del archivo, con marcadores, porque es un dato
+    suelto: no es una zona ni un icono, hay uno solo y no se puede deducir de
+    los demas. Sin boton se escribe `null`, que es lo que el croquis espera
+    para no pintar nada.
+    """
+    if not enlace:
+        return "var ENLACE = null;"
+    trozos = [f'"{k}": {json.dumps(enlace[k], ensure_ascii=False)}'
+              for k in ("t", "u") if enlace.get(k)]
+    return "var ENLACE = {" + ", ".join(trozos) + "};"
+
+
+def guardar_croquis(zonas: list, iconos: list, propios: dict,
+                    enlace=None) -> dict:
     """Valida y escribe las zonas, los iconos y los iconos propios.
 
     Deja una copia de seguridad antes de tocar nada, y si algo no cuadra no
@@ -757,9 +847,13 @@ def guardar_croquis(zonas: list, iconos: list, propios: dict) -> dict:
     """
     exige_codigo_al_dia()
     zonas = _limpia_zonas(zonas)
-    problemas = revisar(zonas, iconos, propios)
+    # El boton se valida ANTES de limpiarlo: si se limpiara primero, un boton a
+    # medias se quedaria en nada y se guardaria como si nunca hubiera existido,
+    # que es justo lo contrario de lo que hay que hacer con algo mal puesto.
+    problemas = revisar(zonas, iconos, propios, enlace)
     if problemas:
         raise ErrorEditor("\n".join(problemas))
+    enlace = limpiar_enlace(enlace)
 
     texto = CROQUIS.read_text(encoding="utf-8")
 
@@ -770,7 +864,8 @@ def guardar_croquis(zonas: list, iconos: list, propios: dict) -> dict:
 
     bloques = (("ZONAS", _texto_zonas(zonas)),
                ("ICONOS", _texto_iconos(iconos)),
-               ("PROPIOS", _texto_propios(propios)))
+               ("PROPIOS", _texto_propios(propios)),
+               ("ENLACE", _texto_enlace(enlace)))
     for nombre, cuerpo in bloques:
         a, b, _ = _tramos(texto, nombre)
         ini, fin = _marcadores(nombre)
@@ -944,6 +1039,10 @@ class Manejador(BaseHTTPRequestHandler):
                 self._archivo(MAPA, "image/webp")
             elif ruta == "/api/estado":
                 datos = leer_croquis()
+                # Los iconos propios se mandan como se editan y no como se
+                # publican: en el croquis van convertidos a PNG cuando eso pesa
+                # menos, y la biblioteca guarda el archivo original.
+                datos["propios"] = propios_para_editar(datos["propios"])
                 formas = formas_simbolos()
                 datos["simbolos"] = SIMBOLOS
                 datos["formas"] = formas
@@ -968,6 +1067,11 @@ class Manejador(BaseHTTPRequestHandler):
                 # Los sentidos de `camina`, por el mismo motivo que las listas
                 # de animaciones: los manda el servidor, que es quien valida.
                 datos["sentidosCamina"] = SENTIDOS_CAMINA
+                # Los archivos que se pueden enlazar y si son imagenes. La
+                # carpeta vive en el repositorio, asi que la lista cambia sola
+                # al meter o sacar archivos: no hay que apuntar nada.
+                datos["recursos"] = leer_recursos()
+                datos["carpetaRecursos"] = CARPETA_RECURSOS
                 # Si este proceso arranco antes del ultimo cambio de codigo, la
                 # pagina lo dice y apaga el boton de guardar. Es la unica señal
                 # que puede dar: desde dentro, un editor viejo y uno al dia
@@ -1021,7 +1125,8 @@ class Manejador(BaseHTTPRequestHandler):
                 if not isinstance(propios, dict):
                     raise ErrorEditor("Los iconos propios tienen que ser un diccionario.")
                 self._json({"ok": True,
-                            "guardado": guardar_croquis(zonas, iconos, propios),
+                            "guardado": guardar_croquis(zonas, iconos, propios,
+                                                        datos.get("enlace")),
                             "git": estado_git()})
             elif ruta == "/api/icono":
                 nombre, imagen, contenido, extension, quitado = preparar_icono(
