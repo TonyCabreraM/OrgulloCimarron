@@ -882,11 +882,49 @@ function adornosDe(z) {
   return (a && typeof a === "object") ? a : {};
 }
 
-// Los poligonos existen para recibir el toque. De fabrica son transparentes,
-// para no dibujar nada encima del arte del mapa; si la zona lleva adornos, se
-// pintan con ellos en el MISMO poligono.
+// El contorno de una zona, en la forma que entiende un <path>. Con `radio` en 0
+// salen las esquinas en angulo recto de siempre.
 //
-// No hace falta un segundo poligono encima para pintar: con el relleno
+// Se dibuja SIEMPRE un <path>, aunque no haya redondeo, para que haya un solo
+// camino de codigo: lo que se prueba con las esquinas rectas es exactamente lo
+// mismo que se usa con las redondeadas. Un <polygon> y un <path> se comportan
+// igual para el relleno, la linea y el toque, asi que no se pierde nada.
+//
+// El redondeo de cada esquina se recorta a la mitad del lado mas corto que la
+// toca. Sin ese recorte, un radio mayor que el lado haria que las curvas de dos
+// esquinas se cruzaran y el contorno se retorciera en un lazo.
+function contorno(puntos, radio) {
+  var n = puntos.length;
+  if (n < 3) return "";
+  var d = "", dos = function (v) { return Math.round(v * 100) / 100 };
+  for (var i = 0; i < n; i++) {
+    var ant = puntos[(i - 1 + n) % n], aca = puntos[i], sig = puntos[(i + 1) % n];
+    var lAnt = Math.hypot(aca[0] - ant[0], aca[1] - ant[1]);
+    var lSig = Math.hypot(sig[0] - aca[0], sig[1] - aca[1]);
+    var r = Math.min(radio || 0, lAnt / 2, lSig / 2);
+    if (r > 0.05) {
+      // Los dos puntos donde la curva entra y sale, medidos sobre los lados.
+      var entra = [aca[0] + (ant[0] - aca[0]) * r / lAnt,
+                   aca[1] + (ant[1] - aca[1]) * r / lAnt];
+      var sale = [aca[0] + (sig[0] - aca[0]) * r / lSig,
+                  aca[1] + (sig[1] - aca[1]) * r / lSig];
+      // Una curva que pasa por la esquina de verdad, con la esquina como punto
+      // de control: asi el contorno no se separa del poligono que se edito.
+      d += (i ? "L" : "M") + dos(entra[0]) + " " + dos(entra[1])
+         + "Q" + dos(aca[0]) + " " + dos(aca[1]) + " "
+         + dos(sale[0]) + " " + dos(sale[1]);
+    } else {
+      d += (i ? "L" : "M") + dos(aca[0]) + " " + dos(aca[1]);
+    }
+  }
+  return d + "Z";
+}
+
+// Las zonas existen para recibir el toque. De fabrica son transparentes, para
+// no dibujar nada encima del arte del mapa; si la zona lleva adornos, se pintan
+// con ellos en el MISMO contorno.
+//
+// No hace falta un segundo contorno encima para pintar: con el relleno
 // transparente el navegador ya lo da por pintado y recibe la pulsacion, que es
 // como funcionaba antes. Duplicarlo seria tener dos listas de puntos que se
 // pueden desincronizar.
@@ -899,17 +937,16 @@ ZON.innerHTML = ZONAS.map(function (z, k) {
   if (a.p) clases.push("punteada");
   // `pausa` marca lo que de verdad anima, para poder pararlo cuando no se ve.
   if (a.a || a.b) clases.push("pausa");
-  // La intensidad, en el propio poligono y en la misma variable que los
+  // La intensidad, en el propio contorno y en la misma variable que los
   // iconos. Se omite cuando vale 1, que es el movimiento de fabrica.
   if (a.m && a.m !== 1) pintas += ' style="--m:' + a.m + '"';
-  // Sin color de relleno el poligono queda transparente, como siempre. El
+  // Sin color de relleno el contorno queda transparente, como siempre. El
   // color de la linea solo se pone si lo hay: sin `stroke`, el navegador no
   // dibuja ninguna linea.
   pintas += ' fill="' + (a.f || "transparent") + '"';
   if (a.l) pintas += ' stroke="' + a.l + '"';
-  return '<polygon class="' + clases.join(" ") + '" data-i="' + k + '" points="'
-       + z[2].map(function (p) { return p.join(",") }).join(" ")
-       + '"' + pintas + "/>";
+  return '<path class="' + clases.join(" ") + '" data-i="' + k + '" d="'
+       + contorno(z[2], a.rd) + '"' + pintas + "/>";
 }).join("");
 CH.innerHTML = ZONAS.map(function (z, k) {
   return '<button class="chip" data-i="' + k + '">' + z[1] + "</button>";

@@ -447,6 +447,7 @@ Van en un **objeto aparte, en quinto lugar** dentro de la zona:
 | `f` | El color de relleno, en `#rrggbb` | No, sin relleno |
 | `l` | El color de la línea, en `#rrggbb` | No, sin línea |
 | `p` | `1` para la línea punteada | No, línea seguida |
+| `rd` | Cuánto se redondean las esquinas, en puntos del mapa (1 a 60) | No, esquinas rectas |
 | `a` | La animación de la zona: mueve el fondo y la línea | No, quieta |
 | `b` | La animación del borde: mueve solo la línea | No, quieta |
 | `m` | La intensidad, de 0.2 a 2.5 | No, 1 |
@@ -462,10 +463,35 @@ campos de siempre y se dibuja igual que antes de que existieran: el servidor
 quita el quinto campo cuando queda vacío. Si no, cambiar los adornos de una
 zona reescribiría las diez del mapa y el diff de git no se podría leer.
 
-**El toque y lo que se ve van en el mismo polígono.** No hay uno encima del
+**El toque y lo que se ve van en el mismo elemento.** No hay uno encima del
 otro: con el relleno transparente el navegador ya lo da por pintado y recibe la
-pulsación, que es como funcionaba antes. Un segundo polígono solo para pintar
+pulsación, que es como funcionaba antes. Un segundo elemento solo para pintar
 sería duplicar los puntos y tener dos cosas que se pueden desincronizar.
+
+#### Las esquinas redondeadas
+
+Se dibuja **siempre un `<path>`**, aunque no haya redondeo, para que haya un
+solo camino de código: lo que se prueba con las esquinas rectas es exactamente
+lo mismo que se usa con las redondeadas. Con `rd` en 0 el `d` que sale es
+**idéntico** al polígono de siempre, y hay una prueba que lo comprueba letra a
+letra — si eso fallara, todas las zonas del mapa cambiarían de forma sin que
+nadie lo hubiera pedido.
+
+Cada esquina se sustituye por una curva que pasa por el vértice de verdad, con
+el vértice como punto de control:
+
+```
+L (punto de entrada)  Q (la esquina) (punto de salida)
+```
+
+Así el contorno **nunca se separa del polígono** que se editó: la curva queda
+por dentro del ángulo, y la caja que se encuadra al hacer zoom sigue valiendo.
+
+**El radio se recorta a la mitad del lado más corto de cada esquina.** Sin ese
+recorte, un radio mayor que el lado haría que las curvas de dos esquinas
+vecinas se cruzaran y el contorno se retorciera en un lazo. Medido: en un
+rectángulo de 100 × 10 con un redondeo de 500, sale una cápsula limpia con
+radio 5, sin un solo `NaN`.
 
 #### Las animaciones de las zonas
 
@@ -503,6 +529,18 @@ quieta. Y la intensidad **alarga las rayas**, que es lo que en una carretera
 significa «más». La prueba comprueba que los números del `keyframes` y los del
 `dasharray` sigan cuadrando: si alguien cambia uno sin el otro, el borde da un
 salto en cada vuelta y no hay ningún error que lo diga.
+
+**El borde necesita línea, y el editor la enciende sola.** Al principio, elegir
+una animación de borde con la línea apagada estaba prohibido: el desplegable
+salía deshabilitado hasta poner un color. Eso hacía que la animación de la
+carretera **pareciera no existir** — se buscaba en la lista y no se podía
+seleccionar, sin ninguna explicación. Ahora se puede elegir siempre, y al
+hacerlo se enciende la línea con el color que hubiera en el selector.
+
+Y al revés: **quitar la línea quita también el punteado y la animación del
+borde.** Antes solo se quitaba la línea, y como la animación del borde la
+volvía a encender sola, la casilla parecía rota: la desmarcabas y seguía
+puesta.
 
 #### El color va por variables
 

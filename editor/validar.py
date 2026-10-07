@@ -133,18 +133,28 @@ ANIMACIONES_BORDE = {
 
 # Las claves de los adornos, que van en un objeto aparte dentro de la zona:
 #
-#   f  el color de relleno, "#rrggbb", o nada si no lleva
-#   l  el color de la linea, "#rrggbb", o nada si no lleva
-#   p  la linea punteada (solo tiene sentido con linea)
-#   a  la animacion de la zona entera
-#   b  la animacion del borde
-#   m  la intensidad, la misma cuenta que en los iconos
+#   f   el color de relleno, "#rrggbb", o nada si no lleva
+#   l   el color de la linea, "#rrggbb", o nada si no lleva
+#   p   la linea punteada (solo tiene sentido con linea)
+#   rd  cuanto se redondean las esquinas, en puntos del mapa
+#   a   la animacion de la zona entera
+#   b   la animacion del borde
+#   m   la intensidad, la misma cuenta que en los iconos
 #
 # Van con nombres y no sueltos al final de la tupla de la zona a proposito: la
 # tupla ya tiene cuatro campos de siempre —nombre, corto, poligono y
-# descripcion— y meterle seis mas seria volver a contar comas con la vista,
+# descripcion— y meterle siete mas seria volver a contar comas con la vista,
 # que es justo el problema que se quito de los iconos.
-CLAVES_ZONA = {"f", "l", "p", "a", "b", "m"}
+CLAVES_ZONA = {"f", "l", "p", "rd", "a", "b", "m"}
+
+# El redondeo de las esquinas, en puntos del mapa.
+#
+# El maximo es 60 porque las zonas del mapa miden unos 300 pt de lado: con mas
+# de 60 una zona pequena se quedaria como un circulo y dejaria de leerse como
+# la banda que es. El minimo util es 1; por debajo, el redondeo no se ve y lo
+# que se guarda es un ajuste que no hace nada.
+MAX_REDONDEO = 60
+MIN_REDONDEO = 1
 
 # El patron de los guiones de la linea, en puntos.
 #
@@ -332,6 +342,16 @@ def revisar_adornos(adornos, sitio: str) -> list[str]:
                 f"{sitio}: la linea esta puesta como punteada pero no tiene "
                 f"color, asi que no hay linea que puntear")
 
+    if "rd" in adornos:
+        rd = adornos["rd"]
+        if not isinstance(rd, (int, float)) or isinstance(rd, bool):
+            problemas.append(
+                f"{sitio}: el redondeo de las esquinas tiene que ser un numero")
+        elif not MIN_REDONDEO <= rd <= MAX_REDONDEO:
+            problemas.append(
+                f"{sitio}: el redondeo {rd:.0f} se sale de {MIN_REDONDEO} a "
+                f"{MAX_REDONDEO} puntos")
+
     for clave, lista, cual in (("a", ANIMACIONES_ZONA, "la zona"),
                                ("b", ANIMACIONES_BORDE, "el borde")):
         if clave not in adornos:
@@ -385,6 +405,9 @@ def limpiar_adornos(adornos) -> dict:
     # ausencia significan lo mismo, al reves que en el circulo de los iconos.
     if adornos.get("p"):
         limpio["p"] = 1
+    # El redondeo, igual: 0 es «esquinas en angulo recto», o sea lo de siempre.
+    if adornos.get("rd"):
+        limpio["rd"] = adornos["rd"]
     if adornos.get("m") and adornos["m"] != INTENSIDAD:
         limpio["m"] = adornos["m"]
     return limpio

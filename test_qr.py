@@ -1367,9 +1367,10 @@ def test_los_adornos_de_las_zonas() -> bool:
     else:
         render = texto[ini:texto.find('}).join("");', ini)]
         for pieza, nota in (("a.f", "el relleno"), ("a.l", "la linea"),
-                            ("a.p", "el punteado"), ("a.a", "la animacion de la zona"),
+                            ("a.p", "el punteado"), ("a.rd", "el redondeo"),
+                            ("a.a", "la animacion de la zona"),
                             ("a.b", "la animacion del borde"),
-                            ("points=", "los puntos, que son lo que recibe el toque")):
+                            ("contorno(", "el contorno, que es lo que recibe el toque")):
             if pieza not in render:
                 problemas.append(f"el render de las zonas no usa {nota}")
         # Sin color, el relleno tiene que seguir siendo transparente: si
@@ -1378,13 +1379,58 @@ def test_los_adornos_de_las_zonas() -> bool:
             problemas.append(
                 "el render de las zonas no deja el relleno transparente cuando "
                 "no hay color: las zonas taparian el mapa")
-        # Y que no se dupliquen los puntos en dos poligonos: el toque y lo que
-        # se ve van en el mismo.
-        if render.count("<polygon") > 1:
+        # Y que no se dupliquen los puntos en dos formas: el toque y lo que se
+        # ve van en el mismo elemento.
+        if render.count("<path") > 1 or "<polygon" in render:
             problemas.append(
-                "el render de las zonas hace mas de un poligono por zona: el "
-                "toque y el color tienen que ir en el mismo, o los puntos se "
+                "el render de las zonas hace mas de una forma por zona: el "
+                "toque y el color tienen que ir en la misma, o los puntos se "
                 "pueden desincronizar")
+
+    # --- 5 bis. El contorno redondeado --------------------------------------
+    # Se dibuja siempre un <path>, aunque no haya redondeo: con `rd` en 0 tiene
+    # que dar exactamente el poligono de siempre, con las esquinas en angulo
+    # recto. Si eso fallara, TODAS las zonas del mapa cambarian de forma sin
+    # que nadie lo hubiera pedido.
+    ini = texto.find("function contorno(")
+    if ini < 0:
+        problemas.append("no existe `contorno` en el croquis: las esquinas no "
+                         "se podrian redondear")
+    else:
+        cuerpo = texto[ini:texto.find("\n}", ini)]
+        # El recorte por el lado es lo que evita que las curvas de dos esquinas
+        # se crucen y el contorno se retuerza.
+        if "lAnt / 2" not in cuerpo or "lSig / 2" not in cuerpo:
+            problemas.append(
+                "`contorno` no recorta el redondeo a la mitad del lado: con un "
+                "radio mayor que el lado, las curvas se cruzarian y el contorno "
+                "se retorceria en un lazo")
+        if "Q" not in cuerpo:
+            problemas.append("`contorno` no dibuja ninguna curva")
+        if '"Z"' not in cuerpo and "'Z'" not in cuerpo:
+            problemas.append("`contorno` no cierra el contorno")
+    # Y que el editor use el MISMO contorno, o lo que se ve al editar no seria
+    # lo que sale despues.
+    if "function contorno(" not in edit:
+        problemas.append("el editor no tiene su `contorno`: la vista previa no "
+                         "podria ensenar el redondeo")
+
+    # Y el redondeo se valida y se escribe.
+    if "rd" not in v.CLAVES_ZONA:
+        problemas.append("`rd` no esta en CLAVES_ZONA")
+    for rd in (0, 61, -1, "mucho"):
+        if not v.revisar_zonas([base + [{"rd": rd}]]):
+            problemas.append(f"acepto un redondeo de {rd!r}")
+    for rd in (1, 30, v.MAX_REDONDEO):
+        if v.revisar_zonas([base + [{"rd": rd}]]):
+            problemas.append(f"rechazo un redondeo de {rd}")
+    # El 0 no se escribe: es «sin redondear», o sea lo de siempre.
+    if "rd" in v.limpiar_adornos({"rd": 0, "l": "#00723f"}):
+        problemas.append("se guarda un redondeo de 0, que es no redondear nada")
+    if "rd" not in v.limpiar_adornos({"rd": 20, "l": "#00723f"}):
+        problemas.append("no se guarda el redondeo")
+    if '"rd": 20' not in editor._texto_zonas([base[:4] + [{"rd": 20}]]):
+        problemas.append("el redondeo no se escribe en el archivo")
 
     # --- 6. Que la prueba no pase en balde ----------------------------------
     if not v.CLAVES_ZONA:

@@ -302,13 +302,13 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 
 /* --- SVG del mapa --- */
 .hoja{fill:#f3f9ee}
-#gZonas polygon{
+#gZonas .z{
   fill:#00723f1f;stroke:var(--verde);stroke-width:1.5;cursor:move;
   vector-effect:non-scaling-stroke;
 }
-#gZonas polygon:hover{fill:#00723f33}
-#gZonas polygon.sel{fill:#00723f33;stroke-width:2.5}
-#gZonas polygon.mal{fill:#b3261e26;stroke:var(--alerta);stroke-width:2.5}
+#gZonas .z:hover{fill:#00723f33}
+#gZonas .z.sel{fill:#00723f33;stroke-width:2.5}
+#gZonas .z.mal{fill:#b3261e26;stroke:var(--alerta);stroke-width:2.5}
 
 /* --- Los adornos de las zonas ---------------------------------------------
    El mismo aspecto que tendran en el mapa publicado, para poder verlo mientras
@@ -318,19 +318,19 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
    `.sel` y `.mal`: asi el color de la zona es el que se eligio, pero el filo
    de la zona elegida y el de la que tiene un problema siguen mandando por
    encima. Al reves, el resaltado no se veria. */
-#gZonas polygon.conRelleno{fill:var(--zf)}
-#gZonas polygon.conLinea{stroke:var(--zl);stroke-width:2.5}
-#gZonas polygon.punteada{stroke-dasharray:3 4}
+#gZonas .z.conRelleno{fill:var(--zf)}
+#gZonas .z.conLinea{stroke:var(--zl);stroke-width:2.5}
+#gZonas .z.punteada{stroke-dasharray:3 4}
 /* `camina` va despues de `.punteada` a proposito: las dos tienen la misma
    fuerza, y la carretera necesita rayas mas largas que un punteado quieto. */
-#gZonas polygon.zb-camina{
+#gZonas .z.zb-camina{
   stroke-dasharray:calc(9 * var(--m, 1)) calc(7 * var(--m, 1));
   animation:bordeCamina 1.6s linear infinite}
-#gZonas polygon.za-late{animation:zonaLate 3s ease-in-out infinite}
-#gZonas polygon.za-brilla{animation:zonaBrilla 2.8s ease-in-out infinite}
-#gZonas polygon.za-destello{animation:zonaDestello 4s ease-out infinite}
-#gZonas polygon.zb-late{animation:bordeLate 3s ease-in-out infinite}
-#gZonas polygon.zb-brilla{animation:bordeBrilla 2.8s ease-in-out infinite}
+#gZonas .z.za-late{animation:zonaLate 3s ease-in-out infinite}
+#gZonas .z.za-brilla{animation:zonaBrilla 2.8s ease-in-out infinite}
+#gZonas .z.za-destello{animation:zonaDestello 4s ease-out infinite}
+#gZonas .z.zb-late{animation:bordeLate 3s ease-in-out infinite}
+#gZonas .z.zb-brilla{animation:bordeBrilla 2.8s ease-in-out infinite}
 #gZonas circle{
   fill:#fff;stroke:var(--verde);stroke-width:2;cursor:grab;
   vector-effect:non-scaling-stroke;
@@ -586,6 +586,10 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
           <span>Con línea de color</span>
         </label>
         <input type="color" id="cLinea" value="#00723f">
+        <div class="pista">
+          El borde de la zona. Al quitarla se van con ella el punteado y la
+          animación del borde, porque las dos son cosas de la línea.
+        </div>
       </div>
       <div class="campo" id="campoPunteada">
         <label class="marca" for="fPunteada">
@@ -598,6 +602,14 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
           que se lean como la línea de una carretera en movimiento.
         </div>
       </div>
+      <div class="campo" id="campoRedondeo">
+        <label for="fRedondeo">Redondear las esquinas · <b id="vRedondeo">0</b></label>
+        <input type="range" id="fRedondeo" min="0" max="60" step="1" value="0">
+        <div class="pista" id="pistaRedondeo">
+          En 0 las esquinas quedan en ángulo recto. Las curvas se recortan solas
+          si el lado es más corto que el redondeo.
+        </div>
+      </div>
       <div class="campo">
         <label for="fAnimZona">Animación de la zona</label>
         <select id="fAnimZona"></select>
@@ -606,7 +618,10 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <div class="campo">
         <label for="fAnimBorde">Animación del borde</label>
         <select id="fAnimBorde"></select>
-        <div class="pista">Mueve solo la línea, sin tocar el fondo.</div>
+        <div class="pista">
+          Mueve solo la línea, sin tocar el fondo. Al elegir una se enciende la
+          línea si estaba apagada, porque el borde <b>es</b> la línea.
+        </div>
       </div>
       <div class="campo" id="campoIntZona">
         <label for="fIntZona">Intensidad del movimiento · <b id="vIntZona">1.0</b></label>
@@ -857,6 +872,7 @@ var s = document.getElementById("s"),
     fLinea = document.getElementById("fLinea"),
     cLinea = document.getElementById("cLinea"),
     fPunteada = document.getElementById("fPunteada"),
+    fRedondeo = document.getElementById("fRedondeo"),
     fAnimZona = document.getElementById("fAnimZona"),
     fAnimBorde = document.getElementById("fAnimBorde"),
     fIntZona = document.getElementById("fIntZona"),
@@ -1072,6 +1088,8 @@ var BOT_MAX = 40, URL_MAX = 300;
 // misma que exige el servidor: aqui se adelanta el aviso para no llegar al
 // guardado con un color que va a rebotar.
 var COLOR = /^#[0-9a-fA-F]{6}$/;
+// El tope del redondeo de las esquinas, que tambien manda el servidor.
+var RD_MAX = 60;
 
 function problemas() {
   var mal = E.zonas.map(function () { return [] });
@@ -1097,6 +1115,8 @@ function problemas() {
       mal[k].push("El color de fondo no es un color válido.");
     if (ad.l && !COLOR.test(ad.l))
       mal[k].push("El color de la línea no es un color válido.");
+    if (ad.rd !== undefined && (ad.rd < 1 || ad.rd > RD_MAX))
+      mal[k].push("El redondeo " + ad.rd + " se sale de 1 a " + RD_MAX + ".");
     if (ad.a && !E.animacionesZona[ad.a])
       mal[k].push("La animación de la zona «" + ad.a + "» no existe.");
     if (ad.b && !E.animacionesBorde[ad.b])
@@ -1239,10 +1259,9 @@ function dibuja() {
     if (a.b) clase += " zb-" + a.b;
     if (a.m && a.m !== 1) pintas.push("--m:" + a.m);
     var estilo = pintas.length ? ' style="' + pintas.join(";") + '"' : "";
-    var poli = '<polygon class="' + clase.trim() + '" data-zona="' + k + '"'
+    var poli = '<path class="' + clase.trim() + '" data-zona="' + k + '"'
              + estilo
-             + ' points="'
-             + z[2].map(function (p) { return p[0] + "," + p[1] }).join(" ") + '"/>';
+             + ' d="' + contorno(z[2], a.rd) + '"/>';
     if (sel && sel.tipo === "zona" && sel.i === k) {
       poli += z[2].map(function (p, v) {
         return '<circle class="' + (mal.zonas[k].length ? "mal" : "") + '" data-zona="' + k
@@ -1498,6 +1517,41 @@ function pintaBiblioteca() {
     }).join("");
 }
 
+// El contorno de una zona, en la forma que entiende un <path>. Calcado del que
+// usa el croquis publicado, para que lo que se ve al editar sea lo que sale
+// despues. Con `radio` en 0 salen las esquinas en angulo recto de siempre.
+//
+// Se dibuja SIEMPRE un <path>, aunque no haya redondeo, para que haya un solo
+// camino de codigo: lo que se prueba con las esquinas rectas es exactamente lo
+// mismo que se usa con las redondeadas.
+//
+// El redondeo de cada esquina se recorta a la mitad del lado mas corto que la
+// toca. Sin ese recorte, un radio mayor que el lado haria que las curvas de dos
+// esquinas se cruzaran y el contorno se retorciera en un lazo.
+function contorno(puntos, radio) {
+  var n = puntos.length;
+  if (n < 3) return "";
+  var d = "", dos = function (v) { return Math.round(v * 100) / 100 };
+  for (var i = 0; i < n; i++) {
+    var ant = puntos[(i - 1 + n) % n], aca = puntos[i], sig = puntos[(i + 1) % n];
+    var lAnt = Math.hypot(aca[0] - ant[0], aca[1] - ant[1]);
+    var lSig = Math.hypot(sig[0] - aca[0], sig[1] - aca[1]);
+    var r = Math.min(radio || 0, lAnt / 2, lSig / 2);
+    if (r > 0.05) {
+      var entra = [aca[0] + (ant[0] - aca[0]) * r / lAnt,
+                   aca[1] + (ant[1] - aca[1]) * r / lAnt];
+      var sale = [aca[0] + (sig[0] - aca[0]) * r / lSig,
+                  aca[1] + (sig[1] - aca[1]) * r / lSig];
+      d += (i ? "L" : "M") + dos(entra[0]) + " " + dos(entra[1])
+         + "Q" + dos(aca[0]) + " " + dos(aca[1]) + " "
+         + dos(sale[0]) + " " + dos(sale[1]);
+    } else {
+      d += (i ? "L" : "M") + dos(aca[0]) + " " + dos(aca[1]);
+    }
+  }
+  return d + "Z";
+}
+
 // --- los adornos de una zona ----------------------------------------------
 // Los adornos son lo que hace VISIBLE una zona en el mapa publicado: el color
 // de fondo, el de la linea, si la linea va punteada y las dos animaciones. Una
@@ -1523,27 +1577,42 @@ function tocaZona(cambio) {
   cambio(a);
   if (!a.f) delete a.f;
   if (!a.l) delete a.l;
-  // El punteado y la animacion del borde son cosas de la linea: sin linea no
-  // hay nada que puntear ni que animar, y el servidor los rechazaria.
+  // El punteado y la animacion del borde son cosas de la linea. En vez de
+  // dejarlos puestos sin linea —cosa que el servidor rechaza— se ENCIENDE la
+  // linea: quien elige «Camina» quiere ver el borde avanzando, no un aviso de
+  // que le falta el color. Antes el desplegable estaba apagado hasta poner un
+  // color, y eso hacia que la animacion pareciera no existir.
+  if (!a.l && (a.p || a.b)) a.l = cLinea.value;
   if (!a.l) { delete a.p; delete a.b; }
+  if (!a.rd) delete a.rd;
   // La intensidad modula un movimiento: sin movimiento no modula nada.
   if (!a.a && !a.b) delete a.m;
   sucio = true;
   dibuja();
+  // Y los controles se vuelven a leer del modelo, porque encender la linea
+  // cambia la casilla del color y no seria justo dejarla desmarcada.
+  sinceraZona();
+}
+
+// Vuelve a poner los controles de los adornos como esta la zona elegida.
+function sinceraZona() {
+  if (!sel || sel.tipo !== "zona" || !E.zonas[sel.i]) return;
+  var z = E.zonas[sel.i];
+  pintaAdornos(z.length > 4 ? z[4] : null);
 }
 
 // Deja los controles como toque: lo que no aplica se apaga, con una pista que
 // diga por que. Un control que se puede tocar pero no hace nada es peor que no
 // tenerlo, porque parece que el editor esta roto.
+//
+// El punteado y la animacion del borde NO se apagan aunque no haya linea: al
+// elegirlos se enciende. Apagarlos era lo que hacia que la animacion de la
+// carretera pareciera no existir.
 function refrescaAdornos() {
   var hay = sel && sel.tipo === "zona" && E.zonas[sel.i];
   var a = hay ? adornosDe(E.zonas[sel.i]) : {};
-  var conLinea = !!a.l, conMovimiento = !!(a.a || a.b);
+  var conMovimiento = !!(a.a || a.b);
 
-  // El punteado y la animacion del borde sin linea no aplican.
-  fPunteada.disabled = !conLinea;
-  document.getElementById("campoPunteada").classList.toggle("apagado", !conLinea);
-  fAnimBorde.disabled = !conLinea;
   document.getElementById("campoIntZona").classList.toggle("apagado", !conMovimiento);
   fIntZona.disabled = !conMovimiento;
 
@@ -1570,6 +1639,9 @@ function pintaAdornos(z) {
   fPunteada.checked = !!z.p;
   fAnimZona.value = z.a || "";
   fAnimBorde.value = z.b || "";
+  var rd = (typeof z.rd === "number") ? z.rd : 0;
+  fRedondeo.value = rd;
+  document.getElementById("vRedondeo").textContent = Math.round(rd);
   var m = (typeof z.m === "number") ? z.m : 1;
   fIntZona.value = m;
   document.getElementById("vIntZona").textContent = m.toFixed(1);
@@ -1705,7 +1777,7 @@ s.addEventListener("pointerdown", function (ev) {
   }
 
   var vertice = ev.target.closest("circle[data-vert]");
-  var zona = ev.target.closest("polygon[data-zona]");
+  var zona = ev.target.closest(".z[data-zona]");
   var icono = ev.target.closest("g[data-icono]");
 
   if (vertice) {
@@ -2356,7 +2428,11 @@ cRelleno.addEventListener("input", function () {
 fLinea.addEventListener("change", function () {
   tocaZona(function (a) {
     if (fLinea.checked) a.l = cLinea.value;
-    else delete a.l;
+    // Al quitar la linea se van con ella el punteado y la animacion del borde,
+    // que son cosas de la linea. Antes solo se quitaba la linea, y como la
+    // animacion del borde la volvia a encender sola, la casilla parecia rota:
+    // la desmarcabas y seguia puesta.
+    else { delete a.l; delete a.p; delete a.b; }
   });
   refrescaAdornos();
 });
@@ -2391,6 +2467,17 @@ fIntZona.addEventListener("input", function () {
   tocaZona(function (a) {
     if (+fIntZona.value === 1) delete a.m;
     else a.m = +fIntZona.value;
+  });
+  refrescaAdornos();
+});
+// El redondeo de las esquinas. En 0 no se escribe nada: las esquinas en angulo
+// recto son lo de siempre, y guardarlas como un cero llenaria el archivo de
+// ajustes que no hacen nada.
+fRedondeo.addEventListener("input", function () {
+  document.getElementById("vRedondeo").textContent = Math.round(+fRedondeo.value);
+  tocaZona(function (a) {
+    if (+fRedondeo.value) a.rd = +fRedondeo.value;
+    else delete a.rd;
   });
   refrescaAdornos();
 });
@@ -2696,6 +2783,10 @@ fetch("/api/estado").then(function (r) {
   }
   fBotonTexto.maxLength = BOT_MAX;
   fBotonUrl.maxLength = URL_MAX;
+  if (E.topes && E.topes.redondeo) {
+    RD_MAX = E.topes.redondeo;
+    fRedondeo.max = RD_MAX;
+  }
   // Las animaciones las manda el servidor, que es quien las valida: si la
   // lista de aqui se moviera aparte, se podria elegir una que luego rechaza.
   // Son las mismas opciones en el panel y en el menú de subir, que se llenan

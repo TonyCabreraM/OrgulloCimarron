@@ -82,6 +82,7 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     MAX_INTENSIDAD,
     MAX_MODELOS,
     MAX_NOMBRE_MODELO,
+    MAX_REDONDEO,
     MAX_ROT,
     MAX_TAM_ICONO,
     MAX_TEXTO,
@@ -271,9 +272,10 @@ def _texto_zonas(zonas: list) -> str:
 def _texto_adornos(adornos: dict) -> str:
     """El objeto de adornos de una zona, en el orden en que se lee.
 
-    El orden es f, l, p, a, b, m: primero lo que se ve (relleno y linea),
-    despues como se pinta la linea, y al final el movimiento. Se omite lo que
-    no esta, para que una zona con solo un color ocupe lo minimo.
+    El orden es f, l, p, rd, a, b, m: primero lo que se ve (relleno y linea),
+    despues como se pinta la linea (punteada y redondeo), y al final el
+    movimiento. Se omite lo que no esta, para que una zona con solo un color
+    ocupe lo minimo.
     """
     trozos = []
     for clave in ("f", "l"):
@@ -281,6 +283,8 @@ def _texto_adornos(adornos: dict) -> str:
             trozos.append(f'"{clave}": {json.dumps(adornos[clave], ensure_ascii=False)}')
     if adornos.get("p"):
         trozos.append('"p": 1')
+    if adornos.get("rd"):
+        trozos.append(f'"rd": {round(float(adornos["rd"]), 2):g}')
     for clave in ("a", "b"):
         if adornos.get(clave):
             trozos.append(f'"{clave}": {json.dumps(adornos[clave], ensure_ascii=False)}')
@@ -893,7 +897,7 @@ class Manejador(BaseHTTPRequestHandler):
                                   "rot": [MIN_ROT, MAX_ROT],
                                   "inte": [MIN_INTENSIDAD, MAX_INTENSIDAD],
                                   "lado": LADO_ICONO, "boton": MAX_BOTON,
-                                  "url": MAX_URL,
+                                  "url": MAX_URL, "redondeo": MAX_REDONDEO,
                                   "titulo": MAX_TITULO, "texto": MAX_TEXTO,
                                   "totalPropios": MAX_ICONOS_PROPIOS}
                 datos["animaciones"] = ANIMACIONES
