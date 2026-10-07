@@ -753,14 +753,17 @@ def test_el_toque_y_el_encabezado() -> bool:
             problemas.append("el circulo del toque se prepara pero no se dibuja")
 
     # --- 3. Que la prueba no pase en balde -----------------------------------
-    # Solo comprueba algo si hay algun icono con informacion Y sin aro, que es
-    # el caso que se rompia. Con aro, el aro ya recogia el toque.
+    # Lo que se comprueba aqui es el CODIGO: la regla de `.toque` y que el
+    # render dibuje el circulo cuando el icono lleva informacion. Si ahora
+    # mismo no hay ningun icono con informacion en el mapa, eso es una decision
+    # de contenido, no un fallo: el dia que se vuelva a poner uno, el circulo
+    # tiene que salir bien. Antes esto era un fallo y saltaba cada vez que se
+    # borraba el ultimo icono con informacion, que no es de nadie.
     iconos = leer_bloque(texto, "ICONOS") or []
-    desprotegidos = [ic for ic in iconos if ic.get("i") and not ic.get("c")]
-    if not desprotegidos:
-        problemas.append(
-            "(no hay ningun icono con informacion y sin aro en el croquis: la "
-            "prueba no estaria comprobando el caso que se rompio)")
+    if not [ic for ic in iconos if ic.get("i")]:
+        print("    (ningun icono lleva informacion ahora mismo: el circulo del "
+              "toque no esta en uso, pero el codigo que lo dibuja queda "
+              "comprobado arriba)")
 
     # --- 4. El encabezado, a la derecha del panel ----------------------------
     # Hay varios bloques de pantalla ancha en el archivo (el de la ventana y el
@@ -1285,6 +1288,25 @@ def test_los_adornos_de_las_zonas() -> bool:
                 problemas.append(
                     f"el croquis no tiene regla para la animacion «{a}» de {cual}")
 
+    # Y el sentido de `camina`, que es una regla aparte. Solo lo tiene ella: es
+    # la unica que recorre el borde de punta a punta.
+    if not v.SENTIDOS_CAMINA:
+        problemas.append("`SENTIDOS_CAMINA` esta vacia: no habria nada que elegir")
+    if "#zonas .g.zb-camina.zd-reves" not in texto:
+        problemas.append(
+            "el croquis no tiene la regla de `camina` al reves: se elegiria el "
+            "sentido y la linea seguiria avanzando igual, sin dar ningun error")
+    # Y se le da la vuelta con `reverse` en vez de con un segundo keyframe: el
+    # viaje es el mismo, y dos keyframes serian dos numeros que se pueden
+    # separar. El periodo (16) tiene que seguir siendo el mismo. si no, el
+    # bucle daria un tiron al llegar al final.
+    regla_reves = re.search(r"#zonas \.g\.zb-camina\.zd-reves\{([^}]*)\}",
+                            texto, flags=re.S)
+    if regla_reves and "reverse" not in regla_reves.group(1):
+        problemas.append(
+            "la regla de `camina` al reves no lleva `reverse`: seria la misma "
+            "animacion y la linea avanzaria hacia el mismo lado")
+
     # --- 2. Los keyframes, y que `camina` cierre el bucle -------------------
     # El desplazamiento de los guiones tiene que ser EXACTAMENTE un periodo
     # (9 + 7 = 16) para que al repetir no de un tiron. Con 15 o 17, cada vuelta
@@ -1358,11 +1380,11 @@ def test_los_adornos_de_las_zonas() -> bool:
         problemas.append(f"una zona sin adornos escribe un objeto vacio: {escrito}")
     # Y con adornos, si se escriben. Se parte de los cuatro campos de siempre,
     # no de la zona con el quinto vacio, que si no quedaria con seis.
-    con = [list(zona[:4]) + [{"f": "#c8e6c9", "l": "#00723f", "p": 1, "a": "late",
-                              "b": "camina", "m": 2}]]
+    con = [list(zona[:4]) + [{"f": "#c8e6c9", "l": "#00723f", "p": 1, "rd": 12,
+                              "a": "late", "b": "camina", "d": -1, "m": 2}]]
     escrito2 = editor._texto_zonas(editor._limpia_zonas(con))
-    for trozo in ('"f": "#c8e6c9"', '"l": "#00723f"', '"p": 1', '"a": "late"',
-                  '"b": "camina"', '"m": 2'):
+    for trozo in ('"f": "#c8e6c9"', '"l": "#00723f"', '"p": 1', '"rd": 12',
+                  '"a": "late"', '"b": "camina"', '"d": -1', '"m": 2'):
         if trozo not in escrito2:
             problemas.append(f"al escribir los adornos falta {trozo}")
 
@@ -1381,6 +1403,12 @@ def test_los_adornos_de_las_zonas() -> bool:
         ({"p": 1}, "un punteado sin linea"),
         ({"l": "#00723f", "m": 2}, "una intensidad sin animacion"),
         ({"l": "#00723f", "m": 9}, "una intensidad fuera de rango"),
+        ({"l": "#00723f", "b": "late", "d": -1},
+         "un sentido con una animacion que no recorre el borde"),
+        ({"l": "#00723f", "b": "camina", "d": 2},
+         "un sentido que no existe"),
+        ({"l": "#00723f", "b": "camina", "d": 0},
+         "un sentido de cero, que es ni uno ni otro"),
     ]
     for adornos, nota in malos:
         salida = v.revisar_zonas([base + [adornos]])
@@ -1395,6 +1423,8 @@ def test_los_adornos_de_las_zonas() -> bool:
         ({"l": "#00723f", "p": 1}, "linea punteada"),
         ({"l": "#00723f", "b": "camina"}, "linea que avanza"),
         ({"l": "#00723f", "b": "camina", "m": 2.5}, "la carretera al maximo"),
+        ({"l": "#00723f", "b": "camina", "d": -1}, "la carretera al reves"),
+        ({"l": "#00723f", "b": "camina", "d": 1}, "la carretera en su sentido"),
         ({"a": "destello"}, "una zona que destella, sin linea"),
         ({}, "adornos vacios"),
     ]
@@ -1417,6 +1447,7 @@ def test_los_adornos_de_las_zonas() -> bool:
                             ("a.p", "el punteado"), ("a.rd", "el redondeo"),
                             ("a.a", "la animacion de la zona"),
                             ("a.b", "la animacion del borde"),
+                            ("a.d", "el sentido del borde"),
                             ("contorno(", "el contorno, que es lo que recibe el toque")):
             if pieza not in render:
                 problemas.append(f"el render de las zonas no usa {nota}")
@@ -1479,6 +1510,41 @@ def test_los_adornos_de_las_zonas() -> bool:
     if '"rd": 20' not in editor._texto_zonas([base[:4] + [{"rd": 20}]]):
         problemas.append("el redondeo no se escribe en el archivo")
 
+    # Y el sentido de `camina` se valida y se escribe, con la misma regla de
+    # siempre: lo que sale solo no se guarda. El sentido normal es aquel en el
+    # que estan escritos los puntos, asi que solo se escribe el de al reves.
+    if "d" not in v.CLAVES_ZONA:
+        problemas.append("`d` no esta en CLAVES_ZONA: el sentido no se guardaria")
+    for mal_d in (0, 2, -2, "reves", None, True):
+        salida = v.revisar_zonas([base + [{"l": "#00723f", "b": "camina",
+                                           "d": mal_d}]])
+        if not salida:
+            problemas.append(f"acepto un sentido de {mal_d!r}")
+    for bien_d in (-1, 1):
+        salida = v.revisar_zonas([base + [{"l": "#00723f", "b": "camina",
+                                          "d": bien_d}]])
+        if salida:
+            problemas.append(f"rechazo un sentido de {bien_d}: {salida}")
+    # Sin `camina` no vale: es la unica que recorre el borde.
+    if not v.revisar_zonas([base + [{"l": "#00723f", "b": "late", "d": -1}]]):
+        problemas.append("acepto un sentido con una animacion que no es `camina`")
+    if "d" not in v.limpiar_adornos({"l": "#00723f", "b": "camina", "d": -1}):
+        problemas.append("no se guarda el sentido al reves")
+    if "d" in v.limpiar_adornos({"l": "#00723f", "b": "camina", "d": 1}):
+        problemas.append(
+            "se guarda el sentido normal, que es el que sale solo: llenaria el "
+            "archivo de ajustes que no hacen nada")
+    escrito3 = editor._texto_zonas(
+        editor._limpia_zonas([base[:4] + [{"l": "#00723f", "b": "camina",
+                                           "d": -1}]]))
+    if '"d": -1' not in escrito3:
+        problemas.append(f"el sentido no se escribe en el archivo: {escrito3}")
+    # Y el orden: el sentido va pegado a la animacion del borde, que es de la
+    # unica que es. Leerlo lejos de ella obligaria a buscarlo.
+    if escrito3.index('"b"') > escrito3.index('"d"'):
+        problemas.append("el sentido se escribe antes que la animacion del "
+                         "borde, y es cosa de ella")
+
     # --- 6. Que la prueba no pase en balde ----------------------------------
     if not v.CLAVES_ZONA:
         problemas.append("`CLAVES_ZONA` esta vacia: no se validaria nada")
@@ -1489,6 +1555,31 @@ def test_los_adornos_de_las_zonas() -> bool:
         problemas.append(
             "(el editor no lee las animaciones de zona del servidor: se estaria "
             "eligiendo de una lista que puede no coincidir con la que valida)")
+    # Y el sentido, por lo mismo: lo manda el servidor, que es quien valida.
+    if "sentidosCamina" not in edit:
+        problemas.append("(el editor no lee del servidor los sentidos de `camina`)")
+    if "sentidosCamina" not in editor.leer_croquis.__doc__ and \
+            "sentidosCamina" not in Path("editor/editor.py").read_text(encoding="utf-8"):
+        problemas.append("el servidor no manda los sentidos de `camina` al editor")
+    # Las dos animaciones de una zona tienen que poder convivir. Se declaran
+    # como variables y las junta una sola regla porque `animation` es una
+    # taquigrafia: con una declaracion por clase, la ultima borra la anterior y
+    # una zona con animacion de zona Y de borde se quedaba solo con la del
+    # borde, sin dar ningun error.
+    for nombre, hoja, prefijo in (("el croquis", texto, "#zonas .g"),
+                                  ("el editor", edit, "#gZonas .z")):
+        mezcla = re.search(re.escape(prefijo) + r"\{animation:var\(--az, none\), "
+                           r"var\(--ab, none\)\}", hoja)
+        if not mezcla:
+            problemas.append(
+                f"{nombre} no junta las dos animaciones en una sola regla: con "
+                f"una declaracion por clase, la de la zona se pierde")
+        for var, familia in (("--az", "za"), ("--ab", "zb")):
+            for a in (v.ANIMACIONES_ZONA if familia == "za" else v.ANIMACIONES_BORDE):
+                if a and f"{prefijo}.{familia}-{a}" not in hoja:
+                    problemas.append(f"{nombre} no define {familia}-{a}")
+                if a and f"{var}:" not in hoja:
+                    problemas.append(f"{nombre} no usa la variable {var}")
     if '"animacionesZona"' not in editor.__dict__.get("__doc__", "") and \
             "animacionesZona" not in editor.leer_croquis.__doc__ and \
             "animacionesZona" not in Path("editor/editor.py").read_text(encoding="utf-8"):
