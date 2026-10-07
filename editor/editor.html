@@ -66,6 +66,18 @@ button{font:inherit;cursor:pointer}
 #mensaje.aviso{background:#fff8e1;color:#7a5a00}
 #mensaje:empty{display:none}
 
+/* El aviso de editor viejo: el proceso arranco antes del ultimo cambio de
+   codigo, asi que guardaria a medias lo que no conoce. Va pegado a la barra de
+   arriba y no dentro del panel, porque hay que verlo ANTES de tocar nada. */
+#reinicia{
+  background:#fdecea;color:#8f1d16;border-bottom:1px solid #f0c4c0;
+  padding:11px 16px;font-size:13px;line-height:1.5;
+}
+#reinicia[hidden]{display:none}
+#reinicia b{font-weight:750}
+#reinicia code{background:#fff;border-radius:5px;padding:1px 6px;
+               font-family:Consolas,monospace;font-size:12px}
+
 /* --- cuerpo --- */
 main{display:grid;grid-template-columns:1fr 372px;min-height:0}
 #lienzo{position:relative;overflow:hidden;background:var(--fondo);cursor:crosshair}
@@ -524,6 +536,19 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
   <button class="boton principal" id="btnSubir">Subir a GitHub</button>
 </header>
 
+<!-- El editor carga su codigo UNA vez, al arrancar. Si se edita despues, el
+     que responde sigue siendo el de antes: guardar parece ir bien y el archivo
+     sale sin lo que ese codigo no conoce. Paso con el redondeo de las
+     esquinas, que se tiraba en silencio en cada guardado. -->
+<div id="reinicia" hidden>
+  <b>El editor se quedó viejo.</b>
+  Se abrió antes del último cambio de código, así que guardaría a medias lo que
+  todavía no conoce: todo lo que le pidas se vería en pantalla y no llegaría al
+  archivo. <b>Cierra esta pestaña y vuelve a arrancar
+  <code>editor/editor.py</code></b>. No se ha perdido nada; el croquis sigue
+  como estaba.
+</div>
+
 <main>
   <div id="lienzo">
     <svg id="s" preserveAspectRatio="xMidYMid meet">
@@ -829,6 +854,10 @@ var E = {zonas: [], iconos: [], simbolos: {}, formas: {}, propios: {}, avisos: [
          // la de la zona mueve el fondo y la linea, y la del borde solo la
          // linea. Las manda el servidor, que es quien las valida.
          animacionesZona: {}, animacionesBorde: {},
+         // El servidor avisa si arranco antes del ultimo cambio de codigo. Un
+         // editor viejo y uno al dia responden igual desde dentro, asi que
+         // esta es la unica señal que puede dar de que se quedo atras.
+         codigoViejo: false,
          // Los ajustes con los que se subio cada icono propio: tamano,
          // animacion, intensidad y circulo. Es lo que hace que al ponerlo en el
          // mapa salga como se dejo. Lo manda el servidor, que los guarda al
@@ -1354,8 +1383,10 @@ function pintaPanel(mal) {
     return '<div class="aviso"><b>●</b><span>' + t + "</span></div>";
   }).join("");
   document.getElementById("btnGuardar").disabled =
+    E.codigoViejo ||
     mal.zonas.some(function (l) { return l.length > 0 }) ||
     mal.iconos.some(function (l) { return l.length > 0 });
+  document.getElementById("btnSubir").disabled = E.codigoViejo;
 
   // El formulario solo manda cuando hay una zona elegida.
   var hay = sel && sel.tipo === "zona" && E.zonas[sel.i];
@@ -2693,6 +2724,15 @@ document.getElementById("btnMenos").addEventListener("click", function () { zoom
 
 // --- guardar y subir ------------------------------------------------------
 function guardar() {
+  // Un editor viejo no sabe que le falta, asi que no puede guardar: escribiria
+  // el archivo con las reglas de antes y lo que no conoce se perderia sin
+  // dejar rastro. El boton ya esta apagado; esto es el cinturon. El servidor
+  // lo vuelve a comprobar por su cuenta.
+  if (E.codigoViejo) {
+    aviso("El editor se quedó viejo. Ciérralo y vuelve a arrancarlo antes de "
+          + "guardar: si no, se perdería lo que todavía no conoce.", "mal");
+    return Promise.resolve(false);
+  }
   var mal = problemas();
   if (mal.zonas.some(function (l) { return l.length > 0 })
       || mal.iconos.some(function (l) { return l.length > 0 })) {
@@ -2762,6 +2802,11 @@ fetch("/api/estado").then(function (r) {
   return r.json();
 }).then(function (d) {
   E = Object.assign(E, d);
+  // El servidor dice si arranco antes del ultimo cambio de codigo. Si es asi,
+  // se avisa arriba y se apaga el guardado: dejarlo pasar seria peor que
+  // fallar, porque el archivo saldria bien formado y sin parte del cambio.
+  E.codigoViejo = !!d.codigoViejo;
+  document.getElementById("reinicia").hidden = !E.codigoViejo;
   hoja.setAttribute("width", E.ancho);
   hoja.setAttribute("height", E.alto);
   fondo.setAttribute("x", 0); fondo.setAttribute("y", 0);

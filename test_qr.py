@@ -2486,6 +2486,94 @@ def test_exceso_se_reporta() -> bool:
         shutil.rmtree(ruta_salida, ignore_errors=True)
 
 
+def test_el_editor_avisa_si_quedo_viejo() -> bool:
+    """Un editor abierto antes del ultimo cambio de codigo guarda a medias.
+
+    Es el fallo mas caro que puede tener esta herramienta, y paso de verdad:
+    al anadir el redondeo de las esquinas, el editor que estaba abierto no
+    conocia la clave, la tiraba al limpiar los adornos y escribia el croquis
+    sin ella. Guardar parecia ir bien, no saltaba ningun error, y lo que
+    llegaba a GitHub eran las zonas sin redondear. Lo perdido no se recupera:
+    nadie sabe que se perdio.
+
+    El servidor carga los .py UNA vez, al arrancar, asi que la unica forma de
+    notarlo desde dentro es comparar el codigo que tiene cargado con el que hay
+    ahora mismo en el disco.
+    """
+    import tempfile
+
+    problemas: list[str] = []
+    raiz = Path(__file__).resolve().parent
+    fuente = (raiz / "editor" / "editor.py").read_text(encoding="utf-8")
+    pagina = (raiz / "editor" / "editor.html").read_text(encoding="utf-8")
+
+    # --- 1. La huella, calculada con el codigo de verdad --------------------
+    # Se llama dos veces: tiene que dar lo mismo y tener forma de sha1 corto.
+    # Si dependiera de algo que cambia entre llamadas (la hora, el respaldo,
+    # los iconos), el editor se creeria viejo siempre y no dejaria guardar.
+    huella = editor.huella_del_codigo()
+    if not re.fullmatch(r"[0-9a-f]{12}", huella):
+        problemas.append(f"la huella no tiene forma de sha1 corto: {huella!r}")
+    if huella != editor.huella_del_codigo():
+        problemas.append("la huella cambia entre dos llamadas seguidas")
+    if '"*.py"' not in fuente:
+        problemas.append(
+            "la huella no se calcula sobre los .py del editor: mirar la "
+            "carpeta entera la haria cambiar con cada guardado")
+
+    # --- 2. Un proceso viejo se niega a guardar -----------------------------
+    # El croquis de verdad se apunta a un temporal: si la comprobacion no
+    # saltara, la validacion rechazaria el envio vacio y no se tocaria nada,
+    # pero mas vale no depender de eso para no romper el mapa al probar.
+    original = (editor.CROQUIS, editor.RESPALDO, editor.HUELLA_ARRANQUE)
+    with tempfile.TemporaryDirectory() as carpeta:
+        falso = Path(carpeta) / "croquis.html"
+        falso.write_text("var ZONAS = [];\n", encoding="utf-8")
+        editor.CROQUIS = falso
+        editor.RESPALDO = Path(carpeta) / "respaldo"
+        editor.HUELLA_ARRANQUE = "0" * 12
+        try:
+            editor.guardar_croquis([], [], {})
+        except editor.ErrorEditor as e:
+            # El mensaje tiene que decir QUE hacer, no solo que algo va mal.
+            if "viejo" not in str(e) or "editor.py" not in str(e):
+                problemas.append(f"el aviso no dice como arreglarlo: {e}")
+        else:
+            problemas.append(
+                "guardo con el codigo viejo: es el caso que hizo perder el "
+                "redondeo de las esquinas sin dejar rastro")
+        finally:
+            editor.CROQUIS, editor.RESPALDO, editor.HUELLA_ARRANQUE = original
+
+    # Y al dia tiene que dejar pasar la comprobacion: si no, no se guardaria
+    # nunca y el editor quedaria inservible.
+    if editor.huella_del_codigo() != editor.HUELLA_ARRANQUE:
+        problemas.append(
+            "la huella de arranque no cuadra con la del disco: el editor se "
+            "creeria viejo nada mas abrirlo")
+
+    # --- 3. Y la pagina lo ensena y apaga el guardado -----------------------
+    # De nada sirve detectarlo si la unica señal es un error al pulsar
+    # Guardar: hay que verlo al abrir y no poder perder el tiempo editando.
+    for aguja, queja in (
+            ('"codigoViejo"', "/api/estado no manda `codigoViejo`"),
+            ('id="reinicia"', "falta el aviso de editor viejo en la pagina"),
+            ("E.codigoViejo = !!d.codigoViejo",
+             "la pagina no se queda con lo que manda el servidor"),
+            ("E.codigoViejo ||",
+             "el boton de Guardar no se apaga con el editor viejo"),
+            ("btnSubir\").disabled = E.codigoViejo",
+             "el boton de Subir no se apaga con el editor viejo"),
+            ("if (E.codigoViejo) {",
+             "guardar() no corta por su cuenta con el editor viejo")):
+        if aguja not in pagina and aguja not in fuente:
+            problemas.append(queja)
+
+    for p in problemas:
+        print(f"  - {p}")
+    return not problemas
+
+
 def main() -> int:
     pruebas = [
         ("minificado conserva estructura", test_minificado_conserva_estructura),
@@ -2505,6 +2593,7 @@ def main() -> int:
         ("las animaciones se paran cuando no se ven",
          test_las_animaciones_se_paran_cuando_no_se_ven),
         ("los adornos de las zonas", test_los_adornos_de_las_zonas),
+        ("el editor avisa si quedo viejo", test_el_editor_avisa_si_quedo_viejo),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
         ("alfabeto y round-trip", test_alfabeto_y_viaje),

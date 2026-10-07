@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import io
 import json
 import re
@@ -101,6 +102,34 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     revisar_modelos,
 )
 import vector  # noqa: E402  (los iconos en SVG)
+
+# ---------------------------------------------------------------------------
+# La huella del codigo
+# ---------------------------------------------------------------------------
+# El servidor carga los .py UNA vez, al arrancar. Si despues se editan, el
+# proceso que sigue respondiendo es el viejo, y desde fuera no hay forma de
+# notarlo: la pagina se sirve nueva del disco, asi que todo parece al dia
+# mientras las reglas que deciden el guardado son las de antes.
+#
+# Paso de verdad con el redondeo de las esquinas: se anadio al editor, el que
+# estaba abierto no conocia la clave, la tiro en silencio al limpiar los
+# adornos y el archivo salio sin ella. Lo que llegaba a GitHub eran las zonas
+# sin redondear y no hubo un solo error por ningun lado. Es el fallo mas caro
+# que puede tener esta herramienta, porque lo perdido no se puede recuperar:
+# nadie sabe que se perdio.
+#
+# Se guarda la huella con la que arranco el proceso y se compara con la que hay
+# en el disco. Si no cuadran, la pagina avisa y no deja guardar hasta reiniciar.
+def huella_del_codigo() -> str:
+    """El sha1 de los .py del editor, que son los que deciden como se guarda."""
+    h = hashlib.sha1()
+    for ruta in sorted(Path(__file__).resolve().parent.glob("*.py")):
+        h.update(ruta.name.encode("utf-8"))
+        h.update(ruta.read_bytes())
+    return h.hexdigest()[:12]
+
+
+HUELLA_ARRANQUE = huella_del_codigo()
 
 HOSTS_LOCALES = {"127.0.0.1", "localhost", "::1", "[::1]"}
 
@@ -688,6 +717,22 @@ def _nombre_libre(nombre: str, ocupados: set) -> str:
     return candidato
 
 
+def exige_codigo_al_dia() -> None:
+    """Corta el guardado si el proceso arranco antes del ultimo cambio.
+
+    No es una precaucion teorica: es lo que hizo que el redondeo de las
+    esquinas se perdiera sin dejar rastro. Guardar con el codigo de antes no
+    falla, guarda menos, y eso es lo peligroso: el archivo sale bien formado y
+    sin lo que ese codigo no conoce.
+    """
+    if huella_del_codigo() != HUELLA_ARRANQUE:
+        raise ErrorEditor(
+            "El editor quedó viejo: se abrió antes del último cambio de código, "
+            "así que guardaría a medias lo que todavía no conoce.\n\n"
+            "Cierra esta pestaña y vuelve a arrancar editor/editor.py. "
+            "No se ha perdido nada: el croquis sigue como estaba.")
+
+
 def guardar_croquis(zonas: list, iconos: list, propios: dict) -> dict:
     """Valida y escribe las zonas, los iconos y los iconos propios.
 
@@ -699,7 +744,13 @@ def guardar_croquis(zonas: list, iconos: list, propios: dict) -> dict:
     Los adornos de las zonas se limpian antes de validar: lo que llega del
     editor trae los campos vacios de los formularios, y una zona sin adornos
     tiene que quedar escrita igual que antes de que existieran.
+
+    Lo primero de todo es mirar que este proceso no sea mas viejo que el
+    codigo: un editor abierto antes del ultimo cambio guardaria a medias y sin
+    decir nada. Se mira aqui y no en la ruta HTTP para que no haya ninguna
+    forma de escribir el croquis que se salte la comprobacion.
     """
+    exige_codigo_al_dia()
     zonas = _limpia_zonas(zonas)
     problemas = revisar(zonas, iconos, propios)
     if problemas:
@@ -909,6 +960,11 @@ class Manejador(BaseHTTPRequestHandler):
                 # diciendo cosas distintas.
                 datos["animacionesZona"] = ANIMACIONES_ZONA
                 datos["animacionesBorde"] = ANIMACIONES_BORDE
+                # Si este proceso arranco antes del ultimo cambio de codigo, la
+                # pagina lo dice y apaga el boton de guardar. Es la unica señal
+                # que puede dar: desde dentro, un editor viejo y uno al dia
+                # responden exactamente igual.
+                datos["codigoViejo"] = huella_del_codigo() != HUELLA_ARRANQUE
                 datos["biblioteca"] = lista_biblioteca(datos["propios"])
                 # Los ajustes de cada icono propio, para que la paleta los
                 # dibuje como son y al ponerlos salgan ya configurados.
