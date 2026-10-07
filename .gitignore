@@ -11,3 +11,17 @@ _tmp_*
 editor/_respaldo/
 editor/iconos/
 editor/modelos.json
+
+# Las fuentes del mapa que son demasiado grandes para el repositorio.
+#
+# GitHub rechaza los archivos de mas de 100 MiB, y CroquisSolo.ai esta justo en
+# 99.99 MiB: entra por un pelo, y si un dia crece un poco deja de entrar y el
+# push falla ENTERO, no solo ese archivo. Ademas, al quedarse en el historial
+# para siempre, un archivo asi engorda el repositorio en cada version.
+#
+# Lo importante esta fuera: lo que se publica es plantilla/rectoria.webp, y git
+# guarda todas sus versiones. La fuente vive en el equipo de quien edita.
+#
+# Las otras versiones del mapa (.ai de 9 MB) SI estan en el repositorio: caben
+# y son la fuente de lo que se ve. Esta no cabe.
+CroquisSolo.ai
