@@ -252,16 +252,33 @@ body{
 #iconos .onda{fill:none;stroke:var(--verde);stroke-width:1.6;stroke-opacity:.9;
               vector-effect:non-scaling-stroke}
 
-/* Los colores del sistema tambien valen aqui: si alguien pide menos movimiento
-   en su telefono, no se mueve nada.
+/* --- Un ajuste del sistema que se quito a proposito -------------------------
+   Aqui vivia una regla que apagaba todas las animaciones cuando el sistema
+   pedia menos movimiento:
 
-   El `!important` NO es un adorno: sin el, esta regla no hace nada. Las reglas
-   que dan animacion a cada clase tienen mas fuerza que una que solo nombre el
-   grupo, asi que ganaban ellas y el ajuste del sistema se ignoraba en
-   silencio. Estuvo asi desde que existen las animaciones. */
-@media (prefers-reduced-motion:reduce){
-  #iconos .an,#zonas .g{animation:none !important}
-}
+       @media (prefers-reduced-motion:reduce){
+         #iconos .an,#zonas .g{animation:none !important}
+       }
+
+   Ya no esta, y no es un olvido.
+
+   El motivo es que las animaciones de este mapa NO son adorno de fondo: las
+   elige una por una quien edita, en el editor, y son parte de lo que el mapa
+   cuenta. Un ajuste del sistema no debe borrar lo que el autor ha decidido
+   poner. Ademas la regla tenia una historia enganosa: durante toda la vida del
+   proyecto NO hacia nada, porque las reglas que dan animacion a cada clase
+   tienen mas fuerza que una que solo nombre el grupo. Al ponerle `!important`
+   para que por fin funcionara, se apago el mapa entero de golpe: en un equipo
+   con el ajuste puesto, ni los iconos ni las lineas se movian, y el sintoma
+   parecia «la animacion no funciona» en vez de «el sistema la esta tapando».
+
+   Si algun dia se quiere recuperar, esta es la linea, y hay que probarla en un
+   equipo CON el ajuste puesto:
+
+       @media (prefers-reduced-motion:reduce){
+         #iconos .an,#zonas .g{animation:none !important}
+       }
+*/
 
 /* --- Los adornos de las zonas ----------------------------------------------
    Una zona nace invisible: es un poligono transparente que solo existe para
@@ -302,7 +319,7 @@ body{
    guiones mas largos que un punteado quieto, y si el punteado ganara, la
    carretera saldria con rayitas de hormiga. */
 #zonas .g.zb-camina{
-  stroke-dasharray:calc(9 * var(--m, 1)) calc(7 * var(--m, 1));
+  stroke-dasharray:calc(9 * var(--m, 1) * 1px) calc(7 * var(--m, 1) * 1px);
   animation:bordeCamina 1.6s linear infinite}
 #zonas .g.zb-late{animation:bordeLate 3s ease-in-out infinite}
 #zonas .g.zb-brilla{animation:bordeBrilla 2.8s ease-in-out infinite}
@@ -326,14 +343,23 @@ body{
   0%,100%{stroke-opacity:1}
   50%{stroke-opacity:0}}
 /* La carretera: los guiones van avanzando por todo el borde.
-   
-   El desplazamiento tiene que ser EXACTAMENTE un periodo de guiones para que
-   el bucle no de un salto. El periodo es 9 + 7 = 16, y por eso el numero de
-   aqui abajo tiene que ser 16 y no otro: con 15 o 17, cada vuelta daria un
-   tiron visible. Y va en negativo porque el patron se mueve al reves que el
-   desplazamiento: en positivo, la linea pareceria ir hacia atras. */
+
+   El desplazamiento tiene que ser EXACTAMENTE un periodo de guiones para que el
+   bucle no de un salto. El periodo es 9 + 7 = 16, y por eso el numero de aqui
+   abajo tiene que ser 16 y no otro: con 15 o 17, cada vuelta daria un tiron
+   visible. Y va en negativo porque el patron se mueve al reves que el
+   desplazamiento: en positivo, la linea pareceria ir hacia atras.
+
+   El `* 1px` del final NO es un adorno, y quitarlo rompe la animacion entera:
+   sin el, el calculo da un numero sin unidad, y el navegador NO lo interpola.
+   Medido: sin el `1px` el desplazamiento pasa por 2 valores y salta de 0 a -16
+   de golpe, o sea que los guiones PARPADEAN en el sitio en vez de avanzar; con
+   el, pasa por 34 valores y recorre el camino. Lo peor es que no da ningun
+   error: la animacion figura como corriendo y el valor final es el correcto,
+   asi que el sintoma se lee como «la animacion no se ve», que es justo lo que
+   se reporto. */
 @keyframes bordeCamina{
-  to{stroke-dashoffset:calc(-16 * var(--m, 1))}}
+  to{stroke-dashoffset:calc(-16 * var(--m, 1) * 1px)}}
 
 /* --- La regla que para las animaciones -------------------------------------
    Va AQUI, al final de todas las animaciones, y el sitio no es casual: las
@@ -354,9 +380,8 @@ body{
 #m.frenado .pausa,
 #m .pausa.fuera{animation-play-state:paused}
 
-/* La del sistema ya no hace falta repetirla aqui: la de arriba, que lleva
-   `!important`, cubre tambien las zonas. Tener dos reglas para lo mismo era
-   parte del problema. */
+/* La del sistema (`prefers-reduced-motion`) se quito a proposito. Donde estaba
+   y por que se explica arriba, en la seccion de las animaciones de los iconos. */
 
 /* --- La ventana de informacion ---------------------------------------------
    Mismo lenguaje que el panel: mismo fondo, mismo filo, mismo radio y el

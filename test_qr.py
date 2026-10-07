@@ -1181,6 +1181,25 @@ def test_las_animaciones_se_paran_cuando_no_se_ven() -> bool:
         problemas.append(
             "se escucha `visibilitychange` pero no se mira `document.hidden`")
 
+    # 2 quater. Y que NO vuelva la regla que apagaba TODO con el ajuste del
+    # sistema. Existio, no hacia nada (las reglas de cada clase la ganaban), y
+    # al ponerle `!important` para que por fin funcionara se apago el mapa
+    # entero: en un equipo con el ajuste puesto no se movia ni un icono ni una
+    # linea, y el sintoma parecia «la animacion no funciona».
+    #
+    # Se quito a proposito: las animaciones las elige una por una quien edita y
+    # son contenido, no adorno de fondo, asi que un ajuste del sistema no debe
+    # borrarlas.
+    for bloque in re.findall(r"@media\s*\(prefers-reduced-motion[^{]*\{([^@]*?)\n\}",
+                             texto, flags=re.S):
+        if re.search(r"animation:\s*none", bloque):
+            problemas.append(
+                "hay una regla de `prefers-reduced-motion` que apaga las "
+                "animaciones: en un equipo con ese ajuste puesto, el mapa "
+                "entero se queda quieto —los iconos y las lineas— y parece que "
+                "la animacion no funciona. Se quito a proposito; si se quiere "
+                "recuperar, hay que probarla en un equipo CON el ajuste")
+
     # 2c. Los iconos que han quedado fuera de la pantalla.
     if "IntersectionObserver" not in texto:
         problemas.append(
@@ -1284,11 +1303,39 @@ def test_los_adornos_de_las_zonas() -> bool:
             problemas.append(
                 "el desplazamiento de `bordeCamina` no es un periodo exacto en "
                 f"negativo: {cuerpo.strip()[:80]}")
-    # Y que los guiones de `camina` sean 9 y 7, que es de donde sale el 16.
-    if not re.search(r"stroke-dasharray:\s*calc\(9 \* var\(--m", texto):
-        problemas.append(
-            "los guiones de `camina` no son `9 7` escalados por la intensidad; "
-            "el keyframe da por hecho ese periodo, asi que tienen que cuadrar")
+        # Y tiene que acabar en `* 1px`. Sin esa unidad el calculo da un numero
+        # sin unidad, y el navegador NO lo interpola: el desplazamiento salta de
+        # 0 a -16 de golpe y los guiones PARPADEAN en el sitio en vez de
+        # avanzar. Medido: 2 valores distintos sin el `1px`, 34 con el.
+        #
+        # Es un fallo que no da ningun error: la animacion figura como
+        # corriendo y el valor final es el correcto, asi que el sintoma se lee
+        # como «la animacion no se ve».
+        #
+        # Se comprueba con un `in` y no con una expresion regular a proposito:
+        # el valor lleva `var(--m, 1)` dentro del calc, y un `[^)]*` se para en
+        # ese parentesis y no llega a ver el final. Con el trozo de texto no hay
+        # forma de equivocarse.
+        if "* 1px" not in cuerpo:
+            problemas.append(
+                "el desplazamiento de `bordeCamina` no lleva `* 1px`: sin esa "
+                "unidad el navegador no lo interpola y los guiones parpadean en "
+                "el sitio en vez de avanzar por el borde, sin dar ningun error")
+    # Y que los guiones de `camina` sean 9 y 7 —que es de donde sale el 16— y
+    # que lleven su unidad, por lo mismo.
+    regla_camina = re.search(r"#zonas \.g\.zb-camina\{([^}]*)\}", texto, flags=re.S)
+    if not regla_camina:
+        problemas.append("no existe la regla de `camina` en el croquis")
+    else:
+        rc = regla_camina.group(1)
+        if "9" not in rc or "7" not in rc:
+            problemas.append(
+                "los guiones de `camina` no son `9 7`: el keyframe da por hecho "
+                "ese periodo, asi que los dos numeros tienen que cuadrar")
+        if rc.count("* 1px") != 2:
+            problemas.append(
+                f"los guiones de `camina` tienen que llevar `* 1px` en los dos "
+                f"numeros: {rc.strip()}")
 
     # --- 3. Que una zona sin adornos se escriba como siempre ----------------
     # Es la comprobacion que de verdad importa para no romper lo que ya hay.

@@ -324,7 +324,7 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
 /* `camina` va despues de `.punteada` a proposito: las dos tienen la misma
    fuerza, y la carretera necesita rayas mas largas que un punteado quieto. */
 #gZonas .z.zb-camina{
-  stroke-dasharray:calc(9 * var(--m, 1)) calc(7 * var(--m, 1));
+  stroke-dasharray:calc(9 * var(--m, 1) * 1px) calc(7 * var(--m, 1) * 1px);
   animation:bordeCamina 1.6s linear infinite}
 #gZonas .z.za-late{animation:zonaLate 3s ease-in-out infinite}
 #gZonas .z.za-brilla{animation:zonaBrilla 2.8s ease-in-out infinite}
@@ -487,9 +487,13 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
   50%{stroke-opacity:0}}
 /* El desplazamiento tiene que ser EXACTAMENTE un periodo de guiones (9+7=16,
    escalado por la intensidad) para que el bucle no de un tiron. Y en negativo,
-   porque el patron se mueve al reves que el desplazamiento. */
+   porque el patron se mueve al reves que el desplazamiento.
+
+   El `* 1px` hace falta de verdad: sin el, el calculo da un numero sin unidad
+   y el navegador no lo interpola, asi que los guiones parpadean en el sitio en
+   vez de avanzar. Ver el comentario largo en croquis.html. */
 @keyframes bordeCamina{
-  to{stroke-dashoffset:calc(-16 * var(--m, 1))}}
+  to{stroke-dashoffset:calc(-16 * var(--m, 1) * 1px)}}
 /* Aqui no se quitan las animaciones al reducir el movimiento: en el editor son
    la vista previa, y sin ellas no habria forma de elegir cual queda mejor. */
 #gAyudas{pointer-events:none}

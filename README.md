@@ -510,18 +510,29 @@ vez**: una zona puede latir mientras su borde avanza.
 
 ```css
 #zonas .g.zb-camina{
-  stroke-dasharray:calc(9 * var(--m, 1)) calc(7 * var(--m, 1));
+  stroke-dasharray:calc(9 * var(--m, 1) * 1px) calc(7 * var(--m, 1) * 1px);
   animation:bordeCamina 1.6s linear infinite}
 @keyframes bordeCamina{
-  to{stroke-dashoffset:calc(-16 * var(--m, 1))}}
+  to{stroke-dashoffset:calc(-16 * var(--m, 1) * 1px)}}
 ```
 
-Dos detalles que tienen que cuadrar o el efecto se rompe sin dar ningún error:
+Tres detalles que tienen que cuadrar o el efecto se rompe sin dar ningún error:
 
 - **El desplazamiento tiene que ser exactamente un periodo de guiones** (9 + 7 =
   16). Con 15 o 17, cada vuelta daría un tirón visible al reiniciarse.
 - **Va en negativo.** El patrón se mueve al revés que el desplazamiento: en
   positivo, la línea parecería ir hacia atrás.
+- **Y termina en `* 1px`.** Parece un adorno y no lo es: sin esa unidad el
+  cálculo da un número sin unidad, y el navegador **no lo interpola**. Medido:
+  sin el `1px` el desplazamiento pasa por **2 valores** y salta de 0 a −16 de
+  golpe, o sea que los guiones **parpadean en el sitio** en vez de avanzar; con
+  él, pasa por **34 valores** y recorre el camino. La animación figura como
+  corriendo y el valor final es el correcto, así que el síntoma se lee como «la
+  animación no se ve», que es exactamente lo que se reportó.
+
+La prueba comprueba las tres cosas, y también que los números del `keyframes`
+y los del `dasharray` sigan cuadrando: si alguien cambia uno sin el otro, el
+borde da un salto en cada vuelta y no hay ningún error que lo diga.
 
 `camina` **pone sus propios guiones**, más largos que el punteado normal, así
 que no hace falta marcar «línea punteada»: esa casilla es para una línea
@@ -846,8 +857,8 @@ se movía 0,8 de los 3,9 que le tocaban y el icono se quedaba casi quieto. Los
 grados son más altos que los de las otras animaciones por el mismo motivo: con
 el pivote abajo, el mismo ángulo mueve mucho menos la punta.
 
-Si el sistema pide menos movimiento (`prefers-reduced-motion`), se quedan
-quietos.
+Si el sistema pide menos movimiento (`prefers-reduced-motion`), **se siguen
+moviendo, a propósito**.
 
 ### Cuando no hace falta animar
 
@@ -1371,8 +1382,25 @@ croquis o la página base:
   paraba nada: las reglas que dan animación a cada clase (`#iconos .an.late`)
   tienen más fuerza que una que solo nombre el grupo y empatan con ella, así que
   ganaban ellas. Estuvo así desde que existen las animaciones y no se notó
-  nunca porque no da ningún error. Se arregla con `!important`, y hay que
-  acordarse de mirarlo cuando se añada un elemento animado nuevo.
+  nunca porque no da ningún error.
+- **Pero al arreglarla con `!important` se apagó el mapa entero.** En un equipo
+  con el ajuste puesto —que es lo normal en Windows si están desactivados los
+  «efectos de animación»— no se movía ni un icono ni una línea, y el síntoma se
+  leía como «la animación no funciona» en vez de «el sistema la está tapando».
+  Se quitó a propósito: **aquí las animaciones las elige una por una quien
+  edita y son contenido, no adorno de fondo**, así que un ajuste del sistema no
+  debe borrarlas. Hay una prueba que impide que vuelva sin querer.
+- **`calc()` con una variable no se interpola en `stroke-dashoffset`.** El
+  cálculo da un número sin unidad y el navegador lo trata como valor discreto:
+  salta de un extremo al otro en vez de recorrerlos, así que los guiones
+  parpadean en el sitio en vez de avanzar. **Hay que añadir `* 1px`** para que
+  el resultado sea una longitud de verdad. Medido: 2 valores distintos sin la
+  unidad, 34 con ella. Y no da ningún error: la animación figura como corriendo
+  y el valor final es el correcto.
+- **Un `[^)]*` en una expresión regular se para en el primer paréntesis.** Para
+  comprobar texto como `calc(-16 * var(--m, 1) * 1px)` hay un `var(...)` dentro
+  y el patrón no llega al final. Cuando el texto lleva paréntesis anidados,
+  conviene comprobar con `in` en trozos en vez de con una expresión regular.
 - **Dos reglas con la misma fuerza las decide el orden, y eso es una trampa.**
   La regla que pausa las animaciones (`.frenado`) tiene la misma fuerza que las
   que animan cada clase. Puesta antes de las de las zonas, las de las zonas
