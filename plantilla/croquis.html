@@ -34,11 +34,24 @@ body{
   touch-action:none;-webkit-tap-highlight-color:transparent;
 }
 #s{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
-/* will-change avisa al navegador de que este <g> se va a transformar, para
+/* `will-change` avisa al navegador de que este <g> se va a transformar, para
    que lo prepare en su propia capa y la animacion no tenga que repintar el
-   mapa entero en cada fotograma. Sin esto, en un movil el zoom va a tirones. */
-#m{transform-box:view-box;transform-origin:0 0;will-change:transform;
+   mapa entero en cada fotograma. Sin esto, en un movil el zoom va a tirones.
+
+   Pero va SOLO MIENTRAS el mapa se mueve, en la clase `.acercando`, y eso es
+   tan importante como el propio `will-change`:
+
+   Una capa se dibuja UNA vez, en una textura, y a partir de ahi se escala esa
+   textura como si fuera una foto. Con `will-change` puesto para siempre, al
+   acercar el mapa tres veces lo que se ve es la textura ampliada, y TODO sale
+   pixelado: los iconos, que son vectores, y las lineas de las zonas. En un
+   ordenador el navegador rehace la capa al acabar el movimiento y no se nota;
+   en un movil se queda la textura escalada, que es justo el sintoma de «los
+   iconos se ven pixelados al hacer zoom». Se suelta al terminar y el
+   navegador vuelve a dibujar el mapa a la resolucion nueva. */
+#m{transform-box:view-box;transform-origin:0 0;
    transition:transform .65s cubic-bezier(.22,1,.36,1)}
+#m.acercando{will-change:transform}
 /* El mapa es una hoja: un filo tenue y una sombra lo despegan del fondo. */
 #hoja{filter:drop-shadow(0 10px 26px #0a484233)}
 /* La version grande del fondo entra por encima de la chica, y solo cuando ya
@@ -1263,6 +1276,11 @@ function frenaUnRato(ms) {
   // El freno va en #m, que es el padre comun de las zonas y de los iconos: una
   // sola clase los para todos.
   M.classList.add("frenado");
+  // Y `acercando` pone el `will-change` que sube el mapa a su propia capa. Va
+  // aqui porque dura exactamente lo mismo que el freno: mientras el mapa se
+  // mueve. Al soltarse, el navegador vuelve a dibujarlo a la resolucion nueva
+  // en vez de escalar la textura de antes, que es lo que lo saca pixelado.
+  M.classList.add("acercando");
   clearTimeout(relojFreno);
   relojFreno = setTimeout(sueltaAnimaciones, ms);
 }
@@ -1272,6 +1290,10 @@ function sueltaAnimaciones() {
   // Con la pagina escondida no se sueltan: no hay nada que mirar y el
   // navegador no deberia estar componiendo fotogramas.
   if (!document.hidden) M.classList.remove("frenado");
+  // La capa se suelta SIEMPRE, tambien con la pagina escondida. Si se quedara
+  // puesta, el mapa se quedaria escalado como una foto y al volver a mirarlo
+  // los iconos saldrian pixelados.
+  M.classList.remove("acercando");
 }
 
 // 2. Con la pagina escondida (otra pestana delante, o el movil bloqueado). Un
@@ -1707,6 +1729,24 @@ function anchoNecesario() {
   return lado * (devicePixelRatio || 1);
 }
 
+// Cuando traer la grande por adelantado. Es lo que evita el unico defecto de
+// tener dos versiones: si solo se trajera al acercar, entre el toque y la
+// llegada del archivo el mapa se veria blando, y en un movil con pantalla
+// densa eso se nota.
+//
+// Con una conexion rapida esos 483 KB no se notan y nadie llega a verlo
+// blando. Con una lenta -o si quien mira ha pedido ahorrar datos- se espera a
+// que de verdad se acerque, y se ahorra.
+//
+// `effectiveType` solo tiene cuatro valores -slow-2g, 2g, 3g y 4g-, y el 4g
+// quiere decir «no va mal», no la tecnologia. No existe el 5g ahi.
+function conexionRapida() {
+  var c = navigator.connection;
+  if (!c) return true;             // sin dato, se supone que si
+  if (c.saveData) return false;
+  return !c.effectiveType || c.effectiveType === "4g";
+}
+
 // El encuadre depende del alto del encabezado y del panel, que cambian al
 // girar el movil o al cruzar el punto donde el panel pasa a lateral.
 addEventListener("resize", function () { A >= 0 ? sel(A) : todo() });
@@ -1726,7 +1766,15 @@ todo();
 // unos 375 px de ancho: 750 reales en una pantalla densa, menos de la mitad de
 // 1600. Ahi si se empieza por la chica, y la grande espera a que alguien
 // acerque.
-if (anchoNecesario() > ANCHO_CHICO) traeLaGrande();
+if (anchoNecesario() > ANCHO_CHICO) {
+  traeLaGrande();
+} else if (conexionRapida()) {
+  // Se trae sola un momento despues de pintar, para no competir con lo que se
+  // ve. En una conexion rapida no se nota, y asi el mapa nunca se ve blando al
+  // acercar porque ya esta.
+  var cuando = window.requestIdleCallback || function (f) { setTimeout(f, 1400) };
+  cuando(function () { traeLaGrande() }, {timeout: 3000});
+}
 </script>
 </body>
 </html>

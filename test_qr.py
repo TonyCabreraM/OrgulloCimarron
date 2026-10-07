@@ -3114,6 +3114,100 @@ def test_los_iconos_van_siempre_en_vector() -> bool:
     return True
 
 
+def test_el_mapa_no_se_queda_en_una_capa() -> bool:
+    """El `will-change` del mapa dura lo que dura el movimiento, y ni un poco mas.
+
+    `will-change:transform` sube el mapa a su propia capa, y una capa se dibuja
+    UNA vez en una textura: a partir de ahi se escala esa textura como si fuera
+    una foto. Puesto para siempre, al acercar el mapa tres veces lo que se ve
+    es la textura ampliada, y sale TODO pixelado: los iconos, que son vectores,
+    y las lineas de las zonas.
+
+    En un ordenador el navegador rehace la capa al acabar el movimiento y no se
+    nota; en un movil se queda la textura escalada. Es exactamente el sintoma de
+    «los iconos se ven pixelados al hacer zoom», y por eso el `will-change` va
+    en una clase que se pone al empezar a moverse y se quita al terminar.
+
+    Y quitarlo es lo que hace que el navegador vuelva a dibujar el mapa a la
+    resolucion nueva, que es el arreglo de verdad: sin capa, los vectores se
+    rasterizan a la escala a la que se estan viendo.
+    """
+    problemas = []
+    texto = CROQUIS.read_text(encoding="utf-8")
+
+    # --- 1. La regla base no lo lleva --------------------------------
+    regla = re.search(r"#m\{([^}]*)\}", texto)
+    if not regla:
+        problemas.append("(no se encuentra la regla de #m)")
+    elif "will-change" in regla.group(1):
+        problemas.append(
+            "`#m` lleva `will-change` siempre: el mapa se queda escalado como "
+            "una foto y los iconos salen pixelados al acercar, sobre todo en "
+            "un movil")
+    if "#m.acercando{will-change:transform}" not in texto:
+        problemas.append(
+            "no existe la clase que pone el `will-change` durante el "
+            "movimiento: el zoom volveria a ir a tirones en un movil")
+
+    # --- 2. Se pone al moverse y se quita al acabar --------------------
+    if 'M.classList.add("acercando")' not in texto:
+        problemas.append("nadie pone la clase `acercando`")
+    if 'M.classList.remove("acercando")' not in texto:
+        problemas.append("nadie quita la clase `acercando`: la capa se queda")
+    # Y tiene que ponerse donde se mueve el mapa, que es `frenaUnRato`.
+    i = texto.find("function frenaUnRato(")
+    if i < 0:
+        problemas.append("(no se encuentra `frenaUnRato`)")
+    elif 'classList.add("acercando")' not in texto[i:texto.find("\n}", i)]:
+        problemas.append(
+            "la capa no se sube al empezar a moverse el mapa: el zoom no "
+            "aprovecharia nada")
+
+    # --- 3. Y se quita SIEMPRE, tambien con la pagina escondida --------
+    # El freno de las animaciones no se suelta con la pagina escondida -no hay
+    # nada que mirar-, pero la capa si: si se quedara puesta al cambiar de
+    # pestana en mitad de un zoom, al volver el mapa estaria escalado como una
+    # foto y los iconos pixelados, sin haber hecho nada.
+    i = texto.find("function sueltaAnimaciones(")
+    if i < 0:
+        problemas.append("(no se encuentra `sueltaAnimaciones`)")
+    else:
+        cuerpo = texto[i:texto.find("\n}", i)]
+        freno = cuerpo.find('remove("frenado")')
+        capa = cuerpo.find('remove("acercando")')
+        if capa < 0:
+            problemas.append("`sueltaAnimaciones` no quita la capa")
+        elif freno >= 0 and capa < freno:
+            problemas.append(
+                "la capa se quita antes que el freno, y dentro del trozo que "
+                "solo corre con la pagina a la vista: cambiando de pestana en "
+                "mitad de un zoom se quedaria puesta")
+
+    # --- 4. Y el fondo grande se pide cuando hace falta, no siempre -----
+    # Solo al acercar, o por adelantado si la conexion es rapida. Sin esta
+    # segunda parte, entre el toque y la llegada del archivo el mapa se veria
+    # blando, que es el unico defecto de tener dos versiones del fondo.
+    if "function conexionRapida(" not in texto:
+        problemas.append(
+            "no se mira la conexion: con una conexion lenta y con \"ahorrar "
+            "datos\" puesto se bajaria la version grande igual")
+    if "saveData" not in texto:
+        problemas.append(
+            "no se respeta «ahorrar datos», que es justo para quien lo pide")
+    if "requestIdleCallback" not in texto:
+        problemas.append(
+            "la version grande no se pide por adelantado en conexion rapida: "
+            "el mapa se veria blando hasta que llegue")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el `will-change` del mapa dura lo que el movimiento, y el fondo "
+          "grande se pide al acercar o por adelantado si la conexion va bien")
+    return True
+
+
 def main() -> int:
     pruebas = [
         ("minificado conserva estructura", test_minificado_conserva_estructura),
@@ -3136,6 +3230,7 @@ def main() -> int:
         ("las pestanas del editor", test_las_pestanas_del_editor),
         ("quitar vertices de una zona", test_quitar_vertices_de_una_zona),
         ("la ventana solo con el zoom", test_la_ventana_solo_se_abre_con_el_mapa_acercado),
+        ("el mapa no se queda en una capa", test_el_mapa_no_se_queda_en_una_capa),
         ("los recursos y el boton del mapa", test_los_recursos_y_el_boton_del_mapa),
         ("los iconos van siempre en vector", test_los_iconos_van_siempre_en_vector),
         ("el editor avisa si quedo viejo", test_el_editor_avisa_si_quedo_viejo),
