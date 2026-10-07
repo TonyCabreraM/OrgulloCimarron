@@ -450,14 +450,35 @@ def _texto_iconos(iconos: list) -> str:
 def _texto_propios(propios: dict) -> str:
     """El objeto de iconos propios, con un nombre por linea.
 
-    Cada imagen es una data URL larguisima que va en una sola linea, porque
-    JSON no deja partir un texto. Se ordenan por nombre para que al guardar
-    dos veces lo mismo el archivo salga igual.
+    Un mapa de bits va como data URL, en una sola linea larguisima, porque
+    JSON no deja partir un texto.
+
+    Un VECTOR va como el texto del SVG, no como data URL. El croquis lo mete
+    en el documento -en un `<symbol>`, y lo usa con `<use>`- para que se vea
+    nitido a cualquier zoom: dentro de un `<image>` el navegador lo dibuja una
+    vez y escala la foto, y en Safari eso sale pixelado. Y de paso ocupa menos,
+    porque base64 engorda un tercio.
+
+    El editor manda los vectores como data URL -los dibuja en un `<image>`, que
+    para el editor vale-, asi que la conversion se hace aqui, que es donde se
+    sabe el nombre con el que hay que renombrar sus clases.
     """
     if not propios:
         return "var PROPIOS = {};"
-    lineas = [f"  {json.dumps(k, ensure_ascii=False)}: {json.dumps(v)}"
-              for k, v in sorted(propios.items())]
+    lineas = []
+    for k, v in sorted(propios.items()):
+        if isinstance(v, str) and v.startswith("data:image/svg+xml"):
+            try:
+                svg = vector.de_data_url(v).decode("utf-8")
+            except vector.SvgInvalido:
+                svg = ""
+            # Si el SVG trae algo que no se puede dejar suelto -una regla de
+            # estilo que no sea de clase-, `prepara_para_incluir` devuelve None
+            # y se queda como estaba: menos nitido en Safari, pero correcto.
+            suelto = vector.prepara_para_incluir(svg, k) if svg else None
+            if suelto is not None:
+                v = suelto
+        lineas.append(f"  {json.dumps(k, ensure_ascii=False)}: {json.dumps(v)}")
     return "var PROPIOS = {\n" + ",\n".join(lineas) + "\n};"
 
 
@@ -615,6 +636,13 @@ def propios_para_editar(propios: dict) -> dict:
     for nombre in list(salida):
         ruta = _archivo_de(nombre)
         if ruta is None:
+            # Un icono que no esta en la biblioteca. En el croquis un vector
+            # viene como TEXTO de SVG, y el editor lo dibuja en un `<image>`,
+            # que necesita una data URL. Se convierte, o el editor no lo
+            # ensenaria.
+            valor = salida[nombre]
+            if isinstance(valor, str) and not valor.lstrip().startswith("data:"):
+                salida[nombre] = vector.a_data_url(valor)
             continue
         crudo = ruta.read_bytes()
         if ruta.suffix.lower() == ".svg":

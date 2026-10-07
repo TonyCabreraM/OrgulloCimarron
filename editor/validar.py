@@ -941,21 +941,38 @@ def revisar_propios(propios) -> list[str]:
         if not isinstance(datos, str):
             problemas.append(f"«{nombre}»: la imagen tiene que ser texto")
             continue
-        if not datos.startswith("data:image/"):
-            lugares = [n for n, d in propios.items()
-                       if isinstance(d, str) and d.startswith("data:image/")]
-            pista = ""
-            if not lugares:
-                pista = ("\nSi lo has editado a mano: la imagen tiene que ser "
-                         "una data URL que empiece por data:image/")
-            problemas.append(f"«{nombre}»: eso no es una imagen incrustada{pista}")
-            continue
-        if ";base64," not in datos:
-            problemas.append(f"«{nombre}»: la imagen tiene que venir en base64")
-            continue
+        # Un VECTOR va como el texto del SVG, no como data URL.
+        #
+        # No es un capricho de formato. Dentro de un `<image>` el navegador
+        # dibuja el SVG UNA vez, a una resolucion pequena, y a partir de ahi
+        # escala esa foto: medido con el motor de Safari, el mismo dibujo sale
+        # 2,3 veces menos nitido que puesto como vector de verdad. Por eso el
+        # vector va suelto en el documento -en un `<symbol>`, usado con
+        # `<use>`-, y ahi el navegador lo DIBUJA a la escala a la que se este
+        # viendo. Un mapa de bits si va como data URL, que es lo que es.
+        es_vector = datos.lstrip().startswith("<svg")
+        if not es_vector:
+            if not datos.startswith("data:image/"):
+                lugares = [n for n, d in propios.items()
+                           if isinstance(d, str)
+                           and (d.startswith("data:image/")
+                                or d.lstrip().startswith("<svg"))]
+                pista = ""
+                if not lugares:
+                    pista = ("\nSi lo has editado a mano: un mapa de bits tiene "
+                             "que ser una data URL que empiece por data:image/, "
+                             "y un vector, el texto de un SVG que empiece por "
+                             "<svg")
+                problemas.append(
+                    f"«{nombre}»: eso no es una imagen incrustada{pista}")
+                continue
+            if ";base64," not in datos:
+                problemas.append(
+                    f"«{nombre}»: la imagen tiene que venir en base64")
+                continue
+            es_vector = datos.startswith("data:image/svg+xml")
         # Los vectores llevan su propio tope, mas alto: no se reducen como una
         # imagen, asi que un SVG pesado sigue siendo nitido y vale la pena.
-        es_vector = datos.startswith("data:image/svg+xml")
         tope = MAX_VECTOR if es_vector else MAX_ICONO
         if len(datos) > tope:
             problemas.append(

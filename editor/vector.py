@@ -272,3 +272,91 @@ def de_data_url(datos_url: str) -> bytes:
         return base64.b64decode(trozo.group(1), validate=False)
     except (ValueError, TypeError):
         raise SvgInvalido("El SVG viene mal codificado.") from None
+
+
+# Un selector de clase y nada mas: un punto, el nombre, y ni un espacio mas.
+# Es lo que llevan los SVG que salen de Illustrator y de Inkscape, y lo unico
+# que se sabe renombrar sin poder equivocarse.
+SOLO_CLASES = re.compile(r"^\s*\.[A-Za-z_-][\w-]*\s*$")
+
+
+def _estilos_seguros(svg: str) -> bool:
+    """Si todas las reglas del `<style>` se pueden renombrar sin mas.
+
+    Solo valen los selectores de clase. Una regla de tipo `path { ... }`
+    afectaria a TODOS los iconos de la pagina en cuanto estuviera dentro, y una
+    de `#algo` se escaparia del renombrado de ids. Con cualquiera de esas, el
+    icono se queda como estaba: menos nitido en Safari, pero correcto.
+    """
+    for bloque in re.findall(r"<style[^>]*>(.*?)</style>", svg, flags=re.S):
+        sin_comentarios = re.sub(r"/\*.*?\*/", " ", bloque, flags=re.S)
+        for regla in re.findall(r"([^{}]+)\{", sin_comentarios):
+            for selector in regla.split(","):
+                if not SOLO_CLASES.match(selector):
+                    return False
+    return True
+
+
+def _con_prefijo(svg: str, nombre: str) -> str:
+    """Le pone el nombre del icono delante a sus clases y a sus ids."""
+    clases: set[str] = set()
+    for bloque in re.findall(r'class="([^"]*)"', svg):
+        clases.update(bloque.split())
+    # De la mas larga a la mas corta: si un icono tuviera `.cls-1` y `.cls-11`,
+    # empezar por la corta dejaria la larga a medias.
+    for clase in sorted(clases, key=len, reverse=True):
+        svg = re.sub(rf"\.{re.escape(clase)}(?![\w-])",
+                     f".{nombre}-{clase}", svg)
+
+    def con_nombre(m: re.Match) -> str:
+        return 'class="' + " ".join(f"{nombre}-{c}" for c in m.group(1).split()) \
+               + '"'
+    svg = re.sub(r'class="([^"]*)"', con_nombre, svg)
+
+    for ident in sorted(set(re.findall(r'id="([^"]*)"', svg)),
+                        key=len, reverse=True):
+        svg = svg.replace(f'id="{ident}"', f'id="{nombre}-{ident}"')
+        svg = svg.replace(f"url(#{ident})", f"url(#{nombre}-{ident})")
+        svg = svg.replace(f'href="#{ident}"', f'href="#{nombre}-{ident}"')
+    return svg
+
+
+def prepara_para_incluir(svg: str, nombre: str) -> str | None:
+    """Deja un SVG listo para meterlo DENTRO de la pagina, no en un `<image>`.
+
+    POR QUE HACE FALTA
+    ------------------
+    Un SVG dentro de un `<image href="data:...">` lo dibuja el navegador UNA
+    vez, a una resolucion pequena, y a partir de ahi escala esa foto. Los
+    trazos y las lineas de las zonas no pasan por ahi -son vectores de verdad-
+    y por eso salen nitidos; los iconos no.
+
+    Esta medido con el motor de Safari: el mismo dibujo, como `<image>`, sale
+    2,3 veces menos nitido que el mismo dibujo puesto como vector de verdad. En
+    Chromium el navegador lo vuelve a dibujar al cambiar la escala y no se
+    nota, y por eso el fallo solo se veia en iPhone. Y no se arregla forzando
+    un repintado ni declarando el tamano: se probo, y no cambia nada.
+
+    Asi que los iconos se ponen en el documento, cada uno UNA vez, en un
+    `<symbol>`, y se usan con `<use>`. De paso ocupa menos: base64 engorda un
+    tercio, y el texto del SVG se comprime con gzip y la base64 no.
+
+    LO QUE HAY QUE ARREGLAR PARA PODER HACERLO
+    ------------------------------------------
+    Los SVG salidos de Illustrator llevan un `<style>` con clases (`.cls-1`,
+    `.st0`...) y esos nombres se repiten en TODOS los archivos, porque son los
+    que pone el programa. Metidos en el mismo documento, el ultimo `.cls-1`
+    ganaria para todos y media docena de iconos cambiaria de color. Lo mismo
+    con los `id`, que ademas salen citados desde `url(#...)` en los rellenos y
+    en los filtros.
+
+    Ponerle el nombre del icono delante a unos y a otros lo arregla: cada uno
+    tiene los suyos y pueden convivir.
+
+    Devuelve None si el SVG trae algo que no se puede dejar suelto -una regla
+    de estilo que no sea de clase-, y entonces quien llama se queda con el
+    `<image>` de siempre.
+    """
+    if not _estilos_seguros(svg):
+        return None
+    return _con_prefijo(svg, nombre)

@@ -3107,9 +3107,13 @@ def test_los_iconos_van_siempre_en_vector() -> bool:
         print(f"    {p}")
     if problemas:
         return False
-    en_vector = sum(1 for u in d["propios"].values()
-                    if str(u).startswith("data:image/svg+xml"))
-    print(f"    {len(d['propios'])} iconos propios, {en_vector} en vector, "
+    # Un vector puede venir de las dos formas -suelto en el documento, que es
+    # como va ahora, o como data URL si el SVG traía algo que no se puede
+    # renombrar-, así que cuentan las dos.
+    en_vector = [n for n, u in d["propios"].items()
+                 if str(u).lstrip().startswith("<svg")
+                 or str(u).startswith("data:image/svg+xml")]
+    print(f"    {len(d['propios'])} iconos propios, {len(en_vector)} en vector, "
           f"y ninguno se rasteriza al publicar")
     return True
 
@@ -3208,6 +3212,116 @@ def test_el_mapa_no_se_queda_en_una_capa() -> bool:
     return True
 
 
+def test_los_vectores_van_sueltos_en_el_documento() -> bool:
+    """Un icono de vector va EN el documento, no dentro de un `<image>`.
+
+    Dentro de un `<image href="data:image/svg+xml...">` el navegador dibuja el
+    SVG UNA vez, a una resolución pequeña, y a partir de ahí escala esa foto.
+    Medido con el motor de Safari: el mismo dibujo sale 2,3 veces menos nítido
+    que puesto como vector de verdad (755 contra 1749 de contraste). Los trazos
+    de las zonas y el fondo no pasan por ahí y se veían nítidos, y de ahí que
+    el síntoma pareciera cosa de los iconos.
+
+    En Chromium el navegador lo vuelve a dibujar al cambiar la escala y no se
+    nota, y por eso solo se veía en iPhone. Forzar un repintado de los iconos y
+    declarar el tamaño dentro del SVG se probaron, y no cambian nada.
+
+    Ahora cada vector se define UNA vez en un `<symbol>` y se usa con `<use>`.
+    Lo que hay que vigilar es lo que hacía falta para poder meterlos todos en
+    el mismo documento: los SVG de Illustrator traen `<style>` con clases
+    (`.cls-1`, `.st0`...) que se REPITEN en todos los archivos. Sin el nombre
+    del icono delante, el último `.cls-1` ganaría para todos y media docena de
+    iconos cambiaría de color.
+    """
+    problemas = []
+
+    # --- 1. El renombrado ---------------------------------------------------
+    modelo = ('<svg viewBox="0 0 10 10"><style>.cls-1{fill:#f00}</style>'
+              '<path class="cls-1" d="M0 0"/>'
+              '<rect id="sombra" fill="url(#sombra)"/></svg>')
+    uno = vec.prepara_para_incluir(modelo, "agua-2")
+    dos = vec.prepara_para_incluir(modelo, "arbol1d")
+    if uno is None or dos is None:
+        problemas.append("no se pudo preparar un SVG con una clase sencilla")
+    else:
+        for trozo in (".agua-2-cls-1{", 'class="agua-2-cls-1"',
+                      'id="agua-2-sombra"', "url(#agua-2-sombra)"):
+            if trozo not in uno:
+                problemas.append(f"el renombrado no puso «{trozo}»")
+        # Y el mismo dibujo con otro nombre tiene que salir con OTRAS clases:
+        # es lo que permite que los diecisiete convivan sin pisarse.
+        if ".agua-2-cls-1" in dos or ".arbol1d-cls-1" in uno:
+            problemas.append(
+                "el nombre del icono no acaba en las clases: dos iconos se "
+                "pisarían los colores en el mismo documento")
+    # Una regla que no sea de clase no se sabe renombrar -afectaría a toda la
+    # página-, así que ese SVG se queda en su `<image>`: menos nítido en
+    # Safari, pero correcto.
+    if vec.prepara_para_incluir(
+            '<svg viewBox="0 0 1 1"><style>path{fill:#f00}</style>'
+            '<path d="M0 0"/></svg>', "x") is not None:
+        problemas.append(
+            "se aceptó un SVG con una regla de estilo que, metida en la "
+            "página, cambiaría el color de TODOS los iconos")
+
+    # --- 2. Y el croquis los dibuja así -------------------------------------
+    texto = CROQUIS.read_text(encoding="utf-8")
+    for aguja, queja in (
+            ("<symbol", "el croquis no arma los `<symbol>` de los vectores"),
+            ('use class="fig"', "`figuraDe` no dibuja los vectores con `<use>`"),
+            ("ES_VECTOR", "el croquis no distingue un vector de un mapa de bits"),
+            ('id="ico-', "los `<symbol>` no llevan un id por icono")):
+        if aguja not in texto:
+            problemas.append(queja)
+
+    # --- 3. Y lo que hay publicado de verdad ---------------------------------
+    # Se mira el archivo, no el código: es lo único que ve el móvil.
+    d = editor.leer_croquis()
+    vectores = [n for n, x in d["propios"].items()
+                if str(x).lstrip().startswith("<svg")]
+    dentro = [n for n, x in d["propios"].items()
+              if str(x).startswith("data:image/svg+xml")]
+    if dentro:
+        problemas.append(
+            f"hay vectores todavía dentro de un `<image>`: {dentro}. Son los "
+            f"que se ven pixelados al acercar en Safari")
+    if not vectores:
+        problemas.append("(no hay ningún vector publicado: la prueba no estaría "
+                         "comprobando nada)")
+    for n in vectores:
+        for bloque in re.findall(r'class="([^"]*)"', str(d["propios"][n])):
+            for clase in bloque.split():
+                if not clase.startswith(n + "-"):
+                    problemas.append(
+                        f"«{n}» tiene una clase sin su nombre delante: «{clase}»."
+                        f" Dos iconos con la misma clase se pisarían los colores")
+
+    # --- 4. El editor sigue trabajando con data URLs -------------------------
+    # Dibuja los iconos en un `<image>`, que necesita una data URL, así que la
+    # conversión va en los dos sentidos: al guardar y al abrir. Si fallara una,
+    # el editor enseñaría huecos o el croquis volvería al `<image>`.
+    suelto = '<svg viewBox="0 0 1 1"><path d="M0 0"/></svg>'
+    if "<svg" not in editor._texto_propios({"prueba": vec.a_data_url(suelto)}):
+        problemas.append("al guardar, un vector se queda como data URL")
+    vuelta = editor.propios_para_editar({"prueba": suelto})
+    if not str(vuelta["prueba"]).startswith("data:image/svg+xml"):
+        problemas.append(
+            "al abrir, un vector que no está en la biblioteca no vuelve como "
+            "data URL: el editor no lo podría dibujar")
+    if v.revisar_propios({"prueba": suelto}):
+        problemas.append("el validador rechaza un vector suelto")
+    if not v.revisar_propios({"prueba": "esto no es un dibujo"}):
+        problemas.append("el validador acepta cualquier texto como icono")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print(f"    {len(vectores)} vectores sueltos en el documento y 1 mapa de "
+          f"bits, cada uno con sus clases propias y sin pisarse")
+    return True
+
+
 def main() -> int:
     pruebas = [
         ("minificado conserva estructura", test_minificado_conserva_estructura),
@@ -3233,6 +3347,8 @@ def main() -> int:
         ("el mapa no se queda en una capa", test_el_mapa_no_se_queda_en_una_capa),
         ("los recursos y el boton del mapa", test_los_recursos_y_el_boton_del_mapa),
         ("los iconos van siempre en vector", test_los_iconos_van_siempre_en_vector),
+        ("los vectores van sueltos en el documento",
+         test_los_vectores_van_sueltos_en_el_documento),
         ("el editor avisa si quedo viejo", test_el_editor_avisa_si_quedo_viejo),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
