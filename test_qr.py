@@ -341,43 +341,60 @@ def test_croquis_zonas_coherentes() -> bool:
     if problemas:
         return False
 
-    # El mapa es un archivo aparte: si no está junto al HTML, la página sale
-    # con el fondo vacío y ni un error en consola.
-    mapa = re.search(r'<image[^>]+href="([^"]+)"', texto)
-    if not mapa:
-        print("    (no se encuentra el <image> con el mapa de fondo)")
-        return False
-
-    # La dirección lleva un `?v=` con el sha1 del propio archivo, para que al
-    # cambiar el arte cambie la dirección y nadie siga viendo la copia vieja.
+    # Los fondos son DOS archivos aparte, y los dos con su `?v=`:
     #
-    # Hace falta de verdad: GitHub Pages sirve la imagen con
+    #   el chico   lo pone el marcado, y es el que se abre siempre
+    #   el grande  lo pone el script, y entra al acercar una zona
+    #
+    # Si no están junto al HTML, la página sale con el fondo vacío y ni un
+    # error en consola.
+    #
+    # Y el `?v=` hace falta de verdad: GitHub Pages sirve la imagen con
     # `Cache-Control: max-age=600`, así que durante diez minutos después de
-    # subir un cambio se sigue viendo el mapa anterior, recargando inclusive.
-    # Y un `?v=` que se queda viejo no da ningún error: solo un mapa que no
-    # cambia, que es justo el fallo que parece «no se subió». Por eso el número
-    # no se escribe a mano y se comprueba aquí.
-    href = mapa.group(1)
-    archivo, _, version = href.partition("?v=")
-    ruta_mapa = Path("plantilla") / archivo
-    if not ruta_mapa.is_file():
-        print(f"    (el mapa {ruta_mapa} no existe junto al HTML)")
+    # subir un cambio se sigue viendo el fondo anterior, recargando inclusive.
+    # Un número que se queda viejo no da ningún error: solo un mapa que no
+    # cambia, que es justo el fallo que parece «no se subió». Por eso no se
+    # escribe a mano y se comprueba aquí.
+    fondos = [("el chico", re.search(r'id="arte"[^>]*href="([^"]+)"', texto)),
+              ("el grande", re.search(r'ARTE_URL = "([^"]+)"', texto))]
+    if not all(m for _, m in fondos):
+        print("    (no se encuentran los dos fondos en el croquis: uno de los")
+        print("     dos no está, o le cambiaron el nombre a su variable)")
+        return False
+    if fondos[0][1].group(1).split("?")[0] == fondos[1][1].group(1).split("?")[0]:
+        print("    (los dos fondos son el mismo archivo: no hay dos tamaños)")
         return False
 
-    sha = hashlib.sha1(ruta_mapa.read_bytes()).hexdigest()[:8]
-    if not version:
-        print(f"    (el <image> no lleva «?v=»: los navegadores seguirán")
-        print(f"     diez minutos con el mapa viejo. Ponle href=\"{archivo}?v={sha}\")")
-        return False
-    if version != sha:
-        print(f"    (cambió rectoria.webp y la dirección sigue con el número de")
-        print(f"     antes: el navegador seguirá enseñando el mapa viejo aunque")
-        print(f"     se recargue. En croquis.html pon href=\"{archivo}?v={sha}\")")
+    resumen = []
+    for cual, m in fondos:
+        archivo, _, version = m.group(1).partition("?v=")
+        ruta = Path("plantilla") / archivo
+        if not ruta.is_file():
+            print(f"    ({cual} apunta a {ruta}, que no existe junto al HTML)")
+            return False
+        sha = hashlib.sha1(ruta.read_bytes()).hexdigest()[:8]
+        if not version:
+            print(f"    ({cual} no lleva «?v=»: los navegadores seguirán diez")
+            print(f"     minutos con el fondo viejo. Ponle «{archivo}?v={sha}»)")
+            return False
+        if version != sha:
+            print(f"    ({cual} cambió y su dirección sigue con el número de")
+            print(f"     antes: el navegador seguirá enseñando el fondo viejo")
+            print(f"     aunque se recargue. Pon «{archivo}?v={sha}»)")
+            return False
+        resumen.append((ruta, ruta.stat().st_size // 1024, version))
+
+    # Y las dos versiones tienen que estar en el orden que espera el croquis:
+    # la que se abre primero TIENE que ser la que menos pesa. Si se cruzaran,
+    # el ahorro se perdería sin que nada avisara.
+    if resumen[0][1] >= resumen[1][1]:
+        print(f"    (el fondo que se abre primero pesa más que el otro: "
+              f"{resumen[0][1]} KB contra {resumen[1][1]} KB, y de eso va el")
+        print(f"     asunto. Cambia cuál pone el marcado y cuál el script)")
         return False
 
-    print(f"    {len(zonas)} zonas y {len(iconos)} iconos "
-          f"({len(propios)} propios), mapa de {ruta_mapa.stat().st_size // 1024} KB"
-          f" (v{version})")
+    print(f"    {len(zonas)} zonas y {len(iconos)} iconos ({len(propios)} propios), "
+          + " y ".join(f"{r.name} {kb} KB (v{v})" for r, kb, v in resumen))
     return True
 
 

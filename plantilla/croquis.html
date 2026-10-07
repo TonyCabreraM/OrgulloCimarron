@@ -41,6 +41,11 @@ body{
    transition:transform .65s cubic-bezier(.22,1,.36,1)}
 /* El mapa es una hoja: un filo tenue y una sombra lo despegan del fondo. */
 #hoja{filter:drop-shadow(0 10px 26px #0a484233)}
+/* La version grande del fondo entra por encima de la chica, y solo cuando ya
+   esta cargada: asi el cambio no se ve. Cambiarle el `href` a una sola imagen
+   dejaria el mapa en blanco mientras llega, que es peor que verlo algo
+   borroso un instante. */
+#arteGrande{opacity:0;transition:opacity .35s ease}
 
 /* Los iconos son los simbolos de punto: banos, primeros auxilios, comida...
    Van encima del mapa y por defecto NO reciben el toque, que sigue siendo de
@@ -446,18 +451,30 @@ body{
    cierra al tocar el mapa -esta pensada para leer dos lineas y seguir- y un
    plano que se esta mirando no deberia irse porque un dedo roce fuera. */
 #vista{position:fixed;inset:0;z-index:10;display:grid;place-items:center;
+       /* Las dos pistas con `minmax(0,1fr)`: sin eso la fila se mide por el
+          contenido, y un `max-height:100%` dentro de una pista que se mide
+          por el contenido se resuelve como `none`. En un movil no se notaba
+          porque la pantalla es mas chica que la imagen; en un monitor, donde
+          la foto de un plano es mas grande que la ventana, se salia por los
+          cuatro lados. */
+       grid-template-columns:minmax(0,1fr);
+       grid-template-rows:minmax(0,1fr);
        padding:18px;background:#0a4842b8;opacity:0;
        transition:opacity .2s ease;pointer-events:none}
 #vista.on{opacity:1;pointer-events:auto}
 #vista[hidden]{display:none}
 #vista img{max-width:100%;max-height:100%;border-radius:14px;
            background:#fff;box-shadow:0 24px 60px #0a484266}
-#cierraVista{position:absolute;top:14px;right:14px;width:42px;height:42px;
-             border:0;border-radius:99px;background:#fff;color:var(--tinta);
-             display:grid;place-content:center;cursor:pointer;
-             box-shadow:0 6px 20px #0a484240}
-#cierraVista:hover{background:var(--lima)}
-#cierraVista svg{width:17px;height:17px;display:block}
+#accionesVista{position:absolute;top:14px;right:14px;display:flex;gap:10px}
+/* Los dos botones de arriba a la derecha: descargar y cerrar. Miden lo mismo y
+   se ven igual, porque son hermanos y ninguno manda sobre el otro. */
+#accionesVista a,#accionesVista button{
+  width:42px;height:42px;border:0;border-radius:99px;background:#fff;
+  color:var(--tinta);display:grid;place-content:center;cursor:pointer;
+  box-shadow:0 6px 20px #0a484240;text-decoration:none;
+  transition:background .2s ease}
+#accionesVista a:hover,#accionesVista button:hover{background:var(--lima)}
+#accionesVista svg{width:17px;height:17px;display:block}
 #selloVentana{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 /* El sello mide siempre lo mismo, y el icono se coloca dentro con un margen
    calculado. El hueco NO lo da un `padding`: lo da el `viewBox`, que el script
@@ -605,21 +622,27 @@ body{
   <g id="m">
     <g id="hoja">
       <rect x="0" y="0" width="1224" height="792" fill="#f3f9ee"/>
-      <!-- El `?v=` es el sha1 del propio webp, en corto. Sirve para lo unico
-           que hace falta: que al cambiar el arte cambie la direccion.
+      <!-- El fondo va en DOS versiones del mismo dibujo, y las dos con su
+           `?v=`, que es el sha1 del archivo en corto.
 
-           Sin el, el navegador y el CDN de GitHub Pages se quedan con la
-           copia vieja y se sigue viendo el mapa de antes. Y no es una teoria:
-           Pages manda `Cache-Control: max-age=600` en la imagen, asi que
-           durante diez minutos despues de subir un cambio se ve el anterior,
-           recargando inclusive. Con la direccion cambiada, no hay nada que
-           reutilizar.
+           El `?v=` sirve para lo unico que hace falta: que al cambiar el arte
+           cambie la direccion. Sin el, el navegador y el CDN de GitHub Pages
+           se quedan con la copia vieja y se sigue viendo el mapa de antes. Y
+           no es una teoria: Pages manda `Cache-Control: max-age=600` en la
+           imagen, asi que durante diez minutos despues de subir un cambio se
+           ve el anterior, recargando inclusive.
 
-           El numero NO se escribe a mano: lo comprueba una prueba contra el
-           sha1 del archivo, porque un numero que se queda viejo no da ningun
-           error, solo un mapa que no cambia. Cuando cambies rectoria.webp hay
-           que actualizarlo, y la prueba dice como. -->
-      <image href="rectoria.webp?v=ff7dd9e5" x="0" y="0" width="1224" height="792"
+           Los dos numeros NO se escriben a mano: los comprueba una prueba
+           contra el sha1 de cada archivo, porque un numero que se queda viejo
+           no da ningun error, solo un mapa que no cambia. Se sacan con:
+
+               python preparar_mapa.py
+
+           El chico es el que se abre siempre y el grande el que entra al
+           acercar; el como y el por que estan en el script, mas abajo. -->
+      <image id="arte" href="rectoria-chico.webp?v=ee715691" x="0" y="0"
+             width="1224" height="792" preserveAspectRatio="none"/>
+      <image id="arteGrande" x="0" y="0" width="1224" height="792"
              preserveAspectRatio="none"/>
       <rect x="1" y="1" width="1222" height="790" fill="none"
             stroke="#b8d4bb" stroke-width="2"/>
@@ -657,12 +680,17 @@ body{
      no se quede en memoria un plano que ya no se mira. -->
 <div id="vista" hidden aria-modal="true" role="dialog">
   <img id="fvista" alt="">
-  <button id="cierraVista" aria-label="Cerrar la vista previa">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2.6" stroke-linecap="round" aria-hidden="true">
-      <path d="M5.5 5.5 18.5 18.5"/><path d="M18.5 5.5 5.5 18.5"/>
-    </svg>
-  </button>
+  <div id="accionesVista">
+    <!-- Solo el boton de cerrar. El de descargar lo arma el script, porque
+         lleva un `href` que solo se sabe cuando se abre la vista: escrito
+         aqui seria un enlace sin destino, y eso el croquis no lo admite. -->
+    <button id="cierraVista" aria-label="Cerrar la vista previa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.6" stroke-linecap="round" aria-hidden="true">
+        <path d="M5.5 5.5 18.5 18.5"/><path d="M18.5 5.5 5.5 18.5"/>
+      </svg>
+    </button>
+  </div>
 </div>
 
 <!-- La ventana que sale al tocar un icono con informacion. Es una sola para
@@ -1198,6 +1226,11 @@ function sel(k) {
   PISTA.textContent = z[3];
   F.classList.add("on");
   encuadra(c[0], c[1], c[2], c[3], 1.14);
+  // Acercar es exactamente el momento en que hace falta el detalle del fondo,
+  // asi que aqui es donde entra la version grande. No hay mas sitios que
+  // acerquen: el mapa se acerca tocando una zona o un boton, y los dos pasan
+  // por aqui.
+  traeLaGrande();
 }
 
 function todo() {
@@ -1411,11 +1444,34 @@ function alPulsarEnlace(e) {
 
 // --- La vista previa ---------------------------------------------------------
 var VISTA_F = document.getElementById("vista"),
-    FVISTA = document.getElementById("fvista");
+    FVISTA = document.getElementById("fvista"),
+    CERRAR_VISTA = document.getElementById("cierraVista"),
+    // Descargar. Se arma aqui y no en el marcado porque lleva un `href` que
+    // solo se sabe al abrir la vista, y un `<a>` sin destino no vale.
+    //
+    // Y es un `<a>` con `download` y no un boton que llame a nada: asi el
+    // navegador hace el trabajo entero -su barra de progreso, su nombre de
+    // archivo-, y funciona aunque el JavaScript falle despues. `download`
+    // solo se obedece en el mismo dominio, y estos archivos lo estan: los
+    // sirve el mismo GitHub Pages que sirve esta pagina.
+    BAJA = document.createElement("a");
+BAJA.id = "bajaVista";
+BAJA.innerHTML = DESCARGA;
+BAJA.setAttribute("download", "");
+BAJA.setAttribute("aria-label", "Descargar la imagen");
+// A la izquierda de cerrar: descargar es lo que se hace a proposito y cerrar
+// lo que se hace al acabar, y el que se pulsa sin querer conviene que sea el
+// de la punta.
+CERRAR_VISTA.parentNode.insertBefore(BAJA, CERRAR_VISTA);
 
 function abreVista(destino) {
-  FVISTA.src = direccionDe(destino);
+  var url = direccionDe(destino);
+  FVISTA.src = url;
   FVISTA.alt = nombreDeRecurso(destino);
+  // El boton de descargar apunta al mismo archivo, con su nombre por delante
+  // para que se guarde con el que tiene y no con el que le ponga el navegador.
+  BAJA.href = url;
+  BAJA.setAttribute("download", nombreDeRecurso(destino));
   VISTA_F.hidden = false;
   // Un fotograma con `hidden` ya quitado antes de la clase, o el navegador no
   // ve el cambio y la vista aparece de golpe sin la transicion.
@@ -1595,14 +1651,82 @@ CH.addEventListener("click", function (e) {
   if (c) sel(+c.dataset.i);
 });
 
+// --- El fondo, en dos tamanos -----------------------------------------------
+// El fondo es el 90 % de lo que se descarga el movil -483 KB- y ocupa 30 MB en
+// memoria al dibujarlo, mas que todo lo demas junto. Por eso hay DOS versiones
+// del mismo dibujo: una de 1600 px que es la que se abre siempre, y otra de
+// 3400 que entra al acercar una zona, que es cuando hace falta el detalle.
+//
+// Medido: en un telefono en vertical el mapa se ve a 375 x 242 px nada mas
+// abrir, o sea la sexta parte de su ancho. Se bajaba y decodificaba la imagen
+// entera -y sus 30 MB- para ensenar eso. Con las dos, el primer pintado baja
+// de 540 KB a unos 230 KB y la memoria de 30 MB a 6,6 MB, y el detalle llega
+// cuando se pide. Quien solo mira el mapa no se baja nunca la grande.
+//
+// Las dos salen del mismo dibujo y con los mismos ajustes -las hace
+// `preparar_mapa.py`-, asi que al cambiar de una a otra no se nota el salto.
+//
+// No se le cambia el `href` a una sola imagen: se ENCIENDE la grande encima
+// cuando ya esta cargada. Cambiarle la direccion a la que se esta viendo deja
+// el mapa en blanco mientras llega, y eso se ve; un fundido de un tercio de
+// segundo, no.
+var ARTE = document.getElementById("arte"),
+    ARTE_GRANDE = document.getElementById("arteGrande"),
+    // El `?v=` de la grande. Lo comprueba una prueba contra el sha1 del
+    // archivo, como el de la chica: un numero viejo no da ningun error, solo
+    // un mapa que no cambia cuando deberia.
+    ARTE_URL = "rectoria.webp?v=ff7dd9e5",
+    ANCHO_CHICO = 1600,
+    pidiendoGrande = false;
+
+function traeLaGrande() {
+  if (pidiendoGrande) return;
+  pidiendoGrande = true;
+  ARTE_GRANDE.setAttribute("href", ARTE_URL);
+  ARTE_GRANDE.addEventListener("load", function () {
+    ARTE_GRANDE.style.opacity = "1";
+    // Y la chica se suelta: debajo ya no se ve, y son 6,6 MB que no hacen
+    // falta para nada. Se espera a que acabe el fundido, o habria un
+    // fotograma sin fondo entre que se suelta una y se ve la otra.
+    setTimeout(function () {
+      ARTE.removeAttribute("href");
+      ARTE.style.display = "none";
+    }, 420);
+  }, {once: true});
+}
+
+// Cuantos pixeles reales ocupa el mapa de ancho con el encuadre de arranque.
+// El <svg> es mas ancho que el mapa -lo que sobra se queda de margen-, asi que
+// hay que quedarse con el menor de los dos lados.
+//
+// Las medidas salen del propio `viewBox` y no de dos numeros escritos aqui:
+// el dia que cambie el lienzo, esto sigue diciendo la verdad solo.
+function anchoNecesario() {
+  var vb = s.viewBox.baseVal;
+  var lado = Math.min(s.clientWidth, s.clientHeight * vb.width / vb.height);
+  return lado * (devicePixelRatio || 1);
+}
+
 // El encuadre depende del alto del encabezado y del panel, que cambian al
 // girar el movil o al cruzar el punto donde el panel pasa a lateral.
 addEventListener("resize", function () { A >= 0 ? sel(A) : todo() });
 // El mapa tarda un poco en cargar: hasta que no este, el <svg> no tiene
 // tamano real y el encuadre saldria mal.
-var IMG = s.querySelector("image");
-if (IMG && !IMG.complete) IMG.addEventListener("load", todo);
+if (!ARTE.complete) ARTE.addEventListener("load", todo);
 todo();
+// Con la pantalla delante se puede medir de verdad cuanto ocupa el mapa, asi
+// que la decision de empezar por la grande se toma aqui y no apurado antes.
+//
+// Se empieza por la chica salvo que ni de lejos llegue: un monitor normal con
+// la pantalla densa necesita mas de 1600 px solo para mirarlo de lejos, y ahi
+// ahorrar esa descarga no tendria sentido -es instantanea- a cambio de verlo
+// borroso.
+//
+// En un movil en vertical, que es de donde venia el problema, el mapa ocupa
+// unos 375 px de ancho: 750 reales en una pantalla densa, menos de la mitad de
+// 1600. Ahi si se empieza por la chica, y la grande espera a que alguien
+// acerque.
+if (anchoNecesario() > ANCHO_CHICO) traeLaGrande();
 </script>
 </body>
 </html>
