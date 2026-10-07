@@ -78,6 +78,43 @@ button{font:inherit;cursor:pointer}
 #reinicia code{background:#fff;border-radius:5px;padding:1px 6px;
                font-family:Consolas,monospace;font-size:12px}
 
+/* --- Las pestañas del panel ------------------------------------------------
+   El panel era una columna larga con siete bloques seguidos, y para encontrar
+   algo habia que recorrerla entera. Ahora se reparte en cuatro pestañas, una
+   por cosa: las zonas, los iconos, los modelos guardados y lo que se va a
+   publicar. Es la idea de Illustrator: a la derecha, solo lo que se esta
+   tocando.
+
+   Los avisos NO van dentro de ninguna. Se quedan arriba, siempre a la vista,
+   porque son lo primero que se mira antes de guardar y esconderlos seria
+   esconderlos justo cuando hacen falta.
+
+   La tira de pestañas se queda pegada arriba al recorrer el panel: con la
+   lista de iconos larga, sin eso habria que subir del todo para cambiar de
+   pestaña. */
+#pestanas{
+  display:flex;gap:3px;padding:9px 10px 0;background:var(--fondo);
+  border-bottom:1px solid var(--linea);position:sticky;top:0;z-index:3;
+}
+.pestana{
+  flex:1;min-width:0;padding:7px 4px 8px;cursor:pointer;font:inherit;
+  font-size:12px;font-weight:650;color:var(--tenue);
+  background:#ffffff9c;border:1px solid var(--linea);border-bottom:none;
+  border-radius:9px 9px 0 0;
+}
+.pestana:hover{color:var(--tinta);background:#fff}
+.pestana.acto{background:var(--panel);color:var(--tinta);font-weight:750}
+.hoja{display:none}
+.hoja.acto{display:block}
+
+/* Una linea de dato: el nombre a la izquierda y el valor a la derecha. Se usa
+   en la pestaña de publicar, que es la que cuenta que hay y que falta. */
+.dato{display:flex;gap:10px;justify-content:space-between;align-items:baseline;
+      font-size:12px;padding:4px 0;border-bottom:1px dashed var(--linea)}
+.dato:last-child{border-bottom:none}
+.dato span{color:var(--tenue);flex:none}
+.dato b{font-weight:650;text-align:right;word-break:break-word}
+
 /* --- cuerpo --- */
 main{display:grid;grid-template-columns:1fr 372px;min-height:0}
 #lienzo{position:relative;overflow:hidden;background:var(--fondo);cursor:crosshair}
@@ -589,6 +626,22 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <div id="avisos"></div>
     </div>
 
+    <!-- Las cuatro pestañas del panel. Cada una lleva su trozo de panel en un
+         `.hoja` hermano, con el mismo `data-panel`: asi no hay que mover nada
+         de sitio al cambiar, solo ensenar y esconder. -->
+    <div id="pestanas" role="tablist" aria-label="Secciones del editor">
+      <button class="pestana" type="button" role="tab"
+              data-panel="zona">Zona</button>
+      <button class="pestana" type="button" role="tab"
+              data-panel="iconos">Iconos</button>
+      <button class="pestana" type="button" role="tab"
+              data-panel="modelos">Modelos</button>
+      <button class="pestana" type="button" role="tab"
+              data-panel="publicar">Publicar</button>
+    </div>
+
+    <div class="hoja" data-panel="zona">
+
     <div class="bloque">
       <h2>Zonas del mapa</h2>
       <div id="listaZonas"></div>
@@ -677,6 +730,9 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <div class="pista" id="pistaIntZona"></div>
       </div>
     </div>
+    </div>
+
+    <div class="hoja" data-panel="iconos">
 
     <div class="bloque">
       <h2>Iconos</h2>
@@ -781,12 +837,6 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       </div>
     </div>
 
-    <div class="bloque" id="bloqueModelos">
-      <h2>Modelos</h2>
-      <div class="pista" style="margin:-4px 0 9px" id="resumenModelos"></div>
-      <div id="listaModelos"></div>
-    </div>
-
     <div class="bloque" id="bloqueAlinear">
       <h2>Alinear los seleccionados</h2>
       <div id="resumenSel" class="pista" style="margin:-4px 0 9px"></div>
@@ -802,6 +852,46 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <div class="fila" style="margin-top:9px">
         <button class="boton" id="btnLimpiarSel">Quitar la selección</button>
       </div>
+    </div>
+    </div>
+
+    <div class="hoja" data-panel="modelos">
+
+    <div class="bloque" id="bloqueModelos">
+      <h2>Modelos</h2>
+      <div class="pista" style="margin:-4px 0 9px" id="resumenModelos"></div>
+      <div id="listaModelos"></div>
+    </div>
+
+    </div>
+
+    <div class="hoja" data-panel="publicar">
+
+    <div class="bloque">
+      <h2>Estado del repositorio</h2>
+      <div id="infoGit"></div>
+    </div>
+
+    <div class="bloque">
+      <h2>Qué hay en el mapa</h2>
+      <div id="infoMapa"></div>
+    </div>
+
+    <div class="bloque">
+      <h2>El croquis publicado</h2>
+      <div class="pista">
+        Es de solo lectura: quien abre el QR solo puede mirarlo. Todo lo que se
+        cambia aquí vive en este equipo hasta que se pulsa <b>Guardar</b> y
+        luego <b>Subir a GitHub</b>. La dirección tarda uno o dos minutos en
+        actualizarse, porque GitHub Pages rehace la página entera y el
+        navegador guarda la copia vieja diez minutos.
+      </div>
+      <div class="fila" style="margin-top:10px">
+        <a class="boton" id="enlacePublicado" target="_blank"
+           rel="noopener">Abrir el croquis publicado</a>
+      </div>
+    </div>
+
     </div>
   </aside>
 </main>
@@ -925,6 +1015,8 @@ var s = document.getElementById("s"),
     avisos = document.getElementById("avisos"),
     mensaje = document.getElementById("mensaje"),
     marcaGit = document.getElementById("marcaGit"),
+    infoGit = document.getElementById("infoGit"),
+    infoMapa = document.getElementById("infoMapa"),
     fNombre = document.getElementById("fNombre"),
     fCorto = document.getElementById("fCorto"),
     fDesc = document.getElementById("fDesc"),
@@ -1494,6 +1586,24 @@ function pintaPanel(mal) {
   // explica que falta en vez de quedarse mudo.
   document.getElementById("btnQuitarVertice").disabled =
     !(sel && sel.tipo === "zona" && E.zonas[sel.i]);
+
+  // El parte de lo que hay en el mapa, que es lo que se va a subir. Va aqui y
+  // no en la pestaña, porque `dibuja` ya se llama cada vez que cambia algo.
+  if (infoMapa) {
+    infoMapa.innerHTML = filasDeDatos([
+      ["Zonas", E.zonas.length],
+      ["Zonas visibles en el mapa", E.zonas.filter(function (z) {
+        var a = (z.length > 4 && z[4]) ? z[4] : {};
+        return !!(a.f || a.l);
+      }).length],
+      ["Zonas con movimiento", E.zonas.filter(function (z) {
+        var a = (z.length > 4 && z[4]) ? z[4] : {};
+        return !!(a.a || a.b);
+      }).length],
+      ["Iconos colocados", E.iconos.length],
+      ["Iconos propios", Object.keys(E.propios || {}).length],
+      ["Modelos guardados", (E.modelos || []).length]]);
+  }
 }
 
 // Le dice a quien edita qué va a pasar al tocar el icono en el mapa, que es
@@ -1770,6 +1880,10 @@ function elige(tipo, i, sumar) {
   // Las marcas se guardan por indice, asi que al borrar un icono quedan
   // corridas y marcan al vecino. Se limpian y se vuelven a poner.
   multi = multi.filter(function (k) { return E.iconos[k] });
+  // El panel se pone en la pestaña de lo que se acaba de elegir: es lo que uno
+  // espera al tocar una zona y no encontrar sus datos, porque el panel se
+  // habia quedado en otra pestaña.
+  if (sel) ponPestana(sel.tipo === "zona" ? "zona" : "iconos");
   dibuja();
   if (tipo === "icono" && i !== undefined)
     listaIconos.querySelector('.icono[data-icono="' + i + '"]')
@@ -2839,6 +2953,41 @@ document.getElementById("btnTodo").addEventListener("click", verTodo);
 document.getElementById("btnMas").addEventListener("click", function () { zoomAlCentro(1 / 1.4) });
 document.getElementById("btnMenos").addEventListener("click", function () { zoomAlCentro(1.4) });
 
+// --- las pestañas del panel -----------------------------------------------
+// Cada boton ensena su `.hoja` y esconde las demas. Se guarda cual esta
+// puesta en el navegador para que al volver a abrir el editor siga donde se
+// dejo: en una tarde de trabajo se entra y se sale muchas veces, y volver
+// siempre a la primera pestaña es un paso que se da de mas.
+//
+// El nombre guardado se comprueba antes de usarlo: si algun dia se renombra
+// una pestaña, lo que quede en el navegador no valdria y el panel se veria
+// vacio sin decir por que. Con la comprobacion, cae en la primera.
+function ponPestana(nombre) {
+  var hay = document.querySelector(
+    '#pestanas .pestana[data-panel="' + nombre + '"]');
+  if (!hay) nombre = "zona";
+  Array.prototype.forEach.call(
+    document.querySelectorAll("#pestanas .pestana"), function (b) {
+      var puesta = b.dataset.panel === nombre;
+      b.classList.toggle("acto", puesta);
+      b.setAttribute("aria-selected", puesta ? "true" : "false");
+      b.tabIndex = puesta ? 0 : -1;
+    });
+  Array.prototype.forEach.call(
+    document.querySelectorAll("#panel .hoja"), function (h) {
+      h.classList.toggle("acto", h.dataset.panel === nombre);
+    });
+  try { localStorage.setItem("editorPestana", nombre) } catch (e) {}
+}
+
+// Una lista de pares nombre/valor, como las filas de la pestaña de publicar.
+function filasDeDatos(pares) {
+  return pares.map(function (p) {
+    return '<div class="dato"><span>' + escapa(String(p[0])) + "</span><b>"
+         + escapa(String(p[1])) + "</b></div>";
+  }).join("");
+}
+
 // --- guardar y subir ------------------------------------------------------
 function guardar() {
   // Un editor viejo no sabe que le falta, asi que no puede guardar: escribiria
@@ -2898,22 +3047,49 @@ document.getElementById("btnSubir").addEventListener("click", function () {
 
 function pintaGit(g) {
   E.git = g || {};
+  var resumen;
   if (!g || !g.hay) {
-    marcaGit.textContent = (g && g.error) || "git no disponible";
+    resumen = (g && g.error) || "git no disponible";
+    marcaGit.textContent = resumen;
     marcaGit.className = "pend";
+  } else {
+    var t = g.rama + " · " + (g.pendientes ? g.pendientes + " archivo(s) por subir" : "todo subido");
+    if (g.sinSubir) t += " · " + g.sinSubir + " commit(s) sin subir";
+    marcaGit.innerHTML = "<b>" + escapa(t) + "</b>";
+    marcaGit.className = g.pendientes || g.sinSubir ? "pend" : "";
+    marcaGit.title = g.detalle || "";
+  }
+  // Y el mismo parte, con mas detalle, en la pestaña de publicar. Es la unica
+  // forma de saber si lo que se ve en el mapa esta subido o solo en el disco.
+  if (!infoGit) return;
+  if (!g || !g.hay) {
+    infoGit.innerHTML = filasDeDatos([["Git", resumen]]);
     return;
   }
-  var t = g.rama + " · " + (g.pendientes ? g.pendientes + " archivo(s) por subir" : "todo subido");
-  if (g.sinSubir) t += " · " + g.sinSubir + " commit(s) sin subir";
-  marcaGit.innerHTML = "<b>" + escapa(t) + "</b>";
-  marcaGit.className = g.pendientes || g.sinSubir ? "pend" : "";
-  marcaGit.title = g.detalle || "";
+  var filas = [
+    ["Rama", g.rama],
+    ["Sin guardar", g.pendientes ? g.pendientes + " archivo(s)" : "nada"],
+    ["Sin subir", g.sinSubir ? g.sinSubir + " commit(s)" : "nada"],
+    ["Bajado de GitHub", g.sinBajar ? g.sinBajar + " commit(s)" : "al día"]];
+  if (g.ultimo) filas.push(["Último cambio subido", g.ultimo]);
+  infoGit.innerHTML = filasDeDatos(filas);
 }
 function recargaGit() {
   fetch("/api/git").then(function (r) { return r.json() }).then(pintaGit).catch(function () {});
 }
 
 // --- arranque -------------------------------------------------------------
+// Las pestañas: el clic cambia de hoja, y la que estaba puesta se recupera del
+// navegador. Se enganchan antes de pedir el estado para que el panel responda
+// desde el primer momento, aunque el servidor tarde.
+Array.prototype.forEach.call(
+  document.querySelectorAll("#pestanas .pestana"), function (b) {
+    b.addEventListener("click", function () { ponPestana(b.dataset.panel) });
+  });
+var pestanaGuardada = null;
+try { pestanaGuardada = localStorage.getItem("editorPestana") } catch (e) {}
+ponPestana(pestanaGuardada || "zona");
+
 fetch("/api/estado").then(function (r) {
   if (!r.ok) throw new Error("el editor respondió " + r.status);
   return r.json();
@@ -2977,6 +3153,11 @@ fetch("/api/estado").then(function (r) {
   fAnimBorde.innerHTML = listaDe(E.animacionesBorde);
   fSentido.innerHTML = listaDe(E.sentidosCamina);
   document.getElementById("commit").value = "Croquis: ";
+  // El enlace al croquis publicado, con la direccion que manda el servidor:
+  // asi la direccion vive en un solo sitio y no hay dos que se separen.
+  if (d.publicado) {
+    document.getElementById("enlacePublicado").href = d.publicado;
+  }
   pintaGit(d.git);
   pintaPaleta();
   verTodo();

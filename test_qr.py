@@ -2665,6 +2665,165 @@ def test_el_editor_avisa_si_quedo_viejo() -> bool:
     return not problemas
 
 
+def test_las_pestanas_del_editor() -> bool:
+    """El panel esta partido en pestañas, y ninguna deja nada fuera.
+
+    El panel era una columna larga con siete bloques seguidos: para encontrar
+    algo habia que recorrerla entera. Ahora son cuatro pestañas, una por cosa.
+    Lo que se puede romper al partir un panel no es el aspecto, es que un
+    bloque se quede sin pestaña: entonces media herramienta desaparece de la
+    vista y nada avisa, porque el HTML sigue ahi.
+    """
+    problemas: list[str] = []
+    edit = EDITOR_HTML.read_text(encoding="utf-8")
+
+    # --- 1. Una pestaña por hoja, y sin repetir ------------------------------
+    pestanas = re.findall(r'class="pestana".*?data-panel="(\w+)"', edit, flags=re.S)
+    hojas = re.findall(r'class="hoja" data-panel="(\w+)"', edit)
+    if len(pestanas) < 2:
+        problemas.append("no hay pestañas en el panel")
+    if len(set(pestanas)) != len(pestanas):
+        problemas.append(f"hay pestañas repetidas: {pestanas}")
+    if pestanas != hojas:
+        problemas.append(
+            f"las pestañas y sus hojas no cuadran: pestañas {pestanas} y hojas "
+            f"{hojas}. Una pestaña sin hoja ensena un panel vacio, y una hoja "
+            f"sin pestaña no se puede abrir")
+
+    # --- 2. Nada se queda fuera de una pestaña -------------------------------
+    # Se parte el archivo por donde empieza cada hoja: trozos[0] es lo de antes
+    # de la primera (los avisos y la tira de pestañas) y el resto, una por
+    # hoja. Un bloque tiene que estar en UNA, y solo en una.
+    trozos = re.split(r'<div class="hoja" data-panel="\w+">', edit)
+    if len(trozos) != len(pestanas) + 1:
+        problemas.append(
+            f"se cuentan {len(trozos) - 1} trozos de panel para {len(pestanas)} "
+            f"pestañas: alguna hoja se abre o se cierra de mas")
+    for id_ in ("listaZonas", "bloqueForm", "paleta", "bloqueIcono",
+                "bloqueAlinear", "bloqueModelos", "infoGit", "infoMapa",
+                "enlacePublicado"):
+        donde = [n for n, t in enumerate(trozos) if f'id="{id_}"' in t]
+        if not donde:
+            problemas.append(f"«{id_}» no esta dentro de ninguna pestaña: "
+                             f"quedaria fuera de la vista")
+        elif len(donde) > 1:
+            problemas.append(f"«{id_}» esta en mas de una pestaña: {donde}")
+
+    # --- 3. Los avisos, fuera de las pestañas --------------------------------
+    # Es lo primero que se mira antes de guardar. Meterlos en una pestaña seria
+    # esconderlos justo cuando hacen falta.
+    if 'id="avisos"' not in trozos[0]:
+        problemas.append(
+            "los avisos tienen que quedar FUERA de las pestañas, siempre a la "
+            "vista: dentro solo se ven si se acierta con la pestaña")
+
+    # --- 4. Se cambia de pestaña, y se recuerda cual --------------------------
+    if "function ponPestana(" not in edit:
+        problemas.append("no existe `ponPestana`: las pestañas no cambiarian")
+    if "dataset.panel === nombre" not in edit:
+        problemas.append("`ponPestana` no marca la pestaña que esta puesta")
+    # El nombre guardado se comprueba antes de usarlo. Si no, al renombrar una
+    # pestaña lo que quede en el navegador no valdria y el panel se veria
+    # vacio, sin decir por que.
+    if "pestana[data-panel=" not in edit:
+        problemas.append(
+            "`ponPestana` no comprueba que la pestaña pedida exista: con un "
+            "nombre viejo guardado en el navegador, el panel saldria vacio")
+    # Y elegir algo en el mapa lleva a la pestaña que lo edita.
+    if "ponPestana(sel.tipo === \"zona\"" not in edit:
+        problemas.append(
+            "elegir una zona o un icono no cambia de pestaña: se toca una zona "
+            "y sus datos pueden estar en una pestaña que no se ve")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print(f"    {len(pestanas)} pestañas ({', '.join(pestanas)}) con sus hojas, "
+          f"los avisos siempre a la vista y los controles en su sitio")
+    return True
+
+
+def test_quitar_vertices_de_una_zona() -> bool:
+    """Se puede quitar una esquina sin tener que adivinar el doble clic.
+
+    Quitar una esquina ya existia, pero SOLO con doble clic encima del punto,
+    y eso no lo descubre nadie. Ahora hay un boton. Lo que hay que vigilar es
+    que sea el mismo camino que el doble clic -dos formas de hacer lo mismo se
+    separan al primer descuido- y que no deje la zona con menos de tres
+    esquinas, que seria un poligono que no se puede dibujar.
+    """
+    problemas = []
+    edit = EDITOR_HTML.read_text(encoding="utf-8")
+
+    # --- 1. El boton existe y esta puesto --------------------------------
+    if 'id="btnQuitarVertice"' not in edit:
+        problemas.append("no hay boton para quitar una esquina")
+    if 'getElementById("btnQuitarVertice")' not in edit:
+        problemas.append("el boton de quitar esquina no esta enganchado")
+    if "function quitaVertice(" not in edit:
+        problemas.append("no existe `quitaVertice`")
+
+    # --- 2. El boton y el doble clic son el MISMO camino ---------------------
+    # Si cada uno borrara por su cuenta, el dia que se cambie una regla la otra
+    # se queda con la vieja, y quitar por el boton haria algo distinto que
+    # quitar con doble clic.
+    doble = re.search(r's\.addEventListener\("dblclick".*?\n\}\);', edit, flags=re.S)
+    if not doble:
+        problemas.append("no se encuentra el manejador del doble clic")
+    else:
+        if "quitaVertice()" not in doble.group(0):
+            problemas.append(
+                "el doble clic no llama a `quitaVertice`: habria dos formas de "
+                "quitar una esquina que se pueden separar")
+        if ".splice(" in doble.group(0):
+            problemas.append("el doble clic quita la esquina por su cuenta, en "
+                             "vez de usar el mismo camino que el boton")
+    # Y que solo haya UN sitio donde se quita de verdad.
+    if edit.count(".splice(verticeSel, 1)") != 1:
+        problemas.append("la esquina se quita en mas de un sitio, o en ninguno")
+
+    # --- 3. Nunca por debajo de tres ----------------------------------------
+    if "menos de 3 esquinas" not in edit:
+        problemas.append(
+            "quitar una esquina no avisa del minimo: una zona de dos esquinas "
+            "no es un poligono y el croquis la dibujaria mal")
+    # Y hay que marcar antes: son dos acciones a proposito, porque quitar una
+    # esquina no se puede deshacer.
+    if "Pulsa antes la esquina" not in edit:
+        problemas.append("no se pide marcar la esquina antes de quitarla")
+
+    # --- 4. La marca ---------------------------------------------------------
+    if "var verticeSel = null" not in edit:
+        problemas.append("no se lleva la cuenta de que esquina esta marcada")
+    # La marca es un indice DENTRO de una zona: al cambiar de zona hay que
+    # soltarla, o quitar se llevaria por delante un punto de otra.
+    if "verticeSel = null;" not in edit:
+        problemas.append("la marca de la esquina no se limpia nunca")
+    if edit.count("verticeSel = null;") < 3:
+        problemas.append(
+            "la marca solo se limpia en un sitio: hay que soltarla al cambiar "
+            "de zona y al meter una esquina nueva, porque los indices se corren")
+    if '"acto"' not in edit:
+        problemas.append("la esquina marcada no se distingue de las demas")
+    if "#gZonas circle.acto{" not in edit:
+        problemas.append("no hay regla para la esquina marcada")
+    # Y va DESPUES de `.mal`: en una zona con problemas hay que poder ver cual
+    # esta marcada, y el filo rojo lo llevan todas las esquinas por igual.
+    if "#gZonas circle.mal{" in edit and \
+            edit.index("#gZonas circle.mal{") > edit.index("#gZonas circle.acto{"):
+        problemas.append("la regla de la esquina marcada va antes que la de "
+                         "los problemas, y el rojo la taparia")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    boton y doble clic comparten el mismo camino, con la esquina "
+          "marcada a la vista y el minimo de 3 esquinas respetado")
+    return True
+
+
 def main() -> int:
     pruebas = [
         ("minificado conserva estructura", test_minificado_conserva_estructura),
@@ -2684,6 +2843,8 @@ def main() -> int:
         ("las animaciones se paran cuando no se ven",
          test_las_animaciones_se_paran_cuando_no_se_ven),
         ("los adornos de las zonas", test_los_adornos_de_las_zonas),
+        ("las pestanas del editor", test_las_pestanas_del_editor),
+        ("quitar vertices de una zona", test_quitar_vertices_de_una_zona),
         ("el editor avisa si quedo viejo", test_el_editor_avisa_si_quedo_viejo),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
