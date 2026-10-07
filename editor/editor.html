@@ -1651,10 +1651,6 @@ function pintaPanel(mal) {
       ["De esos, en vector", Object.keys(E.propios || {}).filter(function (n) {
         return String(E.propios[n]).indexOf("data:image/svg+xml") === 0;
       }).length],
-      ["Vectores que pasan a PNG", E.publicados
-        ? (E.publicados.cambiados.length + " de "
-           + Object.keys(E.propios || {}).length)
-        : "se ve al guardar"],
       ["Modelos guardados", (E.modelos || []).length]]);
   }
 }
@@ -3144,86 +3140,33 @@ function filasDeDatos(pares) {
   }).join("");
 }
 
-// --- los iconos propios, tal como se publican -------------------------
-// El croquis lleva los iconos dentro. Un vector se convierte a PNG antes de
-// publicarlo, pero SOLO cuando el PNG de verdad pesa menos.
+// --- los iconos propios ----------------------------------------------------
+// Los iconos van al croquis TAL COMO ESTAN: un vector se queda en vector.
 //
-// Cuesta creerlo y por eso esta medido: con los iconos que hay ahora mismo en
-// el mapa, en vector ocupan 75 KB y pasados a PNG de 256 px serian 271 KB. El
-// SVG de un dibujo plano pesa poquisimo, y el PNG de un dibujo con curvas
-// suaves y bordes rebajados pesa mucho, porque cada borde suavizado es una
-// orla de colores distintos que el formato PNG no sabe resumir.
+// Se probo a convertirlos a PNG al publicarlos -el movil dibuja un mapa de
+// bits mas barato que un vector- y no compensa por dos motivos:
 //
-// Asi que no se convierte a ciegas: se prueba y se queda lo que ocupe menos.
-// Hoy no cambiaria ninguno; el dia que se suba un dibujo complicado -el de las
-// carpas son 96 KB de SVG- se convierte solo, y el croquis no engorda.
+//   - Se ven peor. El vector se amplia con el zoom y el PNG se pixela, y el
+//     mapa se acerca hasta tres veces. Un icono borroso en el movil se nota
+//     mucho mas que unos milisegundos de dibujo.
 //
-// La conversion la hace el navegador y no el servidor por un motivo de peso:
-// un SVG lo entiende el motor que lo dibuja, y el servidor no lleva uno. Los
-// conversores sueltos que hay para Python no aplican el CSS de dentro del SVG
-// -estos dibujos lo llevan, y buena parte del color sale de ahi-, asi que
-// devolvian siluetas negras. Se probo.
-var LADO_PNG = 256;
-
-function svgAPng(uri) {
-  return new Promise(function (listo) {
-    var img = new Image();
-    img.onload = function () {
-      try {
-        var c = document.createElement("canvas");
-        c.width = LADO_PNG; c.height = LADO_PNG;
-        var x = c.getContext("2d");
-        // Encajado en el cuadro y centrado, que es como lo dibuja el croquis:
-        // el `<image>` lleva los dos lados iguales y la proporcion por defecto.
-        var r = (img.naturalWidth / img.naturalHeight) || 1;
-        var w = LADO_PNG, h = LADO_PNG;
-        if (r > 1) h = Math.round(LADO_PNG / r);
-        else w = Math.round(LADO_PNG * r);
-        x.drawImage(img, (LADO_PNG - w) / 2, (LADO_PNG - h) / 2, w, h);
-        listo(c.toDataURL("image/png"));
-      } catch (e) {
-        // Un SVG que llame a algo de fuera deja el lienzo marcado y el
-        // navegador no deja leerlo. Se queda en vector, que es lo que habia.
-        listo(null);
-      }
-    };
-    img.onerror = function () { listo(null) };
-    img.src = uri;
-  });
-}
-
-async function propiosParaPublicar() {
-  var salida = {}, cambiados = [], ahorro = 0;
-  for (var nombre of Object.keys(E.propios)) {
-    var uri = E.propios[nombre];
-    if (uri.indexOf("data:image/svg+xml") !== 0) {
-      salida[nombre] = uri;
-      continue;
-    }
-    var png = await svgAPng(uri);
-    if (png && png.length < uri.length) {
-      salida[nombre] = png;
-      cambiados.push(nombre);
-      ahorro += uri.length - png.length;
-    } else {
-      salida[nombre] = uri;
-    }
-  }
-  E.publicados = {propios: salida, cambiados: cambiados, ahorro: ahorro};
-  return E.publicados;
-}
-
-// Que paso con los vectores, para poder decirlo al guardar.
-function resumenPng() {
-  var r = E.publicados;
-  if (!r) return "";
-  var total = Object.keys(E.propios).length;
-  if (!r.cambiados.length) {
-    return "Ningún vector pasó a PNG: con estos dibujos el PNG pesa más. ";
-  }
-  return r.cambiados.length + " de " + total + " vectores pasaron a PNG y "
-       + "ahorran " + Math.round(r.ahorro / 1024) + " KB. ";
-}
+//   - Pesa mas, y sobre todo PESA MAS AL DESCARGARLO. Los 17 vectores del
+//     mapa ocupan 75 KB en vector y 271 KB en PNG de 256 px, porque el PNG de
+//     un dibujo con bordes rebajados es una orla de colores que el formato no
+//     sabe resumir. Y hay una trampa que no se ve en el tamano del archivo:
+//     GitHub Pages manda gzip, y el texto de un SVG se comprime mientras que
+//     la base64 de un PNG no. Medido: el croquis entero pasa de 55 KB a
+//     100 KB de descarga.
+//
+// El peso no estaba ahi de todas formas: los iconos son 30 KB comprimidos
+// entre los dieciocho, y el fondo son 483 KB. Por eso lo que se optimizo fue
+// el fondo -en dos tamanos, ver croquis.html- y no los iconos.
+//
+// Si algun dia se quiere volver a probar, el unico sitio donde se puede hacer
+// bien es el navegador: un SVG lo entiende el motor que lo dibuja, y los
+// conversores sueltos de Python no aplican el CSS de dentro del SVG -estos
+// dibujos lo llevan, y buena parte del color sale de ahi-, asi que devuelven
+// siluetas negras. Se probo tambien.
 
 // --- guardar y subir ------------------------------------------------------
 function guardar() {
@@ -3242,12 +3185,10 @@ function guardar() {
     aviso("Hay zonas o iconos con problemas. Mira la lista de la derecha.", "mal");
     return Promise.resolve(false);
   }
-  return propiosParaPublicar().then(function (r) {
-    return fetch("/api/guardar", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({zonas: E.zonas, iconos: E.iconos,
-                            propios: r.propios, enlace: E.enlace})
-    });
+  return fetch("/api/guardar", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({zonas: E.zonas, iconos: E.iconos,
+                          propios: E.propios, enlace: E.enlace})
   }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
     .then(function (par) {
       var ok = par[0], d = par[1];
@@ -3255,7 +3196,7 @@ function guardar() {
       sucio = false;
       aviso("Guardado: " + d.guardado.zonas + " zonas, " + d.guardado.iconos
             + " iconos y " + d.guardado.propios + " iconos propios. "
-            + resumenPng() + "Ya se puede subir.", "ok");
+            + "Ya se puede subir.", "ok");
       dibuja();
       pintaGit(d.git);
       return true;

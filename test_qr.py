@@ -3032,69 +3032,85 @@ def test_los_recursos_y_el_boton_del_mapa() -> bool:
     return True
 
 
-def test_los_vectores_se_publican_como_pesen_menos() -> bool:
-    """Un vector pasa a PNG al publicarlo, pero solo si el PNG pesa menos.
+def test_los_iconos_van_siempre_en_vector() -> bool:
+    """Los iconos propios se publican TAL COMO ESTAN: un vector, en vector.
 
-    La idea de partida era convertir todo a PNG para que el movil trabaje menos
-    al dibujarlo. Medido, sale al reves: los 17 vectores del mapa ocupan 75 KB
-    y pasados a PNG de 256 px serian 271 KB, porque el SVG de un dibujo plano
-    pesa poquisimo y el PNG de un dibujo con curvas suaves pesa mucho -cada
-    borde rebajado es una orla de colores que el formato no sabe resumir-.
-    Convertirlos a ciegas haria el croquis TRES VECES mas pesado, que es justo
-    lo contrario de lo que se buscaba.
+    Se probó a convertirlos a PNG al publicarlos —el móvil dibuja un mapa de
+    bits más barato que un vector— y no compensa:
 
-    Asi que se prueba y se queda lo que ocupe menos, icono por icono. Con los
-    de ahora no cambia ninguno; el dia que se suba un dibujo complicado se
-    convierte solo.
+      - **Se ven peor.** El vector se amplía con el zoom y el PNG se pixela, y
+        el mapa se acerca hasta tres veces. Un icono borroso se nota mucho más
+        que unos milisegundos de dibujo.
+
+      - **Pesa más, sobre todo al descargarlo.** Los 17 vectores del mapa
+        ocupan 75 KB en vector y 271 KB en PNG de 256 px. Y hay una trampa que
+        no se ve en el tamaño del archivo: GitHub Pages manda gzip, y el texto
+        de un SVG sí se comprime mientras que la base64 de un PNG no. Medido:
+        el croquis entero pasa de 55 KB a 100 KB de descarga.
+
+    El peso no estaba ahí de todas formas —los iconos son 30 KB comprimidos
+    entre los dieciocho—, así que lo que se optimizó fue el fondo, que son
+    483 KB y va en dos tamaños.
+
+    Lo que se vigila aquí es que no vuelva, porque es justo el tipo de cosa que
+    se cuela de nuevo con la excusa de optimizar.
     """
     problemas = []
     edit = EDITOR_HTML.read_text(encoding="utf-8")
+    fuente = Path("editor/editor.py").read_text(encoding="utf-8")
 
-    # --- 1. La conversion existe ------------------------------------------
+    # --- 1. No queda ninguna conversión ------------------------------------
     for aguja, queja in (
-            ("function svgAPng(", "no hay forma de convertir un SVG a PNG"),
-            ("async function propiosParaPublicar()",
-             "no hay nada que prepare los iconos antes de publicarlos"),
-            ("propiosParaPublicar()", "`guardar` no convierte antes de mandar"),
-            ("data:image/svg+xml", "la conversion no mira de que tipo es cada icono")):
-        if aguja not in edit:
+            ("svgAPng", "quedó la función que convierte un SVG a PNG"),
+            ("propiosParaPublicar",
+             "quedó el paso que convertía los iconos antes de publicar"),
+            ("LADO_PNG", "quedó el tamaño al que se rasterizaba"),
+            ("toDataURL", "queda algo que saca un PNG de un lienzo")):
+        if aguja in edit:
             problemas.append(queja)
-
-    # --- 2. Y solo cambia cuando de verdad pesa menos ---------------------
-    # Es LA comprobacion de esta prueba. Sin ella, la conversion se hace
-    # siempre y el croquis engorda en vez de adelgazar.
-    i = edit.find("async function propiosParaPublicar(")
-    if i < 0:
-        problemas.append("(no se encuentra propiosParaPublicar)")
-    else:
-        cuerpo = edit[i:edit.find("\n}", i)]
-        if "png.length < uri.length" not in cuerpo:
-            problemas.append(
-                "no se compara el peso antes de cambiar: convertir a ciegas "
-                "haria el croquis tres veces mas pesado con estos dibujos")
-        if "cambiados.push" not in cuerpo:
-            problemas.append(
-                "no se lleva la cuenta de lo que se convirtio: no se podria "
-                "decir al guardar, y el cambio seria invisible")
-
-    # --- 3. El editor vuelve a trabajar con el archivo original -----------
-    # Si no, un icono subido en SVG volveria al editor convertido a PNG, se
-    # perderia el original y el croquis publicado pasaria a ser la fuente.
-    if "def propios_para_editar(" not in \
-            Path("editor/editor.py").read_text(encoding="utf-8"):
-        problemas.append("el servidor no devuelve los iconos como se editan")
-    if "propios_para_editar(datos[\"propios\"])" not in \
-            Path("editor/editor.py").read_text(encoding="utf-8"):
+    # Y el guardado manda los iconos tal cual, sin tocarlos por el camino.
+    i = edit.find("function guardar(")
+    cuerpo = edit[i:edit.find("\n}", i)] if i >= 0 else ""
+    if "propios: E.propios" not in cuerpo:
         problemas.append(
-            "`/api/estado` manda los iconos tal como estan en el croquis, ya "
-            "convertidos: se perderia el vector original al volver a editar")
+            "el guardado no manda los iconos tal como están: algo los toca "
+            "por el camino")
+
+    # --- 2. Ningún vector acaba publicado como PNG --------------------------
+    # Es la comprobación que de verdad importa, y se hace sobre el archivo
+    # publicado y no sobre el código: si un icono está en el croquis como PNG
+    # y en la biblioteca como SVG, es que se rasterizó por el camino.
+    d = editor.leer_croquis()
+    for nombre, uri in sorted(d["propios"].items()):
+        if not str(uri).startswith("data:image/png"):
+            continue
+        ruta = editor._archivo_de(nombre)
+        if ruta is not None and ruta.suffix.lower() == ".svg":
+            problemas.append(
+                f"«{nombre}» está publicado como PNG y en la biblioteca es un "
+                f"SVG: se rasterizó un vector, y se verá pixelado al acercar")
+
+    # --- 3. Y el editor siempre trabaja con el original ---------------------
+    # `propios_para_editar` devuelve el archivo de la biblioteca aunque el
+    # croquis lleve otra cosa: es lo que garantiza que un vector siga siendo
+    # vector también al volver a editarlo, en vez de que el croquis publicado
+    # pase a ser la fuente.
+    if "def propios_para_editar(" not in fuente:
+        problemas.append("el servidor no devuelve los iconos desde la biblioteca")
+    elif "read_bytes()" not in fuente[fuente.find("def propios_para_editar("):
+                                     fuente.find("def _ajustes_de(")]:
+        problemas.append(
+            "`propios_para_editar` no lee el archivo de la biblioteca: "
+            "devolvería lo que haya en el croquis, ya convertido")
 
     for p in problemas:
         print(f"    {p}")
     if problemas:
         return False
-    print("    el vector se convierte a PNG solo cuando pesa menos, y el "
-          "editor sigue trabajando con el archivo original")
+    en_vector = sum(1 for u in d["propios"].values()
+                    if str(u).startswith("data:image/svg+xml"))
+    print(f"    {len(d['propios'])} iconos propios, {en_vector} en vector, "
+          f"y ninguno se rasteriza al publicar")
     return True
 
 
@@ -3121,8 +3137,7 @@ def main() -> int:
         ("quitar vertices de una zona", test_quitar_vertices_de_una_zona),
         ("la ventana solo con el zoom", test_la_ventana_solo_se_abre_con_el_mapa_acercado),
         ("los recursos y el boton del mapa", test_los_recursos_y_el_boton_del_mapa),
-        ("los vectores se publican como pesen menos",
-         test_los_vectores_se_publican_como_pesen_menos),
+        ("los iconos van siempre en vector", test_los_iconos_van_siempre_en_vector),
         ("el editor avisa si quedo viejo", test_el_editor_avisa_si_quedo_viejo),
         ("el croquis publicado no edita nada", test_el_croquis_publicado_no_edita_nada),
         ("el editor rechaza lo ajeno", test_el_editor_rechaza_lo_ajeno),
