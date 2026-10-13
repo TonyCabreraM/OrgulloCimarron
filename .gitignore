@@ -19,9 +19,15 @@ editor/modelos.json
 # push falla ENTERO, no solo ese archivo. Ademas, al quedarse en el historial
 # para siempre, un archivo asi engorda el repositorio en cada version.
 #
-# Lo importante esta fuera: lo que se publica es plantilla/rectoria.webp, y git
-# guarda todas sus versiones. La fuente vive en el equipo de quien edita.
+# Lo importante esta fuera: lo que se publica es plantilla/rectoria-chico.webp,
+# y git guarda todas sus versiones. La fuente vive en el equipo de quien edita.
 #
 # Las otras versiones del mapa (.ai de 9 MB) SI estan en el repositorio: caben
-# y son la fuente de lo que se ve. Esta no cabe.
+# y son la fuente de lo que se ve.
+#
+# FINAL3.ai es la que se usa AHORA, y son 97 MB. Entra por los pelos, pero un
+# archivo de ese tamano en el historial son 97 MB que se pagan para siempre en
+# cada clon, por un archivo que solo se usa para generar cuatro imagenes que si
+# estan en git. Se queda fuera, como CroquisSolo.ai.
 CroquisSolo.ai
+Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL3.ai

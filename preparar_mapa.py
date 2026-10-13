@@ -1,86 +1,80 @@
 # -*- coding: utf-8 -*-
 """
-Prepara el fondo y los banners del croquis a partir del poster exportado.
+Prepara el fondo y los banners del croquis a partir del póster de Illustrator.
 
 USO
 ---
     python preparar_mapa.py
-    python preparar_mapa.py otra/ruta/poster.webp
+    python preparar_mapa.py otra/ruta/poster.ai
 
 Saca, en plantilla/:
 
-    rectoria-chico.webp  el mapa
-    banner-arriba.webp   con el titulo
+    rectoria-chico.webp  el mapa a 1224 px   la que se abre siempre
+    rectoria.webp        el mapa a 3400 px   la que entra al acercar
+    banner-arriba.webp   con el título
     banner-abajo.webp    solo el dibujo
-
-Y, SOLO si el poster tiene mas de 1224 px de ancho, tambien:
-
-    rectoria.webp        el mapa a 3400 px, la que entra al acercar
 
 DE DONDE SALE
 -------------
-De «Logos/Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL2.webp», que es el
-poster entero a 1224 x 1224 px, en tres franjas:
+De «Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL3.ai», que es el póster
+completo: 1224 x 1224 pt, en tres franjas.
 
-    y     0 a  216   banner de arriba, con el titulo
+    y     0 a  216   banner de arriba, con el título
     y   216 to 1008   el mapa
     y  1008 to 1224   banner de abajo, solo el dibujo
 
-El .ai del poster NO se usa para el fondo, y es a proposito. El .ai trae una
-version del mapa con mas cosas dentro -tiras de puestos numeradas y pictogramas de
-aseos, agua, primeros auxilios y parquimetro ya dibujados- y en el croquis eso se
-ve MAL: el croquis pinta encima sus propios cuarenta y seis iconos, y en los
-mismos sitios, con lo que cada icono salia dos veces. El .webp de Logos/ es la
-misma composicion sin ese detalle, que es la que va bien.
+Un `.ai` de Illustrator es un PDF por dentro, así que se abre con PyMuPDF y se
+rasteriza a la resolución que se le pida. De ahí que los cuatro archivos salgan
+nítidos y no pixelados: el origen es vectorial, así que 3400 px son 3400 px
+reales y no un estiramiento.
+
+EL FINAL3 Y NO EL FINAL2
+------------------------
+El FINAL2, y el `.webp` que se exportó de él, NO valen para el fondo. Traen el
+mapa con los pictogramas dentro -aseos, agua, primeros auxilios, parquímetro y
+las tiras de puestos numeradas ya dibujados- y el croquis pinta encima sus
+propios cuarenta y seis iconos, en los mismos sitios. Con lo que cada icono se
+veía dos veces, y desde el archivo parece que todo está bien: sólo se nota en la
+pantalla.
+
+Se comprobó contando, no a ojo: los píxeles azules de las tiras en el mapa del
+FINAL3 son 0.
+
+LA RESOLUCION
+-------------
+El fondo son dos tamaños porque es el 90 % de lo que baja el móvil: la chica,
+para verlo entero al abrir, y la grande, para el detalle al acercar. Los banners
+son UNA sola versión porque no cambian con el zoom -se van con el mapa entero-, así
+que nunca hace falta una mayor que la que está en pantalla.
 
 QUE NO SE MUEVA NI UN ICONO
 ---------------------------
-Las diez zonas y los cuarenta y seis iconos estan escritos a coordenadas fijas
-contra el fondo anterior, asi que el mapa tiene que caer donde estaba. Y se
-comprobo, no se supongo: correlacion normalizada entre el fondo viejo
-y este, con el mapa colocado en cada posicion posible:
+Las diez zonas y los cuarenta y seis iconos están escritos a coordenadas fijas
+contra el fondo anterior, así que el mapa tiene que caer donde estaba. Y se
+comprobó, no se supuso: correlación normalizada contra el fondo viejo publicado,
+con el mapa colocado en cada posición:
 
-    dy=-2   0.8427
-    dy=-1   0.9781   <-- aqui
-    dy= 0   0.9222
-    dy=+1   0.7707
+    dy=-2   0.8307
+    dy=-1   0.9778   <-- aquí
+    dy= 0   0.9186
+    dy=+1   0.7564
 
-Un pico claro en -1, y muy alto: 0.9781 es practicamente el mismo dibujo. Con el
-.ai, que si traia detalle nuevo, la mejor correlacion era 0.9054.
+Un pico claro en -1, y alto: 0.9778 es prácticamente el mismo dibujo.
 
-UN PIXEL, Y LA FRANJA QUE QUEDA
+UN PÍXEL, Y LA FRANJA QUE QUEDA
 -------------------------------
-Al subir el mapa un pixel queda libre una fila de abajo. Se rellena con el color
-que ya tiene el dibujo en su ultima fila, y no con uno escrito aqui: para que el
-relleno sea del color del arte aunque el diseno cambie de fondo otro dia.
+Al subir el mapa un píxel queda libre una fila de abajo. Se rellena con el color
+que ya tiene el dibujo en su última fila, no con uno escrito aquí: para que el
+relleno sea del color del arte aunque el diseño cambie de fondo otro día.
 
-LO DE LAS DOS VERSIONES
------------------------
-El fondo era el 90 % de lo que se baja el movil y se sacaba en dos versiones
-porque el origen era vectorial y se podia renderizar a 3400 px. Ese origen era el
-.ai, que ya no se usa para el fondo. El poster de Logos/ es un WebP de 1224 px.
+El desplazamiento va en puntos del `.ai` y se multiplica por la escala de cada
+salida, para que sea el mismo en las dos versiones y no 1 px en la chica y 3 en
+la grande.
 
-ASI QUE NO HAY VERSION EN ALTA, Y ESTO LO DICE
------------------------------------------------
-Este script no inventa una. Si el poster tiene mas de 1224 px de ancho, saca
-ademas la version grande y todo sigue como antes. Si no la tiene, lo dice y solo
-saca una, sin rellenar con una copia repetida: ampliar una imagen de 1224 a 3400
-y guardarla como si fuera otra es gastar 400 KB para que se vea peor.
-
-Con una sola version, el croquis apunta las dos al MISMO archivo, y el navegador
-lo pide una vez. En cuanto haya un export de mas resolucion, este script lo
-detecta, saca las dos, y no hay que tocar el croquis.
-
-SI ALGUNA VEZ SE PUEDE MAS RESOLUCION
--------------------------------------
-Exporta el poster a mas de 1224 px de ancho y guardalo con el mismo nombre. Las
-coordenadas de las tres franjas se calculan con la escala del poster, asi que se
-acomoda solo.
-
-El numero de `?v=` de cada archivo lo imprime esto al final, y hay que copiarlo
-en plantilla/croquis.html. No se escribe a mano porque un numero que se queda
-viejo no da ningun error: solo un mapa que no cambia, que es justo el fallo que
-parece «no se subio».
+El `?v=` de cada archivo lo imprime esto al final, y hay que copiarlo en
+plantilla/croquis.html. No se escribe a mano porque un número que se queda viejo
+no da ningún error: sólo un mapa que no cambia, que es justo el fallo que parece
+«no se subió».
 """
 from __future__ import annotations
 
@@ -88,41 +82,37 @@ import hashlib
 import sys
 from pathlib import Path
 
+import pymupdf
 from PIL import Image, ImageStat
 
 RAIZ = Path(__file__).resolve().parent
 PLANTILLA = RAIZ / "plantilla"
-ORIGEN = RAIZ / "Logos" / "Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL2.webp"
+ORIGEN = RAIZ / "Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL3.ai"
 
-# El poster de referencia es de 1224 de ancho, en tres franjas de 216, 792 y 216.
-ANCHO = 1224
+# El póster es de 1224 de ancho y son tres franjas de 216, 792 y 216.
+ANCHO = 1224.0
 ALTO_MAPA = 792
 ALTO_BANNER = 216
 Y_MAPA = 216
 Y_ABAJO = ANCHO - ALTO_BANNER          # 1008
 
-# El mapa va un pixel arriba de donde lo pone el poster. Medido; la tabla esta en
-# el docstring. El signo es el que dice que en el poster el mapa esta un pixel mas
+# El mapa va un píxel arriba de donde lo pone el póster. Medido; la tabla está en
+# el docstring. El signo es el que dice que en el póster el mapa está un píxel más
 # abajo que en el croquis.
 DESPLAZE_Y = -1
 
-# Ancho de cada version del fondo. El primero es el que se abre siempre; el
-# segundo solo se saca si el origen da para mas.
+# Ancho de cada versión del fondo. El chico es el que se abre siempre.
 ANCHO_CHICO = 1224
 ANCHO_GRANDE = 3400
 CALIDAD = 88
 
 
 def color_del_borde(imagen: Image.Image) -> tuple:
-    """El color de la ultima fila, que es papel liso.
+    """El color de la última fila, que es papel liso.
 
     Se usa para rellenar el borde que deja el desplazamiento. Sale del dibujo y
-    no de aqui, para que el relleno sea del color del arte aunque el diseno
-    cambie de fondo otro dia.
-
-    Se pasa a RGB antes de medir porque la imagen trae alfa, y `median` devuelve
-    una lista por banda: con cuatro bandas eso seria una lista de listas, que no
-    es un color.
+    no de aquí, para que el relleno sea del color del arte aunque el diseño
+    cambie de fondo otro día.
     """
     rgb = imagen.convert("RGB")
     return tuple(int(valor) for valor in ImageStat.Stat(
@@ -134,23 +124,23 @@ def coloca(imagen: Image.Image, desplaza: int) -> Image.Image:
     """La franja, movida lo que le toca y con el borde libre relleno."""
     if not desplaza:
         return imagen
-    lienzo = Image.new("RGBA", imagen.size, color_del_borde(imagen) + (255,))
+    lienzo = Image.new("RGB", imagen.size, color_del_borde(imagen))
     lienzo.paste(imagen, (0, desplaza))
     return lienzo
 
 
-def reescala(imagen: Image.Image, ancho: int) -> Image.Image:
-    """La franja al ancho pedido, con el desplazamiento.scalado con ella.
+def franja(pagina, ancho: int, banda: float, alto: int, desplaza: int = 0) -> Image.Image:
+    """Una franja del póster a ese ancho en píxeles, colocada donde le toca.
 
-    El desplazamiento va en pixeles del croquis, no de la imagen: multiplicado
-    por la escala, para que siga siendo el mismo entre las dos versiones y no un
-    pixel en la chica y tres en la grande.
+    `desplaza` va en puntos del `.ai`, no en píxeles: se multiplica por la escala
+    de esta salida, para que el desplazamiento sea el mismo en las dos versiones
+    del fondo y no 1 px en la chica y 3 en la grande.
     """
-    if imagen.width == ancho:
-        return coloca(imagen, DESPLAZE_Y)
-    escala = ancho / imagen.width
-    destino = imagen.resize((ancho, round(imagen.height * escala)), Image.LANCZOS)
-    return coloca(destino, round(DESPLAZE_Y / imagen.width * ancho))
+    z = ancho / ANCHO
+    pix = pagina.get_pixmap(matrix=pymupdf.Matrix(z, z), alpha=False,
+                            clip=pymupdf.Rect(0, banda, ANCHO, banda + alto))
+    arte = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    return coloca(arte, round(desplaza * z))
 
 
 def guarda(imagen: Image.Image, nombre: str) -> tuple:
@@ -166,69 +156,53 @@ def main() -> int:
     origen = RAIZ / sys.argv[1] if len(sys.argv) > 1 else ORIGEN
     if not origen.is_file():
         print(f"No encuentro {origen.name}.\n")
-        print("Deberia ser el poster exportado, en Logos/. Se saca así:")
-        print("  exportar el poster a WebP de 1224 px de ancho (o más) y")
-        print("  guardarlo ahí con el nombre del poster.")
-        print("\nO se le pasa la ruta:  python preparar_mapa.py otra.webp")
+        print("Es un .ai, y NO esta en git -pesa demasiado-. Solo existe en el")
+        print("equipo donde se dibuja. Copialo a la raiz del proyecto, o pasale")
+        print("su ruta:  python preparar_mapa.py otra/ruta/poster.ai")
         return 1
 
-    poster = Image.open(origen)
-    if poster.mode != "RGBA":
-        poster = poster.convert("RGBA")
-    escala = poster.width / ANCHO
-    print(f"{origen.name}: {origen.stat().st_size // 1024} KB, "
-          f"{poster.width} x {poster.height} px")
-    if abs(poster.height - poster.width) > 1:
-        print(f"OJO: el poster debería ser cuadrado y mide "
-              f"{poster.width} x {poster.height}. Las tres franjas se sacan "
-              f"por la ALTURA\n     y el mapa se coloca con un desplazamiento "
-              f"medido: si el alto cambió, las dos cosas\n     ya no valen.")
+    doc = pymupdf.open(origen)
+    pagina = doc[0]
+    alto_esperado = ALTO_MAPA + 2 * ALTO_BANNER
+    print(f"{origen.name}: {origen.stat().st_size / 1e6:.0f} MB, "
+          f"{pagina.rect.width:.0f} x {pagina.rect.height:.0f} pt")
+    if (abs(pagina.rect.width - ANCHO) > 1
+            or abs(pagina.rect.height - alto_esperado) > 1):
+        print(f"OJO: el poster deberia medir {ANCHO:.0f} x {alto_esperado:.0f} pt "
+              f"y mide {pagina.rect.width:.0f} x {pagina.rect.height:.0f}.\n"
+              f"     Las tres franjas se sacan por la ALTURA y el mapa se "
+              f"coloca con un\n     desplazamiento medido contra el fondo "
+              f"anterior: si el poster ha cambiado de alto, las dos\n"
+              f"     cosas ya no valen y los iconos quedarian donde no toca.")
 
-    y_mapa = round(Y_MAPA * escala)
-    y_abajo = round(Y_ABAJO * escala)
-    banda_mapa = poster.crop((0, y_mapa, poster.width, y_mapa + round(ALTO_MAPA * escala)))
     salidas = []
+
+    # --- El fondo, en dos versiones ------------------------------------------
     print()
+    for nombre, ancho in (("rectoria-chico.webp", ANCHO_CHICO),
+                          ("rectoria.webp", ANCHO_GRANDE)):
+        foto = franja(pagina, ancho, Y_MAPA, ALTO_MAPA, DESPLAZE_Y)
+        salidas.append(guarda(foto, nombre))
+        mb = foto.width * foto.height * 4 / 1e6
+        print(f"  {nombre:<22} {foto.width}x{foto.height} px  "
+              f"{salidas[-1][3] // 1024:>4} KB  {mb:>4.1f} MB en memoria")
 
-    # --- El fondo ------------------------------------------------------------
-    if poster.width > ANCHO_CHICO:
-        for nombre, ancho in (("rectoria-chico.webp", ANCHO_CHICO),
-                              ("rectoria.webp", min(ANCHO_GRANDE, poster.width))):
-            foto = reescala(banda_mapa, ancho)
-            salidas.append(guarda(foto, nombre))
-            mb = foto.width * foto.height * 4 / 1e6
-            print(f"  {nombre:<22} {foto.width}x{foto.height} px  "
-                  f"{salidas[-1][3] // 1024:>4} KB  {mb:>4.1f} MB en memoria")
-    else:
-        salidas.append(guarda(reescala(banda_mapa, ANCHO_CHICO), "rectoria-chico.webp"))
-        print(f"  rectoria-chico.webp     {salidas[-1][1]}x{salidas[-1][2]} px  "
-              f"{salidas[-1][3] // 1024:>4} KB")
-        print(f"""
-  AVISO: el poster es de {poster.width} px, que es justo el ancho del croquis.
-  NO hay versión en alta, y no se va a fingir: repetirla a {ANCHO_GRANDE} serían
-  ~400 KB para que se vea peor, no mejor.
-
-  En croquis.html, ARTE_URL tiene que apuntar a rectoria-chico.webp y no a
-  rectoria.webp: si no, se pediría un archivo que este script ya no saca. Con las
-  dos en el mismo, el navegador lo pide una vez.
-
-  Si algún día se exporta el poster a más de {ANCHO_CHICO} px de ancho, con el
-  mismo nombre, esto lo detecta solo y vuelve a sacar las dos. No hay que tocar
-  el croquis.""")
-
-    # --- Los banners ---------------------------------------------------------
+    # --- Los banners, en una sola version cada uno ---------------------------
     print()
-    for nombre, y in (("banner-arriba", 0), ("banner-abajo", y_abajo)):
-        alto = round(ALTO_BANNER * escala)
-        salidas.append(guarda(poster.crop((0, y, poster.width, y + alto)),
-                              nombre + ".webp"))
-        print(f"  {nombre + '.webp':<22} {salidas[-1][1]}x{salidas[-1][2]} px  "
+    for nombre, y in (("banner-arriba", 0), ("banner-abajo", Y_ABAJO)):
+        foto = franja(pagina, ANCHO_CHICO, y, ALTO_BANNER)
+        salidas.append(guarda(foto, nombre + ".webp"))
+        print(f"  {(nombre + '.webp'):<22} {foto.width}x{foto.height} px  "
               f"{salidas[-1][3] // 1024:>4} KB")
 
+    doc.close()
     print(f"""
-  El mapa se ha colocado en y={DESPLAZE_Y:+d}, medido, para que los cuarenta y
-  seis iconos y las diez zonas sigan encima de lo de siempre. La tabla de dónde
-  sale ese número está en el docstring de este script.""")
+  El mapa se ha colocado en y={DESPLAZE_Y:+d}, medido, para que los cuarenta y seis
+  iconos y las diez zonas sigan encima de lo de siempre. La tabla de dónde sale
+  ese número está en el docstring de este script.
+
+  ARTE_URL en croquis.html tiene que apuntar a rectoria.webp, la grande: ahora
+  sí hay version en alta, porque el origen es vectorial.""")
 
     print("\nCopia estos numeros en plantilla/croquis.html:")
     for nombre, _, _, _, sha in salidas:

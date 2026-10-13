@@ -283,21 +283,26 @@ byte.
 ## Estructura
 
 ```
-Logos/ ... FINAL2.webp  El póster exportado, 1224 x 1224 px. De aquí sale TODO:
-                        el fondo (banda y=216) y los dos banners
-Logos/ ... FINAL2.svg   El mismo póster en vector. NO se usa: no hay renderizador
-                        de SVG en este equipo y PyMuFD lo dibuja en negro
+Mapa ... FINAL3.ai  El póster original, 1224 x 1224 pt. De aquí sale TODO: el
+                      fondo (banda y=216) y los dos banners. NO está en git
+                      (son 97 MB, al límite de GitHub)
+Logos/ ... FINAL2.webp  El póster exportado a WebP, 1224 px. Ya no se usa: se
+                        quedó sin el detalle de los pictogramas, que es lo que
+                        lo hace inservible
+Logos/ ... FINAL2.svg   El mismo póster en SVG. No se usa: aquí no hay
+                        renderizador de SVG y PyMuPDF lo dibuja en negro
 CroquisSolo.ai          El mapa anterior, 1224 x 792 pt. Ya no se publica; se queda
                         porque es contra el que se midió el desplazamiento del nuevo
 generar_qr.py      Generador: mide, empaqueta y dibuja el QR
-preparar_mapa.py   Saca el fondo y los banners del poster exportado
+preparar_mapa.py   Saca el fondo y los banners del póster de Illustrator
 test_qr.py         Pruebas del ciclo completo
 d.html             Página base, solo para el modo servidor
 plantilla/
   croquis.html     El mapa interactivo (este es el que se publica)
-  rectoria-chico.webp  El fondo: 1224 x 792 px, 114 KB
-  banner-arriba.webp   El banner del título, 1224 x 216 px, 23 KB
-  banner-abajo.webp    El banner de abajo, 1224 x 216 px, 15 KB
+  rectoria-chico.webp  El fondo: 1224 x 792 px, 111 KB
+  rectoria.webp        El fondo en alta: 3400 x 2200 px, 448 KB
+  banner-arriba.webp   El banner del título, 1224 x 216 px, 33 KB
+  banner-abajo.webp    El banner de abajo, 1224 x 216 px, 22 KB
   plantilla.html   Documento de ejemplo
   planos/          Croquis del campus descargados (referencia vieja)
 editor/            Herramienta de edición. NO se publica.
@@ -361,17 +366,25 @@ manipular la del mapa.
 
 ### El arte viene de Illustrator
 
-El original se edita en Illustrator, pero **lo que se publica no sale del `.ai`**
-sino del póster exportado: `Logos/Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL2.webp`,
-de 1224 × 1224 px. `preparar_mapa.py` lo abre con PIL y saca las tres franjas.
+El original es `Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL3.ai`: el póster
+completo, 1224 × 1224 pt. Un `.ai` de Illustrator es un PDF por dentro, así que
+se abre con PyMuPDF y se rasteriza a la resolución que se le pida. **De ahí que
+los cuatro archivos salgan nítidos: el origen es vectorial, así que 3400 px son
+3400 px de verdad y no un estiramiento.**
 
-**Y no es lo mismo que el `.ai`, a propósito.** El `.ai` tiene una versión del mapa
-con más cosas dentro —tiras de puestos numeradas y pictogramas de aseos, agua,
-primeros auxilios y parquímetro ya dibujados— y en el croquis eso se ve mal: el
-croquis pinta encima sus propios cuarenta y seis iconos, y en los mismos sitios,
-así que **cada icono salía dos veces**. El poster exportado es la misma
-composición sin ese detalle, que es la que va bien. Ese error costó dos
-iteraciones: primero se cogió el mapa del `.ai`, y salió con todo duplicado.
+**Ojo con qué versión del póster vale.** El FINAL2 y el `.webp` que se exportó de
+él **no valen para el fondo**: traen el mapa con los pictogramas dentro —aseos,
+agua, primeros auxilios, parquímetro y las tiras de puestos numeradas ya
+dibujados— y el croquis pinta encima sus propios cuarenta y seis iconos, en los
+mismos sitios. **Cada icono se veía dos veces**, y desde el archivo parece que todo
+está bien: sólo se nota en la pantalla.
+
+Eso costó dos iteraciones. La primera cogió el mapa del `.ai` y salió con todo
+duplicado. La segunda usó el `.webp` de `Logos/`, que era la versión limpia pero
+estaba exportada a 1224 px, así que no había versión en alta y todo se veía algo
+blando. **El FINAL3 es la solución de las dos cosas: el `.ai` limpio, que se
+rasteriza a cualquier resolución.** Comprobado contando, no a ojo: los píxeles
+azules de las tiras de puestos en su mapa son 0.
 
 **El poster son tres franjas:** el banner con el título de `y=0` a `216`, el mapa
 de `216` a `1008`, y el banner de abajo de `1008` a `1224`. En el croquis el mapa
@@ -381,14 +394,14 @@ de `792` a `1008`.
 **Y el mapa va desplazado un píxel.** En el poster está un píxel más abajo que en
 el dibujo anterior, así que `preparar_mapa.py` lo sube uno (`DESPLAZE_Y`). Está
 medido, no supuesto: es el desplazamiento que más correlación da entre los dos
-dibujos, y con este poster el pico es clarísimo y muy alto:
+dibujos, y el pico es clarísimo:
 
 | desplazamiento | correlación con el fondo anterior |
 | --- | --- |
-| −2 | 0.8427 |
-| **−1** | **0.9781** |
-| 0 | 0.9222 |
-| +1 | 0.7707 |
+| −2 | 0.8307 |
+| **−1** | **0.9778** |
+| 0 | 0.9186 |
+| +1 | 0.7564 |
 
 Sin ese píxel, las diez zonas y los cuarenta y seis iconos —que están escritos
 en coordenadas fijas— quedarían desplazados respecto al dibujo. Y no se vería en
@@ -396,28 +409,30 @@ la imagen: se vería cuando alguien toca y le abre otra zona.
 
 | | |
 | --- | --- |
-| Tamaño del poster | 1224 × 1224 px |
+| Tamaño del poster | 1224 × 1224 pt |
 | Mapa dentro | banda de y=216 a y=1008, colocada en y=−1 |
-| Fondo del dibujo | gris neutro `#e9e9e9` (antes verde pálido `#f3f9ee`) |
-| Ráster que se publica | `plantilla/rectoria-chico.webp`, 1224 × 792 px, 114 KB |
+| Fondo del dibujo | gris neutro `#e5e7e7` (antes verde pálido `#f3f9ee`) |
+| Rásteres que se publican | `rectoria-chico.webp` 1224 × 792 px, 111 KB · `rectoria.webp` 3400 × 2200 px, 448 KB |
 
-**No hay versión en alta del fondo, y es a conciencia.** Se sacaba en dos
-versiones, de 1224 y de 3400 px, porque el origen era vectorial. Ahora el origen
-es un WebP de 1224 px, y ampliarlo a 3400 serían ~400 KB para que se vea peor. En
-un móvil —que es de donde se lee el QR— el mapa se ve a 375 px y con densidad 3
-salen 1125: el 1224 de origen llega de sobra. En un monitor grande, al ampliar,
-se verá algo más blando que antes. Si algún día hay un export del poster a más de
-1224 px, `preparar_mapa.py` lo detecta solo y vuelve a sacar las dos versiones, y
-no hay que tocar el croquis.
+**Por qué el fondo va en dos tamaños y los banners en uno.** El fondo es el 90 %
+de lo que baja el móvil: la chica, para verlo entero al abrir, y la grande, para
+el detalle al acercar. Los banners son uno solo porque no cambian con el zoom —se
+van con el mapa entero—, así que nunca hace falta uno mayor que el que está en
+pantalla.
 
-**Por qué no el SVG.** El SVG del poster está en `Logos/` y es vectorial, así que
-permitiría cualquier resolución, pero **no hay forma de dibujarlo aquí**: no está
-Inkscape ni rsvg ni ImageMagick, y PyMuPDF lo renderiza con el mapa entero en
-negro. Si algún día se instala un renderizador de SVG, el SVG es la fuente
-preferible.
+**El `.ai` no está en git.** Son 97 MB, y GitHub rechaza por encima de 100 MiB:
+entra por los pelos y, si un día crece un poco, el push falla entero y no solo ese
+archivo. Son 97 MB que además quedarían en el historial para siempre. Vive en el
+equipo donde se dibuja, y lo que se publica son los WebP, que sí están en git con
+todas sus versiones.
+
+**Por qué no el SVG de `Logos/`.** Es vectorial y permitiría cualquier resolución,
+pero **no hay forma de dibujarlo aquí**: no está Inkscape ni rsvg ni ImageMagick, y
+PyMuPDF lo renderiza con el mapa entero en negro. El `.ai` es un PDF por dentro y
+sí se sabe dibujar, con lo que el SVG sobra mientras no haya un renderizador.
 
 **Al cambiar el arte hay que subir el `?v=` de la dirección.** En `croquis.html`
-la imagen se pide como `rectoria-chico.webp?v=11b50494`, y ese número es el sha1 del
+la imagen se pide como `rectoria-chico.webp?v=5335ecf9`, y ese número es el sha1 del
 propio archivo en corto.
 
 Hace falta de verdad: GitHub Pages sirve la imagen con

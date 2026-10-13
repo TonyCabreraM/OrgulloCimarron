@@ -694,19 +694,19 @@ body{
          debajo. -->
     <image id="bannerArriba" x="0" y="-216" width="1224" height="216"
            preserveAspectRatio="none"
-           href="banner-arriba.webp?v=a81e2e40"/>
+           href="banner-arriba.webp?v=0033723e"/>
     <g id="hoja">
-      <!-- El papel de debajo del dibujo es el gris del propio arte, #e9e9e9.
+      <!-- El papel de debajo del dibujo es el gris del propio arte, #e5e7e7.
            Antes era #f3f9ee, el verde palido del dibujo anterior: el fondo del
            poster es un gris neutro y no un verde. Solo se ve un instante, mientras
            la imagen baja, pero si no cuadrara se veria un cambio de color al
-           abrir el mapa.
+           abrir el mapa. Una prueba lo compara contra la imagen de verdad.
 
            El `--papel` de la hoja CSS sigue siendo verde palido a proposito, y no
            es contradiccion: ese lo usa la ventana de informacion, que es una
            tarjeta que flota ENCIMA del mapa, y sobre un fondo gris se separa
            mucho mejor en verde. -->
-      <rect x="0" y="0" width="1224" height="792" fill="#e9e9e9"/>
+      <rect x="0" y="0" width="1224" height="792" fill="#e5e7e7"/>
       <!-- El fondo va en DOS versiones del mismo dibujo, y las dos con su
            `?v=`, que es el sha1 del archivo en corto.
 
@@ -725,18 +725,12 @@ body{
 
            El chico es el que se abre siempre y el grande el que entra al
            acercar; el como y el por que estan en el script, mas abajo. -->
-      <image id="arte" href="rectoria-chico.webp?v=11b50494" x="0" y="0"
+      <image id="arte" href="rectoria-chico.webp?v=5335ecf9" x="0" y="0"
              width="1224" height="792" preserveAspectRatio="none"/>
-      <!-- `arteGrande` es la MISMA imagen que `arte`, y no un descuido.
-           El fondo se sacaba en dos versiones, de 1224 y de 3400 px, porque el
-           origen era un .ai y se podia renderizar a cualquier tamano. Ahora el
-           origen es el poster exportado, que es de 1224 px, y no hay mas que
-           sacar: ampliarlo a 3400 seria gastar 400 KB para que se vea peor.
-
-           Con las dos en el mismo archivo el navegador lo pide una vez y el
-           fundido no se nota, porque es la misma imagen. En cuanto haya un
-           export del poster de mas de 1224 px, `preparar_mapa.py` lo detecta y
-           vuelve a sacar las dos: esto no hay que tocarlo. -->
+      <!-- El fondo entra en DOS versiones, como antes, porque ahora el origen
+           vuelve a ser vectorial (el .ai del poster) y se rasteriza a 3400 px sin
+           pixelarse. `arteGrande` es la que entra al acercar una zona, que es
+           cuando hace falta el detalle. -->
       <image id="arteGrande" x="0" y="0" width="1224" height="792"
              preserveAspectRatio="none"/>
       <rect x="1" y="1" width="1222" height="790" fill="none"
@@ -756,7 +750,7 @@ body{
          completa. -->
     <image id="bannerAbajo" x="0" y="792" width="1224" height="216"
            preserveAspectRatio="none"
-           href="banner-abajo.webp?v=229742e8"/>
+           href="banner-abajo.webp?v=4a7db9f9"/>
   </g>
 </svg>
 
@@ -2002,7 +1996,7 @@ var ARTE = document.getElementById("arte"),
     // El `?v=` de la grande. Lo comprueba una prueba contra el sha1 del
     // archivo, como el de la chica: un numero viejo no da ningun error, solo
     // un mapa que no cambia cuando deberia.
-    ARTE_URL = "rectoria-chico.webp?v=11b50494",
+    ARTE_URL = "rectoria.webp?v=85445477",
     ANCHO_CHICO = 1600,
     pidiendoGrande = false;
 
