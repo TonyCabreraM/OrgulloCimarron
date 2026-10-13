@@ -5,15 +5,19 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Mapa · Día del Orgullo Cimarrón 2026</title>
 <style>
-/* El arte es el mapa que se hizo en Illustrator. Este archivo solo lo hace
-   interactivo, asi que la paleta sale del propio mapa: el crema del papel
-   #f3f9ee, el verde del pasto #179e68, el verde claro #80c458 y el verde
-   profundo de los contornos #0a4842.
+/* El arte es el poster que se hizo en Illustrator. Este archivo solo lo hace
+   interactivo, asi que la paleta sale del propio dibujo: el verde del pasto
+   #179e68, el verde claro #80c458 y el verde profundo de los contornos #0a4842.
 
-   El fondo de la pagina va un punto mas verde que el papel del mapa
-   (#dfeada frente a #f3f9ee) a proposito: asi se ve donde acaba la hoja y
-   los margenes del mapa no se confunden con la pantalla. La reticula de
-   puntos remata los margenes en las pantallas anchas. */
+   OJO CON EL FONDO DEL MAPA. El dibujo del poster tiene un gris neutro de papel,
+   #e8e8e8, no el verde palido que tenia el anterior. Asi que `--papel` ya NO es
+   el fondo del mapa: es el verde palido de la tarjeta de informacion, que flota
+   ENCIMA del mapa y sobre un fondo gris se separa mucho mejor en verde. El
+   papel del mapa de verdad es el del `<rect>` de la hoja, y es #e8e8e8.
+
+   El fondo de la pagina va un punto mas verde que esa tarjeta
+   (#dfeada frente a #f3f9ee) a proposito: asi el borde del panel se ve contra
+   el mapa. La reticula de puntos remata los margenes en las pantallas anchas. */
 :root{
   --papel:#f3f9ee; --fondo:#dfeada; --tinta:#0a4842; --pasto:#179e68;
   --lima:#80c458; --crema:#d6edce; --texto:#0d3b34; --tenue:#4d6d64; --borde:#b8d4bb;
@@ -692,7 +696,17 @@ body{
            preserveAspectRatio="none"
            href="banner-arriba-chico.webp?v=729b7f5c"/>
     <g id="hoja">
-      <rect x="0" y="0" width="1224" height="792" fill="#f3f9ee"/>
+      <!-- El papel de debajo del dibujo es el gris del propio arte, #e8e8e8.
+           Antes era #f3f9ee, el verde palido del dibujo anterior: el fondo del
+           poster es un gris neutro y no un verde. Solo se ve un instante, mientras
+           la imagen baja, pero si no cuadrara se veria un cambio de color al
+           abrir el mapa.
+
+           El `--papel` de la hoja CSS sigue siendo verde palido a proposito, y no
+           es contradiccion: ese lo usa la ventana de informacion, que es una
+           tarjeta que flota ENCIMA del mapa, y sobre un fondo gris se separa
+           mucho mejor en verde. -->
+      <rect x="0" y="0" width="1224" height="792" fill="#e8e8e8"/>
       <!-- El fondo va en DOS versiones del mismo dibujo, y las dos con su
            `?v=`, que es el sha1 del archivo en corto.
 
@@ -711,7 +725,7 @@ body{
 
            El chico es el que se abre siempre y el grande el que entra al
            acercar; el como y el por que estan en el script, mas abajo. -->
-      <image id="arte" href="rectoria-chico.webp?v=ee715691" x="0" y="0"
+      <image id="arte" href="rectoria-chico.webp?v=859a0b5d" x="0" y="0"
              width="1224" height="792" preserveAspectRatio="none"/>
       <image id="arteGrande" x="0" y="0" width="1224" height="792"
              preserveAspectRatio="none"/>
@@ -1978,7 +1992,7 @@ var ARTE = document.getElementById("arte"),
     // El `?v=` de la grande. Lo comprueba una prueba contra el sha1 del
     // archivo, como el de la chica: un numero viejo no da ningun error, solo
     // un mapa que no cambia cuando deberia.
-    ARTE_URL = "rectoria.webp?v=ff7dd9e5",
+    ARTE_URL = "rectoria.webp?v=888fd13a",
     ANCHO_CHICO = 1600,
     pidiendoGrande = false;
 

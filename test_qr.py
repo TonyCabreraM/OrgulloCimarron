@@ -3675,10 +3675,30 @@ def test_los_banners_estan_en_su_sitio() -> bool:
     # --- 5. Y que el mapa no se haya movido de sitio -----------------------
     # El fondo y el filo siguen en 0,0 y miden 1224 x 792. Si esto cambia, el
     # mapa se ha desplazado y las zonas se han quedado donde estaban antes.
-    if not re.search(r'<rect x="0" y="0" width="1224" height="792"', texto):
+    hoja = re.search(r'<rect x="0" y="0" width="1224" height="792"'
+                     r' fill="(#[0-9a-fA-F]{6})"', texto)
+    if not hoja:
         problemas.append(
             "la hoja del mapa ya no mide 1224 x 792 en 0,0: el mapa se ha "
             "movido y las diez zonas se han quedado en el sitio viejo")
+    else:
+        # Y que ese papel sea EL DEL ARTE, no el de antes. Este rect se ve un
+        # instante mientras la imagen baja, asi que si no coincide con el dibujo
+        # se ve un cambio de color al abrir el mapa. Pasó: al cambiar el arte del
+        # poster, que paso de verde palido a gris neutro, el rect se quedo en el
+        # verde y el mapa aparecia claro y luego gris.
+        fondo = CROQUIS.parent / "rectoria-chico.webp"
+        if not fondo.is_file():
+            problemas.append("(no esta rectoria-chico.webp, no se puede comparar)")
+        else:
+            with Image.open(fondo) as imagen:
+                esquina = imagen.convert("RGB").getpixel((4, 4))
+            del_arte = "#%02x%02x%02x" % esquina
+            if hoja.group(1).lower() != del_arte:
+                problemas.append(
+                    f"la hoja del mapa se pinta de {hoja.group(1)} pero el "
+                    f"fondo del arte es {del_arte}: se ve un cambio de color al "
+                    f"abrir el mapa, mientras la imagen baja")
 
     for p in problemas:
         print(f"    {p}")

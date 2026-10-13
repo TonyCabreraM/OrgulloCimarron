@@ -283,8 +283,10 @@ byte.
 ## Estructura
 
 ```
-CroquisSolo.ai   Arte del mapa, 1224 x 792 pt. De aqui sale el fondo
-Mapa ... FINAL2.ai  El póster entero, 1224 x 1224 pt. De aqui salen los banners
+Mapa ... FINAL2.ai  El póster entero, 1224 x 1224 pt. De aquí sale TODO: el fondo
+                      (banda y=216) y los dos banners
+CroquisSolo.ai      El mapa anterior, 1224 x 792 pt. Ya no se publica; se queda
+                      porque es contra el que se midió el desplazamiento del nuevo
 generar_qr.py      Generador: mide, empaqueta y dibuja el QR
 preparar_mapa.py   Saca el fondo y los banners del .ai, en dos tamaños
 test_qr.py         Pruebas del ciclo completo
@@ -357,14 +359,28 @@ manipular la del mapa.
 
 ### El arte viene de Illustrator
 
-El original es `Mapa Dia del Orgullo Cimarron 2026 VERSION 2.ai`, en la raíz
+El original es `Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL2.ai`, en la raíz
 del repo. Un `.ai` de Illustrator es un PDF por dentro, así que se abre con
-PyMuPDF y se convierte a ráster:
+PyMuPDF y se convierte a ráster.
+
+**La página es el póster entero, 1224 × 1224 pt, no solo el mapa.** Son tres
+franjas: el banner con el título de `y=0` a `216`, el mapa de `216` a `1008`, y el
+banner de abajo de `1008` a `1224`. En el croquis el mapa se publica de `0` a
+`792` y los banners se colocan alrededor, de `-216` a `0` y de `792` a `1008`.
+
+**Y el mapa va desplazado un píxel.** En el poster está un píxel más abajo que en
+el dibujo anterior, así que `preparar_mapa.py` lo sube uno (`DESPLAZE_Y`). Está
+medido, no supuesto: es el desplazamiento que más correlación da entre los dos
+dibujos (0,9054 con −1 frente a 0,8539 sin mover), y el resultado publicado
+correlaciona 0,9276 con el fondo anterior. Sin eso, las diez zonas y los
+cuarenta y seis iconos — que están escritos en coordenadas fijas — quedarían
+desplazados respecto al dibujo.
 
 | | |
 | --- | --- |
-| Tamaño de página | 1224 × 792 pt (432 × 279 mm), una sola página |
-| Dibujos vectoriales | 142 443, unos 1 037 150 segmentos |
+| Tamaño de página | 1224 × 1224 pt, una sola página |
+| Mapa dentro | banda de y=216 a y=1008, colocada en y=−1 |
+| Fondo del dibujo | gris neutro `#e8e8e8` (antes verde pálido `#f3f9ee`) |
 | Ráster que se publica | `plantilla/rectoria.webp`, 3400 × 2200 px, ~0.50 MB |
 
 **Por qué un WebP y no el SVG.** Exportar el `.ai` a SVG da ~45 MB: el 73% del
