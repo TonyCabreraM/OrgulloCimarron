@@ -1142,32 +1142,59 @@ def test_las_animaciones_se_paran_cuando_no_se_ven() -> bool:
     texto = CROQUIS.read_text(encoding="utf-8")
     problemas = []
 
-    # --- 1. La regla que las para -------------------------------------------
-    regla = re.search(r"#m\.frenado \.pausa,\s*\n#m \.pausa\.fuera\{([^}]*)\}",
-                      texto)
-    if not regla:
-        problemas.append(
-            "no existe la regla que para las animaciones (`#m.frenado .pausa` y "
-            "`#m .pausa.fuera`): el mapa volveria a animar 58 cosas aunque no "
-            "se vea ninguna")
-    else:
-        cuerpo = regla.group(1).replace(" ", "")
-        if "animation-play-state:paused" not in cuerpo:
+    # --- 1. Las reglas que las para ------------------------------------------
+    # Son dos y van juntas en una sola linea, pero se comprueban por separado.
+    #
+    # La de «fuera» lleva `#m.acercado` delante A PROPOSITO y no es un descuido:
+    # en iOS el IntersectionObserver dice que no hay nada en pantalla ni con el
+    # mapa entero a la vista, y sin esa condicion las 44 animaciones se quedan
+    # pausadas siempre. Medido con `plantilla/diagnostico.html`: 54 de 56
+    # marcados «fuera», 0 animaciones corriendo, 44 pausadas.
+    #
+    # Sin `acercado` no se pierde nada, porque en la vista normal se ve el mapa
+    # entero y no hay nada fuera que ahorrar.
+    reglas = {
+        "el freno": r"#m\.frenado \.pausa\{([^}]*)\}",
+        "lo que esta fuera": r"#m\.acercado \.pausa\.fuera\{([^}]*)\}",
+    }
+    cuerpos = {}
+    for nombre, patron in reglas.items():
+        hallada = re.search(patron, texto)
+        if not hallada:
             problemas.append(
-                f"la regla de parar no usa `animation-play-state:paused`: {cuerpo}")
+                f"no existe la regla que para las animaciones por {nombre} "
+                f"(`{patron}`): el mapa volveria a animar 58 cosas aunque no se "
+                "vea ninguna")
+            continue
+        cuerpos[nombre] = hallada.group(1).replace(" ", "")
+        if "animation-play-state:paused" not in cuerpos[nombre]:
+            problemas.append(
+                f"la regla que para por {nombre} no usa "
+                f"`animation-play-state:paused`: {cuerpos[nombre]}")
         # Parar NO es quitar. Quitar la animacion la reinicia desde el
         # principio, y al reanudar el elemento daria un salto.
-        if re.search(r"animation:\s*none", cuerpo):
+        if re.search(r"animation:\s*none", cuerpos[nombre]):
             problemas.append(
-                "la regla de parar quita la animacion (`animation:none`) en vez "
-                "de pausarla: al reanudar daria un salto al principio")
+                f"la regla que para por {nombre} quita la animacion "
+                "(`animation:none`) en vez de pausarla: al reanudar daria un "
+                "salto al principio")
 
-        # La regla tiene que ir DESPUES de las que dan animacion a cada clase.
-        # Las dos tienen la misma fuerza, asi que decide el orden: puesta antes,
-        # las de las zonas la pisaban y el mapa seguia animandose durante el
-        # zoom aunque los iconos ya estuvieran parados. Es un fallo que no da
+    # Y que lo de «fuera» NO se aplique con el mapa entero delante.
+    if re.search(r"#m \.pausa\.fuera\{", texto):
+        problemas.append(
+            "la regla de lo que esta fuera se aplica sin `#m.acercado`: en iOS "
+            "el IntersectionObserver dice que no hay nada a la vista y apaga las "
+            "44 animaciones con el mapa entero en pantalla")
+
+    if cuerpos:
+        # Las reglas tienen que ir DESPUES de las que dan animacion a cada
+        # clase. Las dos tienen la misma fuerza, asi que decide el orden: puesta
+        # antes, las de las zonas la pisaban y el mapa seguia animandose durante
+        # el zoom aunque los iconos ya estuvieran parados. Es un fallo que no da
         # ningun error, solo un telefono que se sigue trabando.
-        puesto = texto.find("#m.frenado .pausa")
+        puesto = min(texto.find(r) for r in ("#m.frenado .pausa",
+                                             "#m.acercado .pausa.fuera")
+                     if texto.find(r) >= 0)
         for cual in ("#zonas .g.za-late", "#zonas .g.zb-camina",
                      "#iconos .an.late", "#iconos .an.viento"):
             if cual in texto and texto.find(cual) > puesto:
@@ -1381,6 +1408,30 @@ def test_el_freno_se_suelta_siempre() -> bool:
         elif 0 <= donde_observa < bloque.find("requestAnimationFrame"):
             problemas.append(
                 "el `IntersectionObserver` observa antes de `requestAnimationFrame`")
+
+        # --- Y el cortocircuito, que es lo que de verdad lo arregla ----------
+        # En iOS el observador no falla en un elemento: falla en bloque, dice
+        # que no hay nada en pantalla con el mapa entero delante. Esperar un
+        # fotograma no lo arregla - ya se probó y no sirvio -, porque su
+        # respuesta sigue siendo falsa, solo que un fotograma mas tarde.
+        #
+        # Lo que lo arregla es negarse a creerselo cuando dice que CASI TODO
+        # esta fuera. Sin esto, ampliar una zona en iOS volveria a apagar las
+        # animaciones, porque con el mapa ampliado la regla de «fuera» si
+        # aplica.
+        for falta, que in (("observerRoto",
+                            "el cortocircuito que detecta al observador roto"),
+                           (".9", "el umbral del cortocircuito"),
+                           ("disconnect",
+                            "el corte del observador cuando esta roto"),
+                           ('classList.remove("fuera")',
+                            "la limpieza de «fuera» cuando el observador esta roto")):
+            if falta not in bloque:
+                problemas.append(
+                    f"el `IntersectionObserver` no tiene {que}: en iOS dice que "
+                    "no hay nada en pantalla y apagaria todas las animaciones "
+                    "también con el mapa ampliado. Lo que se comprobó es que se "
+                    "olvide este pedazo cuando se toca el observador")
 
     for p in problemas:
         print(f"    {p}")

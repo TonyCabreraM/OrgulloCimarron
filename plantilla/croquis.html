@@ -447,8 +447,24 @@ body{
 
    `animation-play-state` en vez de quitar la animacion: al reanudar sigue por
    donde iba, asi que los elementos no dan un salto al volver a mirarlos. */
-#m.frenado .pausa,
-#m .pausa.fuera{animation-play-state:paused}
+#m.frenado .pausa{animation-play-state:paused}
+
+/* Y lo de «fuera» SOLO cuenta con el mapa ampliado, que es lo unico donde
+   hay algo fuera de la pantalla.
+
+   El motivo es un fallo real de iOS, medido con el comprobador de
+   `plantilla/diagnostico.html`: alli el IntersectionObserver dice que NO
+   intersecta NADA, ni con el mapa entero a la vista. Los 56 elementos pillan
+   «fuera», los 44 animados se quedan con `animation-play-state: paused` y el
+   mapa aparece congelado entero, sin un error en la consola. Por ahi empezo todo:
+   parecia un freno pegado, y el freno estaba suelto desde el principio.
+
+   Sin `acercado` no se para nada. Y no se pierde nada con quitarlo: la vista
+   normal enseña el mapa entero, con lo que TODOS los iconos estan a la vista
+   de verdad y no hay nada que ahorrar. El ahorro del que habla esta
+   optimizacion es justo el de mirar una zona de cerca en un movil, y para eso
+   esta puesto el `.acercado`. */
+#m.acercado .pausa.fuera{animation-play-state:paused}
 
 /* La del sistema (`prefers-reduced-motion`) se quito a proposito. Donde estaba
    y por que se explica arriba, en la seccion de las animaciones de los iconos. */
@@ -1307,6 +1323,11 @@ function pinta(k) {
   // encima de uno acerca la zona que tiene debajo, como en cualquier otro
   // sitio del plano. Con una zona ampliada, el icono manda.
   ICN.classList.toggle("deCerca", k >= 0);
+  // El mismo aviso en `#m`, que es el padre comun de todo lo que dibuja. Lo
+  // necesita la regla que para lo que queda fuera de la pantalla: sin esto, en
+  // iOS, el observador dice que no hay nada a la vista y apaga las 44
+  // animaciones con el mapa entero delante. Se explica en la regla.
+  M.classList.toggle("acercado", k >= 0);
 }
 
 function sel(k) {
@@ -1429,29 +1450,62 @@ function elQueSePausa(nodo) {
 }
 
 if (window.IntersectionObserver) {
+  var observados = 0, observerRoto = false;
   var vigia = new IntersectionObserver(function (entradas) {
+    if (observerRoto) return;
     for (var j = 0; j < entradas.length; j++) {
       var pausable = elQueSePausa(entradas[j].target);
       if (pausable) pausable.classList.toggle("fuera", !entradas[j].isIntersecting);
     }
+    // --- El cortocircuito ---------------------------------------------------
+    // Si el observador dice que CASI TODO esta fuera, esta mintiendo, y hay que
+    // dejar de hacerle caso. No es una teoria: en iOS dice eso siempre, con el
+    // mapa entero a la vista (medido con `plantilla/diagnostico.html`: 54 de 56
+    // marcados «fuera»).
+    //
+    // Por que hace falta aunque la regla de arriba ya exija `#m.acercado`: con el
+    // mapa ampliado el cortocircuito es lo unico que impide que un observador
+    // que miente se lleve por delante tambien lo que se ve de verdad. Y un
+    // observador que se equivoca no se equivoca en un elemento, se equivoca en
+    // bloque: o acierta o esta roto.
+    //
+    // El precio de que esto se dispare sin querer es pequeno: se pierde la
+    // optimizacion y las animaciones se quedan andando. El precio de que NO se
+    // dispare, con el observador roto, es un mapa congelado sin explicacion.
+    // Ante la duda, que las animaciones anden.
+    if (observados >= 8) {
+      var fuera = 0;
+      for (var f = 0; f < ICN.children.length; f++)
+        if (elQueSePausa(ICN.children[f]) &&
+            elQueSePausa(ICN.children[f]).classList.contains("fuera")) fuera++;
+      if (fuera > observados * .9) {
+        observerRoto = true;
+        vigia.disconnect();
+        for (var g = 0; g < ICN.children.length; g++) {
+          var pausable2 = elQueSePausa(ICN.children[g]);
+          if (pausable2) pausable2.classList.remove("fuera");
+        }
+      }
+    }
   }, {rootMargin: "160px"});
   var vigilar = function (grupo) {
-    for (var j = 0; j < grupo.children.length; j++) vigia.observe(grupo.children[j]);
+    for (var j = 0; j < grupo.children.length; j++) {
+      if (elQueSePausa(grupo.children[j])) {
+        vigia.observe(grupo.children[j]);
+        observados++;
+      }
+    }
   };
   // Empezar a observar UN FOTOGRAMA DESPUES, y no nada mas empezar.
   //
   // El primer callback del observador sale antes de que iOS tenga el dibujo
   // asentado, y con el `<svg>` en `position:fixed` y el mapa ya transformado
   // es facil que diga que NO intersecta nada: es una pregunta que se hace sobre
-  // una caja que todavia no esta donde va a estar. Si se le hace caso, los
-  // cincuenta y tantos elementos reciben `fuera` de golpe, se quedan con
-  // `animation-play-state:paused` y el mapa aparece congelado entero - iconos y
-  // zonas, los dos grupos - sin error en la consola, igual que si el freno se
-  // hubiera quedado puesto.
+  // una caja que todavia no esta donde va a estar.
   //
-  // Un fotograma despues el layout ya esta donde va a estar y la respuesta es
-  // buena. Es tambien lo que ya se hace con el fondo grande: no se decide nada
-  // de la pagina hasta que hay algo pintado.
+  // Un fotograma despues el layout ya esta donde va a estar. Es tambien lo que
+  // ya se hace con el fondo grande: no se decide nada de la pagina hasta que hay
+  // algo pintado.
   requestAnimationFrame(function () {
     vigilar(ICN);
     vigilar(ZON);
