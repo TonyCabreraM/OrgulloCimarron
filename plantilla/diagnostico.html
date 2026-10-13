@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Diagnostico del croquis</title>
+<style>
+body{margin:0;padding:16px;font:15px/1.5 system-ui,-apple-system,sans-serif;
+     background:#111;color:#eee}
+h1{font-size:18px;margin:0 0 4px}
+p{color:#aaa;margin:0 0 14px}
+#marca{font-size:26px;font-weight:700;padding:12px;border-radius:10px;
+        margin:0 0 10px;background:#333}
+#marca.si{background:#0a5} #marca.no{background:#c33}
+#marca.medio{background:#c80}
+.linea{font-size:16px;font-weight:700;padding:10px;border-radius:8px;
+        margin:6px 0;background:#2a2a2a}
+.linea.si{background:#064} .linea.no{background:#733}
+.linea.medio{background:#654}
+.oculto{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+
+/* El croquis se abre A PANTALLA COMPLETA, y el informe va ENCIMA.
+   No es decoracion: tiene que verse entero, porque el croquis marca de «fuera»
+   y pausa lo que no esta en pantalla. Con el <iframe> escondido -a la izquierda
+   del todo, o con tamano cero- el observador veria que no hay nada a la vista y
+   pararia todas las animaciones, y el informe diria que no corre ninguna.
+   Estaria mintiendo por culpa de como esta montado el medidor.
+
+   Que el informe tape el croquis no importa: el observador pregunta por la
+   geometria, no por si hay algo delante. El <iframe> sigue ocupando la pantalla
+   entera, que es lo unico que necesita ver. */
+#vento{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:0}
+#capa{position:fixed;inset:0;z-index:10;overflow:auto;padding:16px;
+      background:#111f}
+</style>
+</head>
+<body>
+<div id="capa">
+<h1>Diagnostico del croquis</h1>
+<p id="intro">Abriendo el croquis de verdad...</p>
+
+<div id="marca" class="oculto">CARGANDO</div>
+<div id="salida"></div>
+<p style="margin-top:18px"><a href="#" id="enseñar" style="color:#8cf">quitar
+el informe y mirar el mapa</a></p>
+</div>
+<iframe id="vento" src="croquis.html"></iframe>
+
+<script>
+// Esta pagina NO arregla nada: mira el croquis de verdad, en un <iframe> del
+// mismo origen -asi se puede mirar por dentro- y pone en pantalla lo que ha
+// encontrado. Sirve para dejar de adivinar.
+//
+// La razon de que sea una pagina suelta y no una prueba de `test_qr.py`: esto
+// solo pasa en el motor de Safari y en un telefono. En un ordenador no se ve, y
+// una prueba en el escritorio daria verde con el bug ahi. Hace falta que lo mire
+// quien tiene el telefono, y sin instalar nada: se abre la direccion y se lee.
+//
+// El color de cada linea es el veredicto:
+//   verde    bien
+//   rojo     esto es el problema
+//   naranja  se quedo a medias
+var lineas = [];
+
+function anota(clase, titulo, detalle) {
+  lineas.push([clase, titulo, detalle || ""]);
+  pinta();
+}
+
+function pinta() {
+  var marco = document.getElementById("marca");
+  marco.textContent = lineas.length ? "MIRA ABAJO" : "CARGANDO...";
+  marco.className = lineas.length ? "medio" : "medio oculto";
+  var caja = document.getElementById("salida");
+  caja.innerHTML = "";
+  for (var i = 0; i < lineas.length; i++) {
+    var d = document.createElement("div");
+    d.className = "linea " + lineas[i][0];
+    d.textContent = lineas[i][1] +
+        (lineas[i][2] ? "  ->  " + lineas[i][2] : "");
+    caja.appendChild(d);
+  }
+}
+
+// --- 1. ¿var() dentro de @keyframes? ---------------------------------------
+// Se prueba en el documento de verdad, con una animacion invented y una sonda.
+//
+// Que el navegador CONOZCA la animacion no basta: puede estar en la lista
+// calculada y no tener ningun fotograma que dibujar. Por eso se mira tambien si
+// `getAnimations()` la devuelve corriendo. Esa es justo la diferencia entre
+// «esta declarado y no funciona» y «no esta declarado», que son dos bugs
+// distintos con el mismo sintoma.
+function pruebaVarEnKeyframes(doc) {
+  var estilo = doc.createElement("style");
+  estilo.textContent = "@keyframes sondaVar{0%,100%{transform:scale(1)}" +
+      "50%{transform:scale(calc(1 + .5 * var(--m, 1)))}}";
+  doc.head.appendChild(estilo);
+
+  var g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.style.cssText = "animation:sondaVar .3s linear infinite";
+  g.innerHTML = '<rect width="10" height="10"></rect>';
+  doc.getElementById("iconos").appendChild(g);
+
+  var nombre = doc.defaultView.getComputedStyle(g).animationName;
+  var lista = g.getAnimations ? g.getAnimations() : [];
+  return {
+    declarada: String(nombre).indexOf("sondaVar") >= 0,
+    viva: lista.length > 0 && lista[0].playState === "running",
+    estado: lista.length ? lista[0].playState : "no hay animacion"
+  };
+}
+
+// --- 2. ¿La caja de un <use> a un <symbol>? --------------------------------
+// El dibujo de cada icono esta en un <symbol> y se usa con <use>, y el <g> que
+// anima lleva `transform-box: fill-box`, que saca la caja de la forma que
+// calcule el navegador. Si esa caja sale vacia, el `transform-origin` se va al
+// 0,0 y el icono se dibuja fuera de su sitio: eso se ve como que el icono «no
+// se mueve» cuando en realidad se esta moviendo, pero en otra parte.
+function pruebaCajaDeUso(doc) {
+  var usos = doc.querySelectorAll("#iconos use");
+  if (!usos.length) return {hay: false};
+  var g = usos[0].parentNode;
+  var caja;
+  try {
+    caja = g.getBBox();
+  } catch (e) {
+    return {hay: true, error: "" + e};
+  }
+  var est = doc.defaultView.getComputedStyle(g);
+  return {
+    hay: true,
+    ancho: Math.round(caja.width),
+    alto: Math.round(caja.height),
+    vacia: !caja.width || !caja.height,
+    caja: est.transformBox,
+    origen: est.transformOrigin
+  };
+}
+
+// --- 3. ¿Lo que para el mapa es el freno, el observador o el navegador? -----
+function pruebaElFreno(doc) {
+  var m = doc.getElementById("m");
+  var animados = doc.querySelectorAll("#iconos .an");
+  var fuera = doc.querySelectorAll("#iconos .fuera, #zonas .fuera");
+  var sinNombre = 0, pausadas = 0, vivas = 0, sinAnimar = 0;
+  for (var i = 0; i < animados.length; i++) {
+    if (doc.defaultView.getComputedStyle(animados[i]).animationName === "none")
+      sinNombre++;
+    var as = animados[i].getAnimations ? animados[i].getAnimations() : [];
+    if (!as.length) sinAnimar++;
+    else if (as[0].playState === "paused") pausadas++;
+    else vivas++;
+  }
+  return {
+    frenado: m.classList.contains("frenado"),
+    fuera: fuera.length,
+    animados: animados.length,
+    sinNombre: sinNombre,
+    sinAnimar: sinAnimar,
+    pausadas: pausadas,
+    vivas: vivas,
+    escondida: doc.hidden
+  };
+}
+
+// --- Lo que se ejecuta ------------------------------------------------------
+function mira() {
+  var doc = document.getElementById("vento").contentDocument;
+  if (!doc) {
+    anota("no", "No se pudo abrir el croquis dentro");
+    return;
+  }
+  var w = doc.defaultView;
+  var rojos = 0;
+
+  anota("medio", "Movil", String(w.navigator.userAgent).slice(0, 70));
+  anota(doc.hidden ? "no" : "si", "Pagina visible",
+       doc.visibilityState + (doc.hidden ? "  <-- OCULTA" : ""));
+
+  // 3. El freno y el observador.
+  var f = pruebaElFreno(doc);
+  anota(f.frenado ? "no" : "si", "#m frenado",
+       f.frenado ? "SI: el mapa esta frenado entero" : "no, suelto");
+  anota(f.fuera > f.animados / 2 ? "no" : "si", "Marcados «fuera»",
+       f.fuera + " de " + f.animados);
+  if (f.sinNombre > 0) {
+    rojos++;
+    anota("no", "Iconos SIN animation-name", f.sinNombre);
+  }
+  anota(f.vivas > 0 ? "si" : "no", "Animaciones de icono",
+       f.vivas + " corriendo, " + f.pausadas + " pausadas, " +
+       f.sinAnimar + " sin animacion");
+
+  // 1. var() en @keyframes.
+  var v = pruebaVarEnKeyframes(doc);
+  if (!v.declarada) {
+    rojos++;
+    anota("no", "var() en @keyframes", "NO LA DECLARA: Safari no la entiende");
+  } else if (!v.viva) {
+    rojos++;
+    anota("no", "var() en @keyframes",
+          "la declara pero NO corre (" + v.estado + ")");
+  } else {
+    anota("si", "var() en @keyframes", "funciona");
+  }
+
+  // 2. La caja del <use>.
+  var c = pruebaCajaDeUso(doc);
+  if (c.hay && c.error) {
+    rojos++;
+    anota("no", "Caja del <use>", c.error);
+  } else if (c.hay && c.vacia) {
+    rojos++;
+    anota("no", "Caja del <use>", "VACIA: el origen se va al 0,0");
+  } else if (c.hay) {
+    anota("si", "Caja del <use>",
+          c.ancho + "x" + c.alto + ", " + c.caja + " en " + c.origen);
+  }
+
+  if (rojos) {
+    document.getElementById("marca").textContent = rojos + " PROBLEMA(S)";
+    document.getElementById("marca").className = "no";
+  } else {
+    document.getElementById("marca").textContent = "TODO BIEN (?)";
+    document.getElementById("marca").className = "si";
+  }
+}
+
+var ventana = document.getElementById("vento");
+ventana.addEventListener("load", function () {
+  // Algo de margen: el croquis tiene que asentar su layout, que es lo que el
+  // observador de «fuera» mira. Preguntar antes es medir el arranque, no lo que
+  // le pasa a quien lo esta mirando.
+  setTimeout(mira, 1500);
+});
+document.getElementById("enseñar").addEventListener("click", function (e) {
+  e.preventDefault();
+  var capa = document.getElementById("capa");
+  capa.style.display = capa.style.display === "none" ? "block" : "none";
+});
+setTimeout(function () {
+  if (!lineas.length) {
+    anota("no", "No llego el croquis",
+          "abre esta pagina desde la direccion web, no desde un archivo");
+  }
+}, 9000);
+</script>
+</body>
+</html>
