@@ -283,19 +283,21 @@ byte.
 ## Estructura
 
 ```
-Mapa ... FINAL2.ai  El póster entero, 1224 x 1224 pt. De aquí sale TODO: el fondo
-                      (banda y=216) y los dos banners
-CroquisSolo.ai      El mapa anterior, 1224 x 792 pt. Ya no se publica; se queda
-                      porque es contra el que se midió el desplazamiento del nuevo
+Logos/ ... FINAL2.webp  El póster exportado, 1224 x 1224 px. De aquí sale TODO:
+                        el fondo (banda y=216) y los dos banners
+Logos/ ... FINAL2.svg   El mismo póster en vector. NO se usa: no hay renderizador
+                        de SVG en este equipo y PyMuFD lo dibuja en negro
+CroquisSolo.ai          El mapa anterior, 1224 x 792 pt. Ya no se publica; se queda
+                        porque es contra el que se midió el desplazamiento del nuevo
 generar_qr.py      Generador: mide, empaqueta y dibuja el QR
-preparar_mapa.py   Saca el fondo y los banners del .ai, en dos tamaños
+preparar_mapa.py   Saca el fondo y los banners del poster exportado
 test_qr.py         Pruebas del ciclo completo
 d.html             Página base, solo para el modo servidor
 plantilla/
   croquis.html     El mapa interactivo (este es el que se publica)
-  rectoria.webp    El fondo, en ráster: 3400 x 2200 px, ~0.50 MB
-  banner-arriba-chico.webp  El banner del título, 1224 x 216 px, 30 KB
-  banner-abajo-chico.webp   El banner de abajo, 1224 x 216 px, 20 KB
+  rectoria-chico.webp  El fondo: 1224 x 792 px, 114 KB
+  banner-arriba.webp   El banner del título, 1224 x 216 px, 23 KB
+  banner-abajo.webp    El banner de abajo, 1224 x 216 px, 15 KB
   plantilla.html   Documento de ejemplo
   planos/          Croquis del campus descargados (referencia vieja)
 editor/            Herramienta de edición. NO se publica.
@@ -359,38 +361,63 @@ manipular la del mapa.
 
 ### El arte viene de Illustrator
 
-El original es `Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL2.ai`, en la raíz
-del repo. Un `.ai` de Illustrator es un PDF por dentro, así que se abre con
-PyMuPDF y se convierte a ráster.
+El original se edita en Illustrator, pero **lo que se publica no sale del `.ai`**
+sino del póster exportado: `Logos/Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL2.webp`,
+de 1224 × 1224 px. `preparar_mapa.py` lo abre con PIL y saca las tres franjas.
 
-**La página es el póster entero, 1224 × 1224 pt, no solo el mapa.** Son tres
-franjas: el banner con el título de `y=0` a `216`, el mapa de `216` a `1008`, y el
-banner de abajo de `1008` a `1224`. En el croquis el mapa se publica de `0` a
-`792` y los banners se colocan alrededor, de `-216` a `0` y de `792` a `1008`.
+**Y no es lo mismo que el `.ai`, a propósito.** El `.ai` tiene una versión del mapa
+con más cosas dentro —tiras de puestos numeradas y pictogramas de aseos, agua,
+primeros auxilios y parquímetro ya dibujados— y en el croquis eso se ve mal: el
+croquis pinta encima sus propios cuarenta y seis iconos, y en los mismos sitios,
+así que **cada icono salía dos veces**. El poster exportado es la misma
+composición sin ese detalle, que es la que va bien. Ese error costó dos
+iteraciones: primero se cogió el mapa del `.ai`, y salió con todo duplicado.
+
+**El poster son tres franjas:** el banner con el título de `y=0` a `216`, el mapa
+de `216` a `1008`, y el banner de abajo de `1008` a `1224`. En el croquis el mapa
+se publica de `0` a `792` y los banners se colocan alrededor, de `-216` a `0` y
+de `792` a `1008`.
 
 **Y el mapa va desplazado un píxel.** En el poster está un píxel más abajo que en
 el dibujo anterior, así que `preparar_mapa.py` lo sube uno (`DESPLAZE_Y`). Está
 medido, no supuesto: es el desplazamiento que más correlación da entre los dos
-dibujos (0,9054 con −1 frente a 0,8539 sin mover), y el resultado publicado
-correlaciona 0,9276 con el fondo anterior. Sin eso, las diez zonas y los
-cuarenta y seis iconos — que están escritos en coordenadas fijas — quedarían
-desplazados respecto al dibujo.
+dibujos, y con este poster el pico es clarísimo y muy alto:
+
+| desplazamiento | correlación con el fondo anterior |
+| --- | --- |
+| −2 | 0.8427 |
+| **−1** | **0.9781** |
+| 0 | 0.9222 |
+| +1 | 0.7707 |
+
+Sin ese píxel, las diez zonas y los cuarenta y seis iconos —que están escritos
+en coordenadas fijas— quedarían desplazados respecto al dibujo. Y no se vería en
+la imagen: se vería cuando alguien toca y le abre otra zona.
 
 | | |
 | --- | --- |
-| Tamaño de página | 1224 × 1224 pt, una sola página |
+| Tamaño del poster | 1224 × 1224 px |
 | Mapa dentro | banda de y=216 a y=1008, colocada en y=−1 |
-| Fondo del dibujo | gris neutro `#e8e8e8` (antes verde pálido `#f3f9ee`) |
-| Ráster que se publica | `plantilla/rectoria.webp`, 3400 × 2200 px, ~0.50 MB |
+| Fondo del dibujo | gris neutro `#e9e9e9` (antes verde pálido `#f3f9ee`) |
+| Ráster que se publica | `plantilla/rectoria-chico.webp`, 1224 × 792 px, 114 KB |
 
-**Por qué un WebP y no el SVG.** Exportar el `.ai` a SVG da ~45 MB: el 73% del
-archivo es la textura de pasto, repetida en miles de trazados diminutos.
-Ningún teléfono va a bajar eso al escanear un QR. El WebP conserva el dibujo a
-resolución de sobra (3400 px de ancho para una pantalla de 400) y pesa 90
-veces menos.
+**No hay versión en alta del fondo, y es a conciencia.** Se sacaba en dos
+versiones, de 1224 y de 3400 px, porque el origen era vectorial. Ahora el origen
+es un WebP de 1224 px, y ampliarlo a 3400 serían ~400 KB para que se vea peor. En
+un móvil —que es de donde se lee el QR— el mapa se ve a 375 px y con densidad 3
+salen 1125: el 1224 de origen llega de sobra. En un monitor grande, al ampliar,
+se verá algo más blando que antes. Si algún día hay un export del poster a más de
+1224 px, `preparar_mapa.py` lo detecta solo y vuelve a sacar las dos versiones, y
+no hay que tocar el croquis.
+
+**Por qué no el SVG.** El SVG del poster está en `Logos/` y es vectorial, así que
+permitiría cualquier resolución, pero **no hay forma de dibujarlo aquí**: no está
+Inkscape ni rsvg ni ImageMagick, y PyMuPDF lo renderiza con el mapa entero en
+negro. Si algún día se instala un renderizador de SVG, el SVG es la fuente
+preferible.
 
 **Al cambiar el arte hay que subir el `?v=` de la dirección.** En `croquis.html`
-la imagen se pide como `rectoria.webp?v=00120440`, y ese número es el sha1 del
+la imagen se pide como `rectoria-chico.webp?v=11b50494`, y ese número es el sha1 del
 propio archivo en corto.
 
 Hace falta de verdad: GitHub Pages sirve la imagen con
@@ -405,13 +432,12 @@ lo compara con el sha1 real del archivo y, si no cuadra, dice exactamente qué
 poner. Para calcularlo:
 
 ```bash
-python -c "import hashlib,pathlib;print(hashlib.sha1(pathlib.Path('plantilla/rectoria.webp').read_bytes()).hexdigest()[:8])"
+python -c "import hashlib,pathlib;print(hashlib.sha1(pathlib.Path('plantilla/rectoria-chico.webp').read_bytes()).hexdigest()[:8])"
 ```
 
 **El texto del mapa son contornos, no texto.** Al convertir las tipografías,
-los rótulos dejaron de ser texto extraíble: la única cadena legible en el PDF
-es «Zona recreativa». Por eso los nombres de las zonas viven en `croquis.html`
-y no se pueden leer del `.ai`.
+los rótulos dejaron de ser texto extraíble. Por eso los nombres de las zonas
+viven en `croquis.html` y no se pueden leer del original.
 
 ### Cómo está armado el HTML
 
@@ -1122,7 +1148,7 @@ que se fue.
 
 Se sustituyen dos cosas y nada más:
 
-1. `plantilla/rectoria.webp` — el ráster nuevo, siempre a 1224 × 792 de
+1. `plantilla/rectoria-chico.webp` — el ráster nuevo, siempre a 1224 × 792 de
    proporción (si cambia el tamaño de página, hay que cambiar el `viewBox`).
 2. Los polígonos de `ZONAS` — las coordenadas en puntos, leídas sobre el `.ai`.
 
@@ -1261,7 +1287,7 @@ esperar uno o dos minutos a que GitHub Pages reconstruya, y el QR ya abre la
 versión nueva.
 
 > **Ojo con el fondo.** GitHub Pages sirve la imagen con
-> `Cache-Control: max-age=600`, así que un cambio en `rectoria.webp` **tarda
+> `Cache-Control: max-age=600`, así que un cambio en `rectoria-chico.webp` **tarda
 > diez minutos en verse, recargando inclusive**. Para que no pase, la dirección
 > lleva un `?v=` con el sha1 del archivo: al cambiar el arte hay que subirlo, y
 > una prueba avisa si se te olvida. Los detalles están en la sección del mapa.
@@ -1439,11 +1465,11 @@ croquis o la página base:
   da un salto en cada vuelta.
 - **Un recurso con la misma dirección y contenido nuevo no se ve.** GitHub
   Pages sirve las imágenes con `Cache-Control: max-age=600`, así que al cambiar
-  `rectoria.webp` el navegador **y el CDN** siguen enseñando la copia vieja
+  `rectoria-chico.webp` el navegador **y el CDN** siguen enseñando la copia vieja
   durante diez minutos, aunque se recargue. El fallo se lee como «no se subió el
   cambio» o «se subió mal», y no hay ningún error en ninguna parte: el servidor
   tiene el archivo nuevo y lo que pasa es que nadie lo pide. La solución es que
-  la dirección cambie con el contenido — `rectoria.webp?v=<sha1 corto>` — y que
+  la dirección cambie con el contenido — `rectoria-chico.webp?v=<sha1 corto>` — y que
   una prueba compare ese número con el sha1 de verdad, porque un número que se
   queda viejo falla exactamente igual de callado.
 - **Un salto de línea de más en un comentario rompe el archivo entero.** En

@@ -341,29 +341,36 @@ def test_croquis_zonas_coherentes() -> bool:
     if problemas:
         return False
 
-    # Los fondos son DOS archivos aparte, y los dos con su `?v=`:
+    # Los fondos se nombran en DOS sitios, y los dos con su `?v=`:
     #
     #   el chico   lo pone el marcado, y es el que se abre siempre
     #   el grande  lo pone el script, y entra al acercar una zona
     #
-    # Si no están junto al HTML, la página sale con el fondo vacío y ni un
+    # Antes eran dos archivos distintos porque el origen era un .ai y se podia
+    # renderizar a 1224 y a 3400 px. Ahora el origen es el poster exportado, que
+    # es de 1224 px, y no hay version en alta que sacar. ASI QUE PUEDEN SER EL
+    # MISMO ARCHIVO, y no es un fallo: el navegador lo pide una vez y el mapa se
+    # ve igual. Lo que NO puede ser es que apunten a un archivo que no exista, o
+    # que se queden con un `?v=` viejo, asi que eso si se comprueba.
+    #
+    # Si no estǭn junto al HTML, la pǭgina sale con el fondo vac��o y ni un
     # error en consola.
     #
     # Y el `?v=` hace falta de verdad: GitHub Pages sirve la imagen con
-    # `Cache-Control: max-age=600`, así que durante diez minutos después de
+    # `Cache-Control: max-age=600`, as�� que durante diez minutos despuǸs de
     # subir un cambio se sigue viendo el fondo anterior, recargando inclusive.
-    # Un número que se queda viejo no da ningún error: solo un mapa que no
-    # cambia, que es justo el fallo que parece «no se subió». Por eso no se
-    # escribe a mano y se comprueba aquí.
+    # Un nǧmero que se queda viejo no da ningǧn error: solo un mapa que no
+    # cambia, que es justo el fallo que parece ��no se subi����. Por eso no se
+    # escribe a mano y se comprueba aqu��.
     fondos = [("el chico", re.search(r'id="arte"[^>]*href="([^"]+)"', texto)),
               ("el grande", re.search(r'ARTE_URL = "([^"]+)"', texto))]
     if not all(m for _, m in fondos):
         print("    (no se encuentran los dos fondos en el croquis: uno de los")
-        print("     dos no está, o le cambiaron el nombre a su variable)")
+        print("     dos no estǭ, o le cambiaron el nombre a su variable)")
         return False
     if fondos[0][1].group(1).split("?")[0] == fondos[1][1].group(1).split("?")[0]:
-        print("    (los dos fondos son el mismo archivo: no hay dos tamaños)")
-        return False
+        print("    (los dos fondos apuntan al mismo archivo: no hay version en "
+              "alta,\n     que es lo que pasa cuando el origen son 1224 px)")
 
     resumen = []
     for cual, m in fondos:
@@ -384,10 +391,22 @@ def test_croquis_zonas_coherentes() -> bool:
             return False
         resumen.append((ruta, ruta.stat().st_size // 1024, version))
 
-    # Y las dos versiones tienen que estar en el orden que espera el croquis:
-    # la que se abre primero TIENE que ser la que menos pesa. Si se cruzaran,
-    # el ahorro se perdería sin que nada avisara.
-    if resumen[0][1] >= resumen[1][1]:
+    # Y, si son dos archivos distintos, tienen que estar en el orden que espera
+    # el croquis: la que se abre primero TIENE que ser la que menos pesa. Si se
+    # cruzaran, el ahorro se perdería sin que nada avisara.
+    #
+    # Cuando apuntan al MISMO archivo no hay orden que comprobar -pesan lo mismo
+    # porque son lo mismo-, y solo queda que el peso no se dispare, que es lo
+    # unico que se puede pedir cuando no hay version grande.
+    if resumen[0][0] == resumen[1][0]:
+        if resumen[0][1] > 400:
+            print(f"    (el fondo pesa {resumen[0][1]} KB y no hay version en "
+                  f"alta con la que sustituirlo:\n     en un movil es la mayor "
+                  f"parte de lo que se baja. Suele ser que el origen se ha "
+                  f"exportado\n     a mas de 1224 px y `preparar_mapa.py` no "
+                  f"lo ha vuelto a sacar.)")
+            return False
+    elif resumen[0][1] >= resumen[1][1]:
         print(f"    (el fondo que se abre primero pesa más que el otro: "
               f"{resumen[0][1]} KB contra {resumen[1][1]} KB, y de eso va el")
         print(f"     asunto. Cambia cuál pone el marcado y cuál el script)")
@@ -3666,11 +3685,20 @@ def test_los_banners_estan_en_su_sitio() -> bool:
     # El `?v=` es el sha1 del archivo. Sin el, GitHub Pages y su CDN siguen
     # sirviendo la copia vieja durante diez minutos y el sintoma es un banner que
     # no cambia, que es justo el fallo que parece «no se subio».
-    for nombre in ("banner-arriba-chico", "banner-abajo-chico"):
+    #
+    # Y que sean UNO cada uno, sin la coletilla `-chico`: ahora que el origen es
+    # el poster exportado, que es de 1224 px, no hay version en alta que sacar y
+    # un `-chico` no significaria nada.
+    for nombre in ("banner-arriba", "banner-abajo"):
         if f"{nombre}.webp?v=" not in texto:
             problemas.append(
                 f"el {nombre}.webp no lleva su `?v=`: sin el numero se sigue "
                 f"viendo la copia vieja del banner aunque se suba otra")
+        if f"{nombre}-chico.webp" in texto:
+            problemas.append(
+                f"el banner se sigue pidiendo como {nombre}-chico.webp, que ya "
+                f"no se saca: el origen es el poster exportado, de 1224 px, y no "
+                f"tiene mas resolucion que amplificar")
 
     # --- 5. Y que el mapa no se haya movido de sitio -----------------------
     # El fondo y el filo siguen en 0,0 y miden 1224 x 792. Si esto cambia, el
