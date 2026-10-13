@@ -1276,6 +1276,121 @@ def test_las_animaciones_se_paran_cuando_no_se_ven() -> bool:
     return True
 
 
+def test_el_freno_se_suelta_siempre() -> bool:
+    """Las animaciones se pueden parar, pero no se pueden quedar paradas.
+
+    El sintoma: en un iPhone el mapa aparece con los iconos congelados y las
+    lineas de las zonas sin moverse. El zoom funciona, la ventana abre, los
+    toques responden y no hay ni un error en la consola. Es el fallo mas caro
+    del croquis porque no se ve que pasa: parece que las animaciones no existen.
+
+    La causa era una sola linea. `sueltaAnimaciones` decia
+
+        if (!document.hidden) M.classList.remove("frenado")
+
+    o sea: si la pagina esta escondida, NO se suelta el freno. En iOS, abrir el
+    mapa desde la camara deja la pagina un instante en `hidden`, asi que el reloj
+    de `frenaUnRato` podia saltar justo en ese momento, ver `document.hidden` a
+    true y dejar `frenado` puesto. Y no habia ninguna vuelta atras, porque el
+    reloj ya estaba limpiado y lo unico que quedaba era `visibilitychange`, que
+    en iOS no esta garantizado: al restaurar la pagina desde la cache de atras no
+    llega a dispararse. El mapa se quedaba congelado para siempre.
+
+    Se comprueban las tres cosas que lo cierran:
+
+      1. Que `sueltaAnimaciones` suelte SIN preguntar por `document.hidden`.
+         Que el `if` vuelva a ponerlo reintroduce el bug tal cual, y no se ve
+         en el escritorio: en un ordenador `document.hidden` casi siempre dice
+         la verdad.
+      2. Que haya caminos de vuelta que no dependen de `visibilitychange`.
+         `pageshow` y `focus`. Se sueltan sin preguntar tampoco, a proposito: si
+         el problema es que iOS se equivoca al decir que la pagina esta
+         escondida, preguntar de nuevo seria volver al mismo fallo.
+      3. Que el `IntersectionObserver` espere un fotograma antes de observar.
+         Su primer callback sale antes de que iOS tenga el dibujo asentado, y con
+         el `<svg>` en `position:fixed` y el mapa ya transformado es facil que
+         diga que NO intersecta nada: los cincuenta y tantos elementos reciben
+         `fuera` de golpe y el mapa aparece congelado entero, con el mismo
+         sintoma que un freno pegado.
+    """
+    texto = CROQUIS.read_text(encoding="utf-8")
+    # Sin comentarios: el trozo que explica por que se quito el `if` vuelve a
+    # escribir `document.hidden`, y sin limpiarlos la prueba se encontraria con
+    # su propia explicacion y fallaria siempre.
+    limpio = _sin_comentarios(texto)
+    problemas = []
+
+    # --- 1. Que soltar no dependa de si la pagina esta escondida ------------
+    ini = limpio.find("function sueltaAnimaciones(")
+    if ini < 0:
+        problemas.append("(no se encuentra sueltaAnimaciones en el croquis)")
+    else:
+        cuerpo = limpio[ini:limpio.find("\n}", ini)]
+        if "document.hidden" in cuerpo:
+            problemas.append(
+                "`sueltaAnimaciones` vuelve a mirar `document.hidden`: si la "
+                "pagina esta escondida cuando salta el reloj, NO suelta el "
+                "freno y ya no hay ninguna vuelta atras. En iOS, abrir el mapa "
+                "desde la camara deja la pagina un instante en `hidden` y el "
+                "mapa se queda congelado para siempre, sin error en la consola")
+        if 'classList.remove("frenado")' not in cuerpo:
+            problemas.append(
+                "`sueltaAnimaciones` no quita «frenado»: aunque se llame, las "
+                "animaciones no volverian a moverse")
+        if 'classList.remove("acercando")' not in cuerpo:
+            problemas.append(
+                "`sueltaAnimaciones` no quita «acercando»: la capa del mapa se "
+                "quedaria puesta y los iconos saldrian pixelados al ampliar")
+
+    # --- 2. Vueltas que no dependen de `visibilitychange` -------------------
+    # Se buscan los `addEventListener` de los dos. Si el evento se escucha pero
+    # no llama a `sueltaAnimaciones`, la puerta esta ahi pero no abre.
+    for evento, por_que in (
+        ("pageshow",
+         "es el camino por el que se restaura la pagina desde la cache de atras, "
+         "que es justo donde `visibilitychange` no llega: sin el, un mapa que se "
+         "quedara congelado al cambiar de aplicacion no vuelve nunca"),
+        ("focus",
+         "es lo que dispara al volver a la pestana; con iOS que no siempre "
+         "avisa de la visibilidad, es la otra forma de volver a mirar el mapa"),
+    ):
+        pos = limpio.find(f'addEventListener("{evento}"')
+        if pos < 0:
+            problemas.append(
+                f"no se escucha «{evento}»: {por_que}. Sin el, el mapa puede "
+                "quedarse con las animaciones congeladas sin forma de volver")
+        elif "sueltaAnimaciones" not in limpio[pos:pos + 200]:
+            problemas.append(
+                f"se escucha «{evento}» pero no suelta el freno: {por_que}")
+
+    # --- 3. Que el observador espere a que haya algo pintado ----------------
+    pos = limpio.find("if (window.IntersectionObserver)")
+    if pos < 0:
+        problemas.append("(no se encuentra el IntersectionObserver)")
+    else:
+        bloque = limpio[pos:limpio.find("\n}", pos)]
+        donde_observa = bloque.find("vigiar(ICN)")
+        if bloque.find("requestAnimationFrame") < 0:
+            problemas.append(
+                "el `IntersectionObserver` empieza a observar sin esperar a que "
+                "haya un fotograma pintado: en iOS su primer callback sale antes "
+                "de que el dibujo este asentado y dice que nada intersecta, con "
+                "lo que todos los iconos y zonas reciben «fuera» de golpe y el "
+                "mapa aparece congelado entero, con el mismo sintoma que un "
+                "freno pegado")
+        elif 0 <= donde_observa < bloque.find("requestAnimationFrame"):
+            problemas.append(
+                "el `IntersectionObserver` observa antes de `requestAnimationFrame`")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el freno se puede poner y quitar siempre, y hay tres caminos "
+          "varios para volver a soltarlo aunque iOS no avise")
+    return True
+
+
 def test_los_adornos_de_las_zonas() -> bool:
     """Una zona puede llevar color, linea y movimiento, y sigue siendo opcional.
 
@@ -3340,6 +3455,7 @@ def main() -> int:
         ("el sello y el boton de la ventana", test_el_sello_y_el_boton_de_la_ventana),
         ("las animaciones se paran cuando no se ven",
          test_las_animaciones_se_paran_cuando_no_se_ven),
+        ("el freno se suelta siempre", test_el_freno_se_suelta_siempre),
         ("los adornos de las zonas", test_los_adornos_de_las_zonas),
         ("las pestanas del editor", test_las_pestanas_del_editor),
         ("quitar vertices de una zona", test_quitar_vertices_de_una_zona),

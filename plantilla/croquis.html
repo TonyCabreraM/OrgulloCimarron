@@ -1332,9 +1332,23 @@ function frenaUnRato(ms) {
 
 function sueltaAnimaciones() {
   clearTimeout(relojFreno);
-  // Con la pagina escondida no se sueltan: no hay nada que mirar y el
-  // navegador no deberia estar componiendo fotogramas.
-  if (!document.hidden) M.classList.remove("frenado");
+  // SE SUELTA SIEMPRE, sin mirar si la pagina esta escondida.
+  //
+  // Antes decia `if (!document.hidden)`. Ese `if` era una trampa: en iOS, abrir
+  // el mapa desde la camara deja la pagina un instante en `hidden`, asi que el
+  // reloj de `frenaUnRato` podia saltar mientras la pagina ya no se miraba, veia
+  // `document.hidden` a true y NO quitaba `frenado` - sin dejar ninguna vuelta
+  // atras, porque el reloj ya estaba limpiado. La unica recuperacion que
+  // quedaba era `visibilitychange`, que en iOS no esta garantizado: con la
+  // pagina restaurada de la cache de atras no llega a dispararse.
+  //
+  // El resultado era el mapa entero congelado para siempre - iconos y zonas, los
+  // dos a la vez - sin un solo error en la consola: el zoom seguia funcionando
+  // y la ventana abria, solo las animaciones se quedaban paradas. Ahora lo
+  // unico que decide si el mapa esta escondido es `visibilitychange`, que es
+  // de donde viene, y si ese evento se cuelga ya no importa: al volver a mirar
+  // se llama a esta funcion desde `pageshow` y desde `focus`.
+  M.classList.remove("frenado");
   // La capa se suelta SIEMPRE, tambien con la pagina escondida. Si se quedara
   // puesta, el mapa se quedaria escalado como una foto y al volver a mirarlo
   // los iconos saldrian pixelados.
@@ -1347,6 +1361,25 @@ addEventListener("visibilitychange", function () {
   if (document.hidden) M.classList.add("frenado");
   else sueltaAnimaciones();
 });
+
+// --- Las otras dos puertas de vuelta ----------------------------------------
+// `visibilitychange` es la puertanormal, pero no es la unica que ofrece iOS, y en
+// iOS no siempre llega. Estos dos son la red debajo.
+//
+// `pageshow` se dispara al restaurar la pagina desde la cache de atras, que es
+// justo el camino por el que se pierde `visibilitychange`, y tambien en la carga
+// normal. `focus` se dispara al volver a la pestana.
+//
+// Sueltan SIEMPRE, sin preguntar por `document.hidden`, y esa es la gracia: si
+// el problema de verdad es que iOS se equivoca al decir que la pagina esta
+// escondida, un `if (!document.hidden)` aqui dejaria el mapa congelado igual,
+// que es el fallo que se estaba arreglando. Preguntarle seria volver al mismo
+// error.
+//
+// No se corre el riesgo de soltar el freno con la pagina tapada: ninguno de los
+// dos se dispara al pasar a segundo plano, solo al volver a ella.
+addEventListener("pageshow", function () { sueltaAnimaciones(); });
+addEventListener("focus", function () { sueltaAnimaciones(); });
 
 // 3. Lo que ha quedado fuera de la pantalla. Se nota sobre todo ampliado: en un
 //    movil, mirando una zona de cerca, se ven cuatro o cinco cosas de las 58
@@ -1373,8 +1406,24 @@ if (window.IntersectionObserver) {
   var vigilar = function (grupo) {
     for (var j = 0; j < grupo.children.length; j++) vigia.observe(grupo.children[j]);
   };
-  vigilar(ICN);
-  vigilar(ZON);
+  // Empezar a observar UN FOTOGRAMA DESPUES, y no nada mas empezar.
+  //
+  // El primer callback del observador sale antes de que iOS tenga el dibujo
+  // asentado, y con el `<svg>` en `position:fixed` y el mapa ya transformado
+  // es facil que diga que NO intersecta nada: es una pregunta que se hace sobre
+  // una caja que todavia no esta donde va a estar. Si se le hace caso, los
+  // cincuenta y tantos elementos reciben `fuera` de golpe, se quedan con
+  // `animation-play-state:paused` y el mapa aparece congelado entero - iconos y
+  // zonas, los dos grupos - sin error en la consola, igual que si el freno se
+  // hubiera quedado puesto.
+  //
+  // Un fotograma despues el layout ya esta donde va a estar y la respuesta es
+  // buena. Es tambien lo que ya se hace con el fondo grande: no se decide nada
+  // de la pagina hasta que hay algo pintado.
+  requestAnimationFrame(function () {
+    vigilar(ICN);
+    vigilar(ZON);
+  });
 }
 
 // --- La ventana de informacion ---------------------------------------------
