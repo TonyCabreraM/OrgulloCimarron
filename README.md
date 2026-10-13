@@ -1495,4 +1495,4 @@ croquis o la página base:
   intermedia, no la final.** Medir justo después de disparar la animación da
   números falsos: parece que las zonas se salen de la pantalla cuando en
   realidad todavía van en camino. Hay que esperar a que la transición termine
-  (0.65s aquí) antes de medir.
+  (0.3s aquí) antes de medir.

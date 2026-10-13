@@ -3327,6 +3327,88 @@ def test_el_mapa_no_se_queda_en_una_capa() -> bool:
     return True
 
 
+def test_el_zoom_no_tiene_que_rehacer_la_sombra() -> bool:
+    """El zoom no puede llevar encima un filtro que haya que rehacer cada vez.
+
+    El sintoma: en un telefono de gama baja el zoom va a tirones. El dibujo esta
+    bien y el dibujo es lo de menos: lo que cuesta es lo que el navegador tiene
+    que rehacer en cada fotograma, y un `<g>` que se transforma no es una
+    textura que se estira, es el mapa entero vuelto a renderizar.
+
+    Lo que mas cara sale es un `filter` dentro del grupo que se transforma. Un
+    filtro saca el subarbol del camino barato: en vez de mover la textura ya
+    hecha hay que rehacer el filtro entero en cada escala. Y el que tenia la hoja
+    era de 26 px de desenfoque sobre el mapa completo.
+
+    Con la duracion de antes eran unos 39 fotogramas de desenfoque gaussiano
+    seguidos. Por eso las dos cosas van juntas en esta prueba, y por eso la
+    duracion tambien se vigila.
+
+    Lo que NO se toca, y por eso la prueba mira `#hoja` y no `filter` a pelo: el
+    halo de los iconos sin aro (`#iconos .sinAro .lam`) sigue siendo un
+    `drop-shadow`, y ese se queda. Son dos filtros de 1.6 px sobre un icono
+    pequeno, que es otra cosa muy distinta a un desenfoque de 26 px sobre el
+    mapa entero.
+    """
+    limpio = _sin_comentarios(CROQUIS.read_text(encoding="utf-8"))
+    problemas = []
+
+    # --- 1. La hoja, sin filtro --------------------------------------------
+    # No se busca la regla de `#hoja`, porque quitarla ES lo correcto: lo que
+    # no puede pasar es que vuelva a aparecer CON filtro. Un `filter` en
+    # cualquier regla que selector `#hoja` valida.
+    #
+    # Se leen los bloques completos de los selectores que empiezan por `#hoja`,
+    # para no confundirse con `#hojalgo` ni con un `#hoja` que este en un
+    # comentario (los comentarios ya van quitados).
+    selector = re.compile(r"#hoja(?=[{, ])")
+    for bloque in selector.finditer(limpio):
+        cuerpo = limpio[bloque.start():limpio.find("}", bloque.start())]
+        if "filter" in cuerpo:
+            problemas.append(
+                f"`#hoja` vuelve a llevar filtro ({cuerpo.strip()}): esta DENTRO "
+                "del `<g>` que se transforma al hacer zoom, y un filtro saca el "
+                "subarbol del camino barato, con lo que en vez de mover la "
+                "textura hay que rehacerlo entero en cada escala. En un telefono "
+                "de gama baja el zoom va a tirones")
+
+    # --- 2. Y que la duracion no se vuelva a alargar ------------------------
+    # El tope es 400 ms. No es que 650 sea incorrecto, es que cada fotograma de
+    # mas es una opcion mas de que uno caiga, y en gama baja un fotograma caido
+    # se ve como un tiron. El editor ya lleva 240 ms en su propio lienzo.
+    regla = re.search(r"#m\{[^}]*transition:\s*transform\s*([\d.]+)s", limpio)
+    if not regla:
+        problemas.append(
+            "no se encuentra la transicion de `#m`: el zoom se moveria a "
+            "saltos, que es justo lo que hay que evitar")
+    else:
+        segundos = float(regla.group(1))
+        if segundos > .4:
+            problemas.append(
+                f"el zoom dura {segundos}s: son unos {round(segundos * 60)} "
+                "fotogramas, y cada uno vuelve a renderizar el mapa entero. En "
+                "un telefono de gama baja se nota como que va a tirones. El "
+                "editor ya lleva 0.24s en su propio lienzo")
+
+    # --- 3. Y que el filo se quede ------------------------------------------
+    # El filo separa la hoja del fondo de verdad y no cuesta nada: es un trazo,
+    # no un filtro. Si alguien lo quita buscando quitar el filtro, se pierde el
+    # despegue visual sin ganar nada.
+    if "#b8d4bb" not in limpio:
+        problemas.append(
+            "el filo de la hoja (`#b8d4bb`) ha desaparecido: separa el mapa del "
+            "fondo y es un trazo, no un filtro, asi que no cuesta nada. Se quito "
+            "la sombra, no el filo")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el zoom no lleva ningun filtro que rehacer, dura lo justo y el "
+          "filo de la hoja se queda, que es lo que lo despega del fondo")
+    return True
+
+
 def test_los_vectores_van_sueltos_en_el_documento() -> bool:
     """Un icono de vector va EN el documento, no dentro de un `<image>`.
 
@@ -3461,6 +3543,7 @@ def main() -> int:
         ("quitar vertices de una zona", test_quitar_vertices_de_una_zona),
         ("la ventana solo con el zoom", test_la_ventana_solo_se_abre_con_el_mapa_acercado),
         ("el mapa no se queda en una capa", test_el_mapa_no_se_queda_en_una_capa),
+        ("el zoom no rehace la sombra", test_el_zoom_no_tiene_que_rehacer_la_sombra),
         ("los recursos y el boton del mapa", test_los_recursos_y_el_boton_del_mapa),
         ("los iconos van siempre en vector", test_los_iconos_van_siempre_en_vector),
         ("los vectores van sueltos en el documento",

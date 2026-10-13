@@ -49,11 +49,43 @@ body{
    en un movil se queda la textura escalada, que es justo el sintoma de «los
    iconos se ven pixelados al hacer zoom». Se suelta al terminar y el
    navegador vuelve a dibujar el mapa a la resolucion nueva. */
+/* --- La duracion del zoom, y por que no hay sombra ------------------------
+   Las dos cosas de este trozo se quitaron por lo mismo: el zoom iba a tirones
+   en telefonos de gama baja, y no era el dibujo sino lo que habia que rehacer
+   en cada fotograma. Con 650 ms son unos 39 fotogramas, y en cada uno el
+   navegador vuelve a renderizar el mapa entero: no es escalar una textura ya
+   hecha. */
+
 #m{transform-box:view-box;transform-origin:0 0;
-   transition:transform .65s cubic-bezier(.22,1,.36,1)}
+   /* De 650 ms a 300. No es un capricho de duracion: cada fotograma de mas es
+      una opcion mas de que uno caiga, y un fotograma caido en un telefono de
+      gama baja se ve como un tirón, no como un cuadro perdido. Ademas 300 ms
+      es lo que ya llevaba el editor en su propio lienzo (`editor.html`), que
+      se ve bien: el mismo movimiento, con el mismo `cubic-bezier`, es fluido
+      ahi y no lo era aqui.
+
+      El `cubic-bezier` no se toca. Es el que hace que el mapa salga disparado y
+      frene al llegar, y con el lineal se lee como un tobogán. */
+   transition:transform .3s cubic-bezier(.22,1,.36,1)}
 #m.acercando{will-change:transform}
-/* El mapa es una hoja: un filo tenue y una sombra lo despegan del fondo. */
-#hoja{filter:drop-shadow(0 10px 26px #0a484233)}
+
+/* `#hoja` ya no lleva `filter: drop-shadow(0 10px 26px #0a484233)`.
+
+   Era una sombra de 26 px de desenfoque sobre TODA la hoja, puesta en un
+   elemento que esta DENTRO del `<g>` que se transforma al hacer zoom. Eso es
+   justo lo que peor le sienta a un telefono de gama baja: un filtro obliga a
+   sacar el subarbol del camino barato, con lo que en vez de mover una textura
+   hay que rehacer el filtro entero en cada escala. Un desenfoque de 26 px sobre
+   el mapa completo, unas treinta y nueve veces seguidas.
+
+   Se quito del todo en vez de rebajarlo porque el efecto era casi nulo: la hoja
+   es un rectángulo opaco con las esquinas vivas, y una sombra de ambiente de
+   26 px encima se leia casi siempre como un rectángulo translúcido desplazado.
+   Ese coste, sin nada a cambio.
+
+   El filo de `#hoja` (`croquis.html`, el `rect` de `stroke:#b8d4bb`) se queda:
+   ese separa la hoja del fondo de verdad y no cuesta nada, porque es un trazo
+   y no un filtro. */
 /* La version grande del fondo entra por encima de la chica, y solo cuando ya
    esta cargada: asi el cambio no se ve. Cambiarle el `href` a una sola imagen
    dejaria el mapa en blanco mientras llega, que es peor que verlo algo
