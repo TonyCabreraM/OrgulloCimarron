@@ -3490,6 +3490,95 @@ def test_el_zoom_no_tiene_que_rehacer_la_sombra() -> bool:
     return True
 
 
+def test_el_sello_no_se_mide_con_getbbox() -> bool:
+    """La miniatura de la ventana se encaja bien, tambien en iOS.
+
+    El sintoma: al tocar un icono que tiene informacion, la miniatura que sale en
+    la ventana sale cortada por abajo. Solo en iOS.
+
+    La causa era medir el dibujo con `getBBox()` sobre un `<use>`. En Safari eso
+    devuelve la caja de lo que hay DENTRO del `<symbol>`, en el sistema de
+    coordenadas del symbol, sin aplicar el `x`, `y`, `width` y `height` del
+    `<use>`: se mide una cosa y el dibujo esta en otra, con lo que el `viewBox` de
+    la miniatura se centra donde no toca y el dibujo se sale de el. En Chromium
+    `getBBox()` si tiene en cuenta la colocacion, y ahi se ve bien, que es lo que
+    hace que esto solo saliera en iOS.
+
+    Con el icono de agua se va el 34% de abajo. Medido con los numeros de
+    verdad: el dibujo va de y=-12.20 a y=12.20, y el `viewBox` acababa
+    centrandose en y=16.40 con medio lado 20.30, o sea de y=-3.90 a y=36.70. Todo
+    lo que queda por debajo de -3.90 se sale del `viewBox` y el navegador lo
+    recorta sin decir nada.
+
+    Asi que la caja se CALCULA con la proporcion del `viewBox` del `<symbol>` y el
+    rectangulo del `<use>`, que es lo que haria el navegador con `meet`. No se
+    mide: se calcula.
+    """
+    limpio = _sin_comentarios(CROQUIS.read_text(encoding="utf-8"))
+    problemas = []
+
+    ini = limpio.find("function cajaDeLaFigura(")
+    if ini < 0:
+        problemas.append(
+            "(no existe cajaDeLaFigura): el encaje de la miniatura vuelve a "
+            "medirse con getBBox() y en iOS el icono sale cortado")
+    else:
+        cuerpo = limpio[ini:limpio.find("\n}", ini)]
+        # El caso que falla: un <use> a un <symbol>.
+        if 'tagName === "use"' not in cuerpo:
+            problemas.append(
+                "cajaDeLaFigura no distingue el <use>: es justo el que en iOS "
+                "devuelve una caja que no es la del dibujo, y el que hay que "
+                "calcular en vez de medir")
+        else:
+            # Y lo que hace falta para calcularla: la proporcion del symbol y el
+            # rectangulo donde se encaja.
+            for falta, que in (
+                ("viewBox.baseVal",
+                 "la proporcion del `<symbol>`, que es de donde sale la caja"),
+                ('numeroDe(dibujo, "width")',
+                 "el ancho del rectangulo del `<use>`"),
+                ("Math.min(", "el encaje con `meet`: el menor de los dos lados"),
+            ):
+                if falta not in cuerpo:
+                    problemas.append(
+                        f"cajaDeLaFigura no usa {falta} ({que})")
+
+    # Y que encajaSello ya no mida por su cuenta.
+    ini = limpio.find("function encajaSello(")
+    if ini < 0:
+        problemas.append("(no existe encajaSello)")
+    else:
+        cuerpo = limpio[ini:limpio.find("\n}", ini)]
+        # Se busca `getBBox()` CON parentesis, que es una llamada. El `getBBox` a
+        # secas es la comprobacion de que el navegador lo tenga, y esa se queda.
+        if "getBBox()" in cuerpo:
+            problemas.append(
+                "`encajaSello` vuelve a llamar a `getBBox()` por su cuenta: "
+                "midiendo un `<use>` en iOS sale una caja que no es la del "
+                "dibujo, y el icono se sale del `viewBox` y aparece cortado")
+        if "cajaDeLaFigura" not in cuerpo:
+            problemas.append(
+                "`encajaSello` no usa cajaDeLaFigura: se queda midiendo el "
+                "dibujo en vez de calcular su caja")
+
+    # Y que el caso raro siga funcionando: sin viewBox no hay proporcion, y el
+    # rectangulo del <use> es la caja.
+    if "numeroDe" not in limpio:
+        problemas.append(
+            "(no existe numeroDe): leer los atributos del `<use>` a mano es lo "
+            "que hace falta para el caso sin `viewBox`, donde un `|| 0` metido "
+            "entre medias daria NaN y el viewBox se iria a paseo")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    la miniatura se encaja calculando la caja del dibujo, no midiendo "
+          "el `<use>` a un `<symbol>`, que en iOS mide una cosa y dibuja otra")
+    return True
+
+
 def test_los_vectores_van_sueltos_en_el_documento() -> bool:
     """Un icono de vector va EN el documento, no dentro de un `<image>`.
 
@@ -3616,6 +3705,7 @@ def main() -> int:
         ("animaciones e intensidad", test_animaciones_e_intensidad),
         ("el toque y el encabezado", test_el_toque_y_el_encabezado),
         ("el sello y el boton de la ventana", test_el_sello_y_el_boton_de_la_ventana),
+        ("el sello no se mide con getBBox", test_el_sello_no_se_mide_con_getbbox),
         ("las animaciones se paran cuando no se ven",
          test_las_animaciones_se_paran_cuando_no_se_ven),
         ("el freno se suelta siempre", test_el_freno_se_suelta_siempre),

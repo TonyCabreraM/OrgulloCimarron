@@ -1750,20 +1750,71 @@ var SELLO_LADO = 52, SELLO_LIBRES = 5;
 // mas pequeno es mucho mejor que una ventana que no abre.
 function encajaSello(svg) {
   if (!svg || !svg.getBBox) return;
-  var dibujo = svg.firstElementChild, caja;
-  if (!dibujo || !dibujo.getBBox) return;
-  try {
-    caja = dibujo.getBBox();
-  } catch (e) {
-    return;                       // el nodo no se puede medir todavia
-  }
-  if (!(caja.width > 0) || !(caja.height > 0)) return;
+  var caja = cajaDeLaFigura(svg);
+  if (!caja || !(caja.width > 0) || !(caja.height > 0)) return;
   var ancho = svg.getBoundingClientRect().width || SELLO_LADO;
   // El lado del viewBox para que el dibujo quepa en (ancho - 2 * libres).
   var lado = Math.max(caja.width, caja.height) * ancho / (ancho - 2 * SELLO_LIBRES);
   var cx = caja.x + caja.width / 2, cy = caja.y + caja.height / 2;
   svg.setAttribute("viewBox", (cx - lado / 2) + " " + (cy - lado / 2)
                               + " " + lado + " " + lado);
+}
+
+// La caja REAL que ocupa el dibujo dentro del `<svg>`, sin fiarse de `getBBox()`.
+//
+// Un `<use>` NO se puede medir con `getBBox()`. En Safari devuelve la caja de lo
+// que hay DENTRO del `<symbol>`, en el sistema de coordenadas del symbol, sin
+// aplicar el `x`, el `y`, el `width` y el `height` del `<use>`: mide una cosa y el
+// dibujo esta en otra. En Chromium si lo tiene en cuenta, y ahi se ve bien, que
+// es justo lo que hace que esto solo saliera en iOS.
+//
+// Con lo de `agua-2` salia de quitarle el 34% de abajo a la gota. Medido: el
+// dibujo va de y=-12.20 a y=12.20, y el viewBox se|centeraba en y=16.40 con medio
+// lado 20.30, o sea de y=-3.90 a y=36.70. Lo que queda por debajo de -3.90 se
+// sale del viewBox y el navegador lo recorta, sin decir nada.
+//
+// Asi que la caja se calcula, que es lo que haria el navegador: el `<symbol>`
+// dice su proporcion en su viewBox, y el `<use>` lo encaja en su rectangulo
+// conservando la proporcion y centrandolo, que es lo que hace `meet`.
+function cajaDeLaFigura(svg) {
+  var dibujo = svg && svg.firstElementChild;
+  if (!dibujo) return null;
+
+  if (dibujo.tagName === "use") {
+    var ref = (dibujo.getAttribute("href")
+            || dibujo.getAttribute("xlink:href") || "").slice(1);
+    var simbolo = ref && document.getElementById(ref);
+    if (!simbolo) return null;
+    var vb = simbolo.viewBox && simbolo.viewBox.baseVal;
+    var rx = numeroDe(dibujo, "x"), ry = numeroDe(dibujo, "y");
+    // Sin viewBox no hay proporcion que mirar y el dibujo va a su tamano: el
+    // rectangulo del <use> ES la caja.
+    if (!vb || !(vb.width > 0) || !(vb.height > 0))
+      return {x: rx, y: ry,
+              width: numeroDe(dibujo, "width"),
+              height: numeroDe(dibujo, "height")};
+    var rw = numeroDe(dibujo, "width") || vb.width;
+    var rh = numeroDe(dibujo, "height") || vb.height;
+    // `meet`: cabe entero, centrado, sin deformar.
+    var k = Math.min(rw / vb.width, rh / vb.height);
+    var dw = vb.width * k, dh = vb.height * k;
+    return {x: rx + (rw - dw) / 2 + vb.x * k,
+            y: ry + (rh - dh) / 2 + vb.y * k,
+            width: dw, height: dh};
+  }
+
+  // Para un `<image>` y para un `<g>` con trazos, `getBBox()` si sirve.
+  if (!dibujo.getBBox) return null;
+  try {
+    return dibujo.getBBox();
+  } catch (e) {
+    return null;                    // el nodo no se puede medir todavia
+  }
+}
+
+function numeroDe(nodo, que) {
+  var v = parseFloat(nodo.getAttribute(que));
+  return isNaN(v) ? 0 : v;
 }
 
 function abreVentana(k) {
