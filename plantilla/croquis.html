@@ -577,12 +577,11 @@ body{
    resto del mapa: el diseno de Illustrator ya se lee solo y cualquier
    adorno encima lo ensucia. */
 
-#cab{position:fixed;top:0;left:0;right:0;z-index:2;padding:16px 20px 30px;
-     display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
-     pointer-events:none;background:linear-gradient(#f3f9eeff,#f3f9ee00)}
-#marca{font-size:16px;font-weight:800;letter-spacing:.02em;color:var(--tinta)}
-#lugar{font-size:11px;font-weight:650;letter-spacing:.13em;text-transform:uppercase;
-       color:var(--tenue)}
+/* El encabezado de texto se fue con el banner, que ya lleva el titulo. Lo que
+   queda de el es el alto libre de arriba, que `encuadra()` necesita para
+   centrar el mapa: sin nada encima, es un margen fijo. El degradado que tenia
+   tambien: existia para que el texto se leyera sobre el dibujo, y sin texto no
+   hay nada que tapar. */
 
 /* El panel lleva los accesos rapidos: en el movil acertarle a una banda
    diagonal es dificil, asi que ademas de informar sirve para navegar.
@@ -664,23 +663,34 @@ body{
   #chips{flex-wrap:wrap;overflow:visible}
   #enlaces{margin-top:auto}
   #enlaces .enlace{flex:1;justify-content:center}
-  /* El encabezado empieza donde termina el panel. Los dos van anclados
-     arriba a la izquierda, asi que sin esto el panel tapa el titulo: el
-     encabezado empieza en x=20 y el panel llega hasta x=352.
-
-     Se aparta el encabezado en vez de bajar el panel porque el mapa se
-     encuadra a partir de su borde inferior: bajarlo le quitaria alto al
-     mapa, y subirlo no cabe. */
-  #cab{padding-left:372px}
 }
 </style>
 </head>
 <body>
-<svg id="s" viewBox="0 0 1224 792" preserveAspectRatio="xMidYMid meet">
+<!-- El lienzo son los DOS banners y el mapa en medio, que es el poster entero.
+     El `viewBox` empieza en -216 y no en 0 porque el mapa se queda donde estaba,
+     de 0 a 792, y los banners se colocan alrededor: el de arriba de -216 a 0 y
+     el de abajo de 792 a 1008.
+
+     ASI, Y NO MOVIENDO EL MAPA, es lo que permite este cambio. Las zonas, los
+     iconos, `validar.py`, `encuadra()` y `getScreenCTM()` siguen hablando de un
+     mapa de 1224 x 792 en el origen, sin tocar ni una coordenada. Si en cambio
+     se hubiera desplazado el mapa a y=216 para que todo cuadrara desde cero,
+     habria que mover tambien las diez zonas, los cuarenta y seis iconos y el
+     encuadre, y cualquier numero que se quedara viejo seria una zona que se
+     toca en el sitio equivocado. -->
+<svg id="s" viewBox="0 -216 1224 1224" preserveAspectRatio="xMidYMid meet">
   <defs>
     <clipPath id="recorte"><circle cx="0" cy="0" r="12.2"/></clipPath>
   </defs>
   <g id="m">
+    <!-- El banner de arriba, con el titulo. Va DENTRO de `#m` a proposito: al
+         ampliar una zona se va con el mapa, que es lo que tiene que pasar. Si se
+         dejara fuera          se queda pegado al borde de la pantalla mientras el mapa se mueve
+         debajo. -->
+    <image id="bannerArriba" x="0" y="-216" width="1224" height="216"
+           preserveAspectRatio="none"
+           href="banner-arriba-chico.webp?v=729b7f5c"/>
     <g id="hoja">
       <rect x="0" y="0" width="1224" height="792" fill="#f3f9ee"/>
       <!-- El fondo va en DOS versiones del mismo dibujo, y las dos con su
@@ -710,11 +720,30 @@ body{
     </g>
     <g id="zonas"></g>
     <g id="iconos"></g>
+    <!-- Y el de abajo, que es solo el dibujo. Una sola version, y no dos como
+         el fondo: estos no cambian con el zoom -se van con el mapa entero-, asi
+         que no hay ningun momento en que haga falta una version mas grande que
+         la que se ve a pantalla. Son 20 KB y se quedan 20 KB.
+
+         `preparar_mapa.py` saca tambien una de 2448 px de cada uno, por si
+        alguna vez se quisiera el cambio por capas como el del fondo, pero de
+         momento no se usa: se dejaria pagar 99 KB a todo el mundo para algo que
+         solo se nota en un monitor de densidad 2 con el mapa a pantalla
+         completa. -->
+    <image id="bannerAbajo" x="0" y="792" width="1224" height="216"
+           preserveAspectRatio="none"
+           href="banner-abajo-chico.webp?v=605d1f3b"/>
   </g>
 </svg>
 
-<header id="cab"><span id="marca">Día del Orgullo Cimarrón 2026</span>
-<span id="lugar">Rectoría UABC · Mexicali, B.C.</span></header>
+<!-- NO hay encabezado de texto. Antes decia «Día del Orgullo Cimarrón 2026» y
+     «Rectoría UABC · Mexicali, B.C.», pero el banner de arriba ya lleva el
+     titulo y queda mejor que una linea de texto suelta: el titulo va en el
+     arte, que es donde estaba puesto de verdad.
+
+     Lo que hace falta sigue sin cambios: `encuadra()` mide el borde de este
+     encabezado para saber cuanto alto hay libre arriba, y ahora ese alto es
+     fijo. Ver `ARRIBA_LIBRE`. -->
 <footer id="ficha">
   <div id="rotulo">
     <span id="punto">
@@ -851,8 +880,16 @@ var ZONAS = [
 ];
 /* === FIN ZONAS === */
 
-// Vista general: el predio del campus con las dos calles que lo enmarcan.
-var VISTA = [110, 100, 1005, 640];
+// Vista general: el POSTER entero, con los dos banners y el mapa en medio.
+//
+// Antes era `[110, 100, 1005, 640]`, un recorte del campus con las calles que lo
+// enmarcan. Con los banners no vale: ese rectangulo no los incluye, con lo que
+// en la vista general no se veria ni el titulo ni el dibujo de abajo, que es
+// justo lo que se ha pedido.
+//
+// Ahora es el poster completo, de -216 a 1008 en vertical -los dos banners de 216
+// y el mapa de 792 en medio-, que es lo mismo que el `viewBox`.
+var VISTA = [0, -216, 1224, 1224];
 
 /* === INICIO ENLACE === */
 var ENLACE = {"t": "Programa del evento", "u": "RecursosExtra/11x17pl_Orgullo CImarron_Vrs4.jpg"};
@@ -1029,11 +1066,23 @@ var NOMBRES = {
 var TAM_ICONO = 46;
 
 var s = document.getElementById("s"), M = document.getElementById("m"),
-    cab = document.getElementById("cab"), F = document.getElementById("ficha"),
+    F = document.getElementById("ficha"),
     TITULO = document.getElementById("titulo"), PISTA = document.getElementById("pista"),
     PUNTO = document.getElementById("punto"), ZON = document.getElementById("zonas"),
     ICN = document.getElementById("iconos"),
     CH = document.getElementById("chips"), K = [], A = -1, i;
+
+// El alto libre que hay ARRIBA, en pixeles de pantalla, para `encuadra()`.
+//
+// Antes se media el borde inferior del encabezado de texto. Ese encabezado se
+// fue con el banner de arriba, que ya lleva el titulo, asi que ahora no hay
+// nada encima del mapa y el hueco es un margen fijo.
+//
+// Es un margen y no cero porque el banner es una imagen con fondo blanco y el
+// resto de la pagina es verde palido: pegado al borde, el blanco se ve como un
+// recorte. Con aire, la composicion respira y el mapa no queda aplastado contra
+// los limites de la pantalla.
+var ARRIBA_LIBRE = 14;
 
 // Un texto que va a acabar dentro del SVG. Las etiquetas de los iconos las
 // escribe una persona, asi que pueden traer un & o un < y romper el dibujo.
@@ -1289,15 +1338,15 @@ function caja(puntos) {
 //    distintas, c.a para el eje X y c.d para el Y. Usar c.a en los dos ejes
 //    descentra la vista.
 //  - El centro util es el del hueco, no el del svg: si se centra en el svg,
-//    la zona ampliada queda tapada por el panel o por el encabezado.
+//    la zona ampliada queda tapada por el panel.
 //  - El panel es barra inferior en vertical y lateral en apaisado, asi que el
 //    hueco se mide de sus rectangulos en vez de suponer donde esta.
 function encuadra(x, y, w, h, aire) {
   var c = s.getScreenCTM(), ux = c.a, uy = c.d,
       W = s.clientWidth, H = s.clientHeight,
-      rc = cab.getBoundingClientRect(), rf = F.getBoundingClientRect(),
+      rf = F.getBoundingClientRect(),
       lateral = rf.width < W * .62,
-      arriba = rc.bottom,
+      arriba = ARRIBA_LIBRE,
       izq = lateral ? rf.right + 12 : 0,
       abajo = lateral ? 0 : H - rf.top,
       ancho = W - izq, alto = H - arriba - abajo,
@@ -1997,6 +2046,14 @@ todo();
 // unos 375 px de ancho: 750 reales en una pantalla densa, menos de la mitad de
 // 1600. Ahi si se empieza por la chica, y la grande espera a que alguien
 // acerque.
+//
+// Con el poster entero el lienzo es cuadrado, y eso hace que
+// `anchoNecesario()` de menos pixeles en un monitor ancho, que antes se
+// emparejaba con la anchura de la pantalla y ahora se empareja con la altura:
+// en un 16:9 manda la altura. Y asi tiene que ser, porque el mapa ya no ocupa
+// la pantalla entera sino las dos terceras partes de un lienzo cuadrado. El
+// numero bajo no es que se haya estropeado: es que de verdad hacen falta menos
+// pixeles.
 if (anchoNecesario() > ANCHO_CHICO) {
   traeLaGrande();
 } else if (conexionRapida()) {

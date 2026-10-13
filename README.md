@@ -283,13 +283,17 @@ byte.
 ## Estructura
 
 ```
-Mapa Dia del Orgullo Cimarron 2026 VERSION 2.ai   Arte original de Illustrator
+CroquisSolo.ai   Arte del mapa, 1224 x 792 pt. De aqui sale el fondo
+Mapa ... FINAL2.ai  El póster entero, 1224 x 1224 pt. De aqui salen los banners
 generar_qr.py      Generador: mide, empaqueta y dibuja el QR
+preparar_mapa.py   Saca el fondo y los banners del .ai, en dos tamaños
 test_qr.py         Pruebas del ciclo completo
 d.html             Página base, solo para el modo servidor
 plantilla/
   croquis.html     El mapa interactivo (este es el que se publica)
-  rectoria.webp    El arte, en ráster: 3400 x 2200 px, ~0.50 MB
+  rectoria.webp    El fondo, en ráster: 3400 x 2200 px, ~0.50 MB
+  banner-arriba-chico.webp  El banner del título, 1224 x 216 px, 30 KB
+  banner-abajo-chico.webp   El banner de abajo, 1224 x 216 px, 20 KB
   plantilla.html   Documento de ejemplo
   planos/          Croquis del campus descargados (referencia vieja)
 editor/            Herramienta de edición. NO se publica.
@@ -395,9 +399,14 @@ y no se pueden leer del `.ai`.
 
 ### Cómo está armado el HTML
 
-El mapa se dibuja con un `<image>` dentro de un `<svg viewBox="0 0 1224 792">`,
+El mapa se dibuja con un `<image>` dentro de un `<svg viewBox="0 -216 1224 1224">`,
 en el mismo sistema de coordenadas que el archivo de Illustrator. Así los
 números de `ZONAS` se leen directamente sobre el `.ai`.
+
+El `viewBox` empieza en **-216** y no en 0 porque el croquis publica el **póster
+entero**: el banner con el título de -216 a 0, el mapa de 0 a 792, y el banner de
+abajo de 792 a 1008. El mapa se queda exactamente donde estaba, así que ninguna
+zona, ningún icono y ningún número ha cambiado: lo único que creció es el lienzo.
 
 ```javascript
 /* === INICIO ZONAS === */

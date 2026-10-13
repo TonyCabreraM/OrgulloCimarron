@@ -717,11 +717,12 @@ def test_el_toque_y_el_encabezado() -> bool:
     exigen que la forma este pintada, y con `fill:none` no lo esta. Poner
     `auto` ahi pareceria razonable y no funcionaria.
 
-    **El encabezado.** En apaisado el panel es lateral y el encabezado va
-    anclado arriba a la izquierda, asi que el panel le pasa por encima y el
-    titulo desaparece detras. Aqui se comprueba que el encabezado empiece
-    despues de donde termina el panel. Asi, si alguien ensancha el panel, la
-    prueba avisa en vez de que el titulo desaparezca en silencio.
+    **El panel.** En apaisado el panel es lateral y va anclado arriba a la
+    izquierda, asi que se come el poster por ese lado. Antes lo que vigilaba esto
+    era que el encabezado de texto empezase despues del panel; ese encabezado se
+    fue con el banner de arriba, que ya lleva el titulo. Ahora lo que se vigila es
+    lo mismo un nivel mas abajo: que `encuadra()` aparte el hueco del panel al
+    encuadrar, que es lo que deja el poster a la vista.
     """
     texto = CROQUIS.read_text(encoding="utf-8")
     problemas = []
@@ -782,40 +783,35 @@ def test_el_toque_y_el_encabezado() -> bool:
               "toque no esta en uso, pero el codigo que lo dibuja queda "
               "comprobado arriba)")
 
-    # --- 4. El encabezado, a la derecha del panel ----------------------------
-    # Hay varios bloques de pantalla ancha en el archivo (el de la ventana y el
-    # del panel), asi que se busca el que lleva el panel por su regla y no el
-    # primero que aparezca.
-    bloques = re.findall(
-        r"@media \(min-width:760px\) and \(orientation:landscape\)\{(.*?)\n\}",
-        texto, flags=re.S)
-    css = next((b for b in bloques if "#ficha{left:" in b), None)
-    if css is None:
+    # --- 4. Que el panel no tape el mapa ------------------------------------
+    # Antes esto miraba que el encabezado de texto empezase despues de donde
+    # termina el panel, porque los dos van anclados arriba a la izquierda y el
+    # panel le pasaba por encima. Ese encabezado se fue con el banner de arriba,
+    # que ya lleva el titulo, asi que la comprobacion se ha quedado sin objeto.
+    #
+    # Lo que la sustituye es lo mismo pero con el mapa entero: el panel sigue
+    # anclado y ahora lo que tiene que quedar despejado es el POSTER, con sus
+    # dos banners. Y no se mira el dibujo, sino que `encuadra()` aparte el hueco:
+    # en apaisado el panel es lateral, asi que el huecoUtil empieza a la derecha
+    # de donde termina el panel. Si alguien lo quita, el panel se come la banda
+    # de abajo del banner, en silencio.
+    if not re.search(r"izq\s*=\s*lateral\s*\?\s*rf\.right\s*\+\s*12\s*:\s*0",
+                     texto):
         problemas.append(
-            "(no se encuentra el bloque de pantalla ancha que coloca el panel)")
-    else:
-        panel = re.search(r"#ficha\{left:(\d+)px;right:auto;top:14px;"
-                          r"bottom:14px;width:(\d+)px", css)
-        cabecera = re.search(r"#cab\{padding-left:(\d+)px\}", css)
-        if not panel or not cabecera:
-            problemas.append(
-                "en pantalla ancha hacen falta el `left` y el `width` del panel y "
-                "el `padding-left` del encabezado, para poder comprobar que no "
-                "se pisan")
-        else:
-            borde_panel = int(panel.group(1)) + int(panel.group(2))
-            desde = int(cabecera.group(1))
-            if desde < borde_panel:
-                problemas.append(
-                    f"el encabezado empieza en {desde}px y el panel llega hasta "
-                    f"{borde_panel}px: el titulo queda debajo del panel")
+            "`encuadra` no aparta el hueco del panel en apaisado: el panel es "
+            "lateral, y sin esto se queda encima de la banda de abajo del "
+            "banner del poster")
+    if "rf = F.getBoundingClientRect()" not in texto:
+        problemas.append(
+            "`encuadra` ya no mide el rectangulo del panel: sin el no se sabe "
+            "donde acaba y el poster se dibuja debajo")
 
     for p in problemas:
         print(f"    {p}")
     if problemas:
         return False
     print("    los iconos con informacion tienen su superficie de toque y el "
-          "encabezado empieza donde termina el panel")
+          "panel se aparta para no tapar el poster")
     return True
 
 
@@ -3579,6 +3575,120 @@ def test_el_sello_no_se_mide_con_getbbox() -> bool:
     return True
 
 
+def test_los_banners_estan_en_su_sitio() -> bool:
+    """El poster es los dos banners y el mapa, y las tres cosas donde deben.
+
+    El croquis se dibuja con el poster entero: el banner con el titulo arriba, el
+    mapa en medio y el banner de abajo. Lo que hay que vigilar es que las tres
+    cosas sigan en su sitio, porque el fallo es silencioso: si el banner se queda
+    un poco mas abajo, no da ningun error, solo un titulo que no esta donde
+    tocaba.
+
+    **Y el mapa no se mueve.** El `viewBox` empieza en -216 y no en 0 para poder
+    poner el banner de arriba ENCIMA sin desplazar el mapa: este sigue de 0 a 792,
+    donde estaba, y las diez zonas y los cuarenta y seis iconos siguen hablando de
+    las mismas coordenadas. La razon de hacerlo asi y no moviendo el mapa a
+    y=216 es que un numero que se queda viejo en una zona es una zona que se toca
+    en el sitio equivocado, y eso no se ve en el dibujo: se ve cuando alguien
+    toca.
+
+    El banner de abajo va dentro de `#m` tambien, y con una sola version: no
+    cambia con el zoom -se va con el mapa entero-, asi que no hay ningun momento
+    en que haga falta una mas grande que la que se ve a pantalla.
+    """
+    texto = CROQUIS.read_text(encoding="utf-8")
+    problemas = []
+
+    # --- 1. El lienzo, que tiene que dar a los tres --------------------------
+    lienzo = re.search(r'<svg id="s" viewBox="([^"]*)"', texto)
+    if not lienzo:
+        problemas.append(
+            "no se encuentra el `viewBox` del `<svg>`: sin el no se sabe si los "
+            "banners caben o se salen de la pantalla")
+    else:
+        partes = lienzo.group(1).split()
+        if len(partes) != 4:
+            problemas.append(f"el `viewBox` esta mal escrito: {lienzo.group(1)}")
+        else:
+            x, y, ancho, alto = (float(p) for p in partes)
+            # El mapa sigue donde estaba: de 0 a 792. Si esto cambia, el mapa se
+            # ha movido y con el todas las zonas.
+            if (x, y, ancho) != (0.0, -216.0, 1224.0) or alto != 1224.0:
+                problemas.append(
+                    f"el lienzo es {lienzo.group(1)} y deberia ser "
+                    f"0 -216 1224 1224: el mapa tiene que seguir de 0 a 792 y "
+                    f"los banners alrededor. Un `y` que no sea -216 significa "
+                    f"que el mapa se ha movido, y con el todas las zonas")
+
+    # --- 2. Los dos banners, cada uno en su sitio ---------------------------
+    # Se mide lo que dice el render, no lo que hay en un comentario.
+    for ident, y_esperado, nombre in (("bannerArriba", -216, "arriba"),
+                                      ("bannerAbajo", 792, "abajo")):
+        etiqueta = re.search(r'<image id="%s"[^>]*>' % ident, texto, flags=re.S)
+        if not etiqueta:
+            problemas.append(
+                f"no esta el `<image id=\"{ident}\">`: el banner de {nombre} no "
+                f"se dibujaria")
+            continue
+        marca = etiqueta.group(0)
+        y = re.search(r'\by="(-?\d+)"', marca)
+        alto = re.search(r'\bheight="(\d+)"', marca)
+        ancho = re.search(r'\bwidth="(\d+)"', marca)
+        if not y or float(y.group(1)) != y_esperado:
+            problemas.append(
+                f"el banner de {nombre} esta en y={y.group(1) if y else '?'} y "
+                f"tiene que estar en {y_esperado}: si se separa del mapa se ve "
+                f"un trozo de pagina en medio, y si se solapa, el mapa queda "
+                f"tapado")
+        for dim, valor in (("width", 1224), ("height", 216)):
+            m = re.search(r'\b%s="(\d+)"' % dim, marca)
+            if not m or int(m.group(1)) != valor:
+                problemas.append(
+                    f"el banner de {nombre} mide {dim}={m.group(1) if m else '?'} "
+                    f"y tiene que medir {valor}, que es el ancho del mapa")
+
+    # --- 3. Y que la vista general enseñe el poster entero -------------------
+    # Antes era un recorte del campus. Con los banners, ese rectangulo no los
+    # incluye y en la vista general no se veria ni el titulo ni el dibujo de
+    # abajo: el mapa se abriria sin el banner y pareceria que no se ha subido.
+    vista = re.search(r"var VISTA = \[([^\]]*)\]", texto)
+    if not vista:
+        problemas.append("(no se encuentra VISTA, el encuadre de la vista general)")
+    else:
+        nums = [float(p) for p in vista.group(1).split(",")]
+        if len(nums) == 4 and (nums[1] > -216 or nums[2] < 1224 or nums[3] < 1224):
+            problemas.append(
+                f"VISTA es {nums} y no abarca el poster entero: tiene que "
+                f"llegar de y=-216 a y=1008 y medir 1224 de ancho, o los "
+                f"banners no se ven al abrir el mapa")
+
+    # --- 4. Que los dos archivos existan con su `?v=` -----------------------
+    # El `?v=` es el sha1 del archivo. Sin el, GitHub Pages y su CDN siguen
+    # sirviendo la copia vieja durante diez minutos y el sintoma es un banner que
+    # no cambia, que es justo el fallo que parece «no se subio».
+    for nombre in ("banner-arriba-chico", "banner-abajo-chico"):
+        if f"{nombre}.webp?v=" not in texto:
+            problemas.append(
+                f"el {nombre}.webp no lleva su `?v=`: sin el numero se sigue "
+                f"viendo la copia vieja del banner aunque se suba otra")
+
+    # --- 5. Y que el mapa no se haya movido de sitio -----------------------
+    # El fondo y el filo siguen en 0,0 y miden 1224 x 792. Si esto cambia, el
+    # mapa se ha desplazado y las zonas se han quedado donde estaban antes.
+    if not re.search(r'<rect x="0" y="0" width="1224" height="792"', texto):
+        problemas.append(
+            "la hoja del mapa ya no mide 1224 x 792 en 0,0: el mapa se ha "
+            "movido y las diez zonas se han quedado en el sitio viejo")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    el poster entero en el lienzo, los dos banners en su sitio, y el "
+          "mapa sin moverse un pixel de donde estaba")
+    return True
+
+
 def test_los_vectores_van_sueltos_en_el_documento() -> bool:
     """Un icono de vector va EN el documento, no dentro de un `<image>`.
 
@@ -3704,6 +3814,7 @@ def main() -> int:
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
         ("animaciones e intensidad", test_animaciones_e_intensidad),
         ("el toque y el encabezado", test_el_toque_y_el_encabezado),
+        ("los banners estan en su sitio", test_los_banners_estan_en_su_sitio),
         ("el sello y el boton de la ventana", test_el_sello_y_el_boton_de_la_ventana),
         ("el sello no se mide con getBBox", test_el_sello_no_se_mide_con_getbbox),
         ("las animaciones se paran cuando no se ven",
