@@ -1187,6 +1187,17 @@ ZON.innerHTML = ZONAS.map(function (z, k) {
   // dibuja ninguna linea.
   pintas += ' fill="' + (a.f || "transparent") + '"';
   if (a.l) pintas += ' stroke="' + a.l + '"';
+  // El grosor y la opacidad, que llegaron con la version 2 del editor. Antes
+  // el grosor estaba clavado en el CSS (2) y no se podia tocar.
+  //
+  // El grosor va como ATRIBUTO y no en el `style` a proposito: hay una regla
+  // que pone el de la zona animada en 2.5 para que la linea que se mueve se vea
+  // por encima de la quieta, y esa gana a un atributo de presentacion, pero no a
+  // un `style` en linea. Asi el grosor que puso quien edita manda siempre, y si
+  // en el futuro se quiere que la animacion tenga otro comportamiento, se
+  // cambia el `style` y no el atributo.
+  if (a.w) pintas += ' stroke-width="' + a.w + '"';
+  if (a.o !== undefined && a.o !== 1) pintas += ' stroke-opacity="' + a.o + '"';
   return '<path class="' + clases.join(" ") + '" data-i="' + k + '" d="'
        + contorno(z[2], a.rd) + '"' + pintas + "/>";
 }).join("");
@@ -1288,6 +1299,36 @@ function nombreDe(tipo) {
 // su propio centro (el 0,0 donde esta dibujado), que es lo que uno espera al
 // girar un icono. Si fuera antes del scale, giraria sobre un centro ya escalado
 // y se iria del sitio.
+//
+// LAS TRANSFORMACIONES, entre el scale y el rotate
+// -----------------------------------------------
+// `sx`, `sy`, `sk` y `op` llegaron con la version 2 del editor. Van en el mismo
+// atributo `transform`, entre el tamaño y el giro, y en este orden por dos
+// razones:
+//
+//   - la escala despues del tamaño, para que `sx` y `sy` sean la forma FINAL del
+//     icono y no se multipliquen por `s`. Un icono de tamano 30 con `sy` de 0.5
+//     sale bajo, no la mitad de grande y aplastado.
+//
+//   - el `skew` antes del giro, porque inclinar despues de girar lean «caido a
+//     un lado», y inclinar antes rotado lee «apegado a la rotacion». Lo segundo
+//     es lo que se quiere.
+//
+// El signo de `sx`/`sy` da la vuelta: -1 es el icono del reves, y no hace falta
+// una clave aparte porque una escala negativa ES un espejo.
+//
+// Y si no hay ninguna transformacion no se escribe nada: el `transform` de un
+// icono corriente tiene que seguir siendo el de siempre, byte a byte, para que el
+// archivo no se llene de `scale(1,1) rotate(0)` que no hacen nada.
+function transformacionesDe(ic) {
+  var trozos = [];
+  var sx = ic.sx === undefined ? 1 : ic.sx;
+  var sy = ic.sy === undefined ? 1 : ic.sy;
+  if (sx !== 1 || sy !== 1) trozos.push("scale(" + sx + "," + sy + ")");
+  if (ic.sk) trozos.push("skewX(" + ic.sk + ")");
+  return trozos.length ? " " + trozos.join(" ") : "";
+}
+
 ICN.innerHTML = ICONOS.map(function (ic, k) {
   // `c` en 0 es "sin circulo". Se comprueba en `conAroDe`, que lo mira con
   // `in` y no por lo que vale.
@@ -1316,12 +1357,17 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
   // La intensidad del movimiento va en un `style` con solo la variable, para
   // que no pise el atributo `transform` de este mismo elemento, que es el que
   // pone el icono en su sitio. Se omite cuando vale 1, que es lo normal.
-  var fuerza = (ic.m && ic.m !== 1) ? ' style="--m:' + ic.m + '"' : "";
+  // Lo mismo con la opacidad, que tambien va en el `style` porque es una
+  // propiedad distinta y no se puede expresar en el `transform`.
+  var Variables = (ic.m && ic.m !== 1) ? "--m:" + ic.m : "";
+  if (ic.op !== undefined && ic.op !== 1) Variables += ";opacity:" + ic.op;
+  var fuerza = Variables ? ' style="' + Variables + '"' : "";
   // La comilla que cierra el transform va al principio del ultimo trozo. Es
   // facil dejarla fuera (paso dos veces) y el navegador se traga la etiqueta
   // entera: el icono desaparece y solo sale un aviso en la consola.
   return "<g" + caja + fuerza + ' transform="translate(' + ic.x + "," + ic.y
        + ") scale(" + ((ic.s || TAM_ICONO) / 24) + ")"
+       + transformacionesDe(ic)
        + (ic.r ? " rotate(" + ic.r + ")" : "") + '"><title>'
        + escapa(ic.n || nombreDe(ic.t)) + "</title>"
        + (conAro ? '<circle class="aro" r="13.4"/>' : "")

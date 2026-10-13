@@ -77,14 +77,18 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     ANIMACIONES_SIN_INTENSIDAD,
     ANIMACIONES_ZONA,
     CARPETA_RECURSOS,
+    ESCALA_NULA,
     EXTENSIONES_IMAGEN,
+    GROSOR,
     INTENSIDAD,
     MAX_BOTON,
+    MAX_GROSOR,
     MAX_ICONO,
     MAX_ICONOS_PROPIOS,
     MAX_INTENSIDAD,
     MAX_MODELOS,
     MAX_NOMBRE_MODELO,
+    MAX_OPACIDAD,
     MAX_REDONDEO,
     MAX_ROT,
     MAX_TAM_ICONO,
@@ -92,10 +96,13 @@ from validar import (  # noqa: E402  (va despues del sys.path a proposito)
     MAX_TITULO,
     MAX_URL,
     MAX_VECTOR,
+    MIN_GROSOR,
     MIN_INTENSIDAD,
+    MIN_OPACIDAD,
     MIN_ROT,
     MIN_TAM_ICONO,
     NOMBRE_PROPIO,
+    OPACIDAD,
     SENTIDOS_CAMINA,
     SIMBOLOS,
     es_recurso,
@@ -346,10 +353,10 @@ def _texto_zonas(zonas: list) -> str:
 def _texto_adornos(adornos: dict) -> str:
     """El objeto de adornos de una zona, en el orden en que se lee.
 
-    El orden es f, l, p, rd, a, b, d, m: primero lo que se ve (relleno y linea),
-    despues como se pinta la linea (punteada y redondeo), luego el movimiento y
-    al final hacia donde va. Se omite lo que no esta, para que una zona con
-    solo un color ocupe lo minimo.
+    El orden es f, l, p, rd, a, b, d, m, w, o: primero lo que se ve (relleno y
+    linea), despues como se pinta la linea (punteada y redondeo), luego el
+    movimiento y al final hacia donde va. Se omite lo que no esta, para que una
+    zona con solo un color ocupe lo minimo.
     """
     trozos = []
     for clave in ("f", "l"):
@@ -368,6 +375,12 @@ def _texto_adornos(adornos: dict) -> str:
         trozos.append(f'"d": {round(float(adornos["d"]), 2):g}')
     if adornos.get("m"):
         trozos.append(f'"m": {round(float(adornos["m"]), 2):g}')
+    # El grosor y la opacidad de la version 2. Van al final, y solo cuando se
+    # apartan de lo de fabrica: una zona corriente no crece ni un byte.
+    if adornos.get("w") and float(adornos["w"]) != GROSOR:
+        trozos.append(f'"w": {round(float(adornos["w"]), 2):g}')
+    if adornos.get("o") and float(adornos["o"]) != OPACIDAD:
+        trozos.append(f'"o": {round(float(adornos["o"]), 2):g}')
     return "{" + ", ".join(trozos) + "}"
 
 
@@ -431,6 +444,18 @@ def _campos_icono(ic: dict) -> list[str]:
         texto, url = ic["u"]
         partes.append('"u": [' + json.dumps(texto, ensure_ascii=False)
                       + ", " + json.dumps(url, ensure_ascii=False) + "]")
+    # Las transformaciones de la version 2. Se escriben solo cuando se apartan de
+    # lo de fabrica, con dos decimales, yASI un icono corriente no crece ni un
+    # byte en el archivo. La escala se mira con `in` y no por lo que valga,
+    # porque -1 es un valor de fabrica en el sentido de que es un espejo, y aun
+    # asi hay que poder escribirlo.
+    for clave, defecto in (("sx", ESCALA_NULA), ("sy", ESCALA_NULA)):
+        if clave in ic and float(ic[clave]) != defecto:
+            partes.append(f'"{clave}": {round(float(ic[clave]), 2):g}')
+    if ic.get("sk") and float(ic["sk"]) != 0:
+        partes.append(f'"sk": {round(float(ic["sk"]), 2):g}')
+    if ic.get("op") and float(ic["op"]) != OPACIDAD:
+        partes.append(f'"op": {round(float(ic["op"]), 2):g}')
     return partes
 
 

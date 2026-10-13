@@ -105,6 +105,51 @@ INTENSIDAD = 1.0
 MIN_INTENSIDAD = 0.2
 MAX_INTENSIDAD = 2.5
 
+# --- Las transformaciones ----------------------------------------------------
+# Llegan con la version 2 del editor. Antes el icono solo se podia girar (`r`) y
+# cambiar de tamano (`s`); para aplastarlo, inclinarlo o darle la vuelta habia que
+# editar el croquis a mano.
+#
+# LA ESCALA ADMITE NEGATIVOS, Y ESO ES A PROPOSITO
+# --------------------------------------------------
+# `sx` y `sy` van de -4 a 4 sin pasar por cero, y el cero esta prohibido porque
+# dejaria el icono sin dibujo y del todo invisible, que es un fallo que en el
+# mapa se lee como «este icono no esta puesto» y no como «este icono esta roto».
+#
+# El signo da la vuelta: -1 es el icono del reves. Va incluido en vez de una
+# clave aparte porque es lo mismo -una escala negativa es un espejo- y asi el
+# archivo tiene una clave menos que mantener.
+#
+# El tope de 4 es de sobra: los iconos miden 24.4 unidades y el mapa entero son
+# 1224, con lo que alIcons mas grande ya se sale del mapa.
+MIN_ESCALA = -4.0
+MAX_ESCALA = 4.0
+ESCALA_NULA = 1.0
+ESCALA_MINIMA = 0.1          # lo mas pequeno que se admite en valor absoluto
+
+# La inclinacion, en grados. Se limita a 45 porque es el angulo en el que un
+# rectangulo se queda en un rombo: mas alla ya no se lee como «un icono
+# inclinado» sino como una figura distinta.
+MIN_INCLINACION = -45.0
+MAX_INCLINACION = 45.0
+
+# La opacidad. No baja de 0.05 porque por debajo el icono desaparece y con el
+# mismo problema que la escala nula.
+MIN_OPACIDAD = 0.05
+MAX_OPACIDAD = 1.0
+OPACIDAD = 1.0
+
+# El grosor de la linea de una zona, en puntos del mapa. Antes estaba clavado en
+# el CSS: ponia 2 y punto, y una zona que necesitaba un filo mas fino o mas grueso
+# no lo tenia sin editar el archivo a mano.
+#
+# El minimo de 0.5 es el grosor que mas o menos se ve a la escala del mapa, y el
+# maximo de 12 es una franja de verdad: mas que eso ya no parece el borde de una
+# zona sino un objeto.
+MIN_GROSOR = 0.5
+MAX_GROSOR = 12.0
+GROSOR = 2.0
+
 # --- Los adornos de una zona ------------------------------------------------
 # Una zona nace invisible: es un poligono transparente que solo existe para
 # recibir el toque, para no tapar el dibujo del mapa. A partir de aqui se le
@@ -158,7 +203,11 @@ SENTIDOS_CAMINA = {SENTIDO_NORMAL: "Normal", SENTIDO_REVES: "Al revés"}
 # tupla ya tiene cuatro campos de siempre -nombre, corto, poligono y
 # descripcion- y meterle ocho mas seria volver a contar comas con la vista,
 # que es justo el problema que se quito de los iconos.
-CLAVES_ZONA = {"f", "l", "p", "rd", "a", "b", "d", "m"}
+#
+# `w` y `o` llegaron con la version 2 del editor, para el grosor de la linea y la
+# opacidad. El grosor estaba clavado en el CSS y no se podia tocar sin editar el
+# archivo a mano.
+CLAVES_ZONA = {"f", "l", "p", "rd", "a", "b", "d", "m", "w", "o"}
 
 # El redondeo de las esquinas, en puntos del mapa.
 #
@@ -209,9 +258,16 @@ MAX_MODELOS = 60
 MAX_NOMBRE_MODELO = 40
 
 # Las claves de un icono. Se rechaza cualquier otra: un nombre mal escrito
-# (`X` por `x`) dejaria el icono sin ese dato y no se notaria hasta verlo en
-# el mapa, que es la peor forma de enterarse.
-CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "c", "m", "i", "u"}
+# (`X` por `x`) dejaria el icono sin ese dato y no se notaria hasta verlo en el
+# mapa, que es la peor forma de enterarse.
+#
+# Las cuatro ultimas son las TRANSFORMACIONES, que llegaron con la version 2
+# del editor. Antes solo habia tamano `s` y giro `r`, y con eso no se podia
+# aplastar, inclinar ni volver del reves un icono: habia que editar el archivo a
+# mano. Son opcionales y valen lo de fabrica, asi que un icono que no las use no
+# las escribe y el archivo no crece ni un byte.
+CLAVES_ICONO = {"t", "x", "y", "n", "s", "r", "a", "c", "m", "i", "u",
+                "sx", "sy", "sk", "op"}
 
 # El texto que sale en la ventana al tocar un icono. Va dentro del croquis,
 # asi que se limita: una parrafada convertiria la pagina del movil en algo
@@ -394,7 +450,7 @@ def revisar_adornos(adornos, sitio: str) -> list[str]:
         return [f"{sitio}: en los adornos no conozco {' ni '.join(raros)}. "
                 f"Las claves son {', '.join(sorted(CLAVES_ZONA))} "
                 f"(f=relleno, l=linea, p=punteada, a=animacion, b=borde, "
-                f"d=sentido, m=intensidad)"]
+                f"d=sentido, m=intensidad, w=grosor, o=opacidad)"]
 
     for clave, cual in (("f", "el relleno"), ("l", "la linea")):
         if clave in adornos and not es_color(adornos[clave]):
@@ -418,12 +474,36 @@ def revisar_adornos(adornos, sitio: str) -> list[str]:
     if "rd" in adornos:
         rd = adornos["rd"]
         if not isinstance(rd, (int, float)) or isinstance(rd, bool):
-            problemas.append(
-                f"{sitio}: el redondeo de las esquinas tiene que ser un numero")
+            problemas.append(f"{sitio}: el redondeo de las esquinas tiene que ser un numero")
         elif not MIN_REDONDEO <= rd <= MAX_REDONDEO:
             problemas.append(
                 f"{sitio}: el redondeo {rd:.0f} se sale de {MIN_REDONDEO} a "
                 f"{MAX_REDONDEO} puntos")
+
+    # El grosor y la opacidad llegaron con la version 2 del editor.
+    if "w" in adornos:
+        w = adornos["w"]
+        if not isinstance(w, (int, float)) or isinstance(w, bool):
+            problemas.append(f"{sitio}: el grosor de la linea tiene que ser un numero")
+        elif not MIN_GROSOR <= w <= MAX_GROSOR:
+            problemas.append(
+                f"{sitio}: el grosor {w:g} se sale de {MIN_GROSOR} a "
+                f"{MAX_GROSOR} puntos")
+        # Grosor sin linea es un ajuste que no hace nada, como el punteado sin
+        # linea. Se avisa para que no quede puesto por error.
+        elif not adornos.get("l"):
+            problemas.append(
+                f"{sitio}: la linea tiene grosor {w:g} pero no tiene color, asi "
+                f"que no hay linea que engordar")
+
+    if "o" in adornos:
+        o = adornos["o"]
+        if not isinstance(o, (int, float)) or isinstance(o, bool):
+            problemas.append(f"{sitio}: la opacidad tiene que ser un numero")
+        elif not MIN_OPACIDAD <= o <= MAX_OPACIDAD:
+            problemas.append(
+                f"{sitio}: la opacidad {o:g} se sale de {MIN_OPACIDAD} a "
+                f"{MAX_OPACIDAD}")
 
     for clave, lista, cual in (("a", ANIMACIONES_ZONA, "la zona"),
                                ("b", ANIMACIONES_BORDE, "el borde")):
@@ -501,6 +581,12 @@ def limpiar_adornos(adornos) -> dict:
         limpio["d"] = SENTIDO_REVES
     if adornos.get("m") and adornos["m"] != INTENSIDAD:
         limpio["m"] = adornos["m"]
+    # El grosor y la opacidad de la version 2, con la misma regla que el resto:
+    # fuera si valen lo de fabrica. Una zona corriente no crece ni un byte.
+    if adornos.get("w") and adornos["w"] != GROSOR:
+        limpio["w"] = adornos["w"]
+    if adornos.get("o") and adornos["o"] != OPACIDAD:
+        limpio["o"] = adornos["o"]
     return limpio
 
 
@@ -606,7 +692,8 @@ def _revisar_icono(ic, sitio: str, conocidos: set, con_posicion: bool) -> list[s
                 f"Las claves son {', '.join(sorted(CLAVES_ICONO))} "
                 f"(t=tipo, x, y, n=etiqueta, s=tamaño, r=rotación, "
                 f"a=animación, c=círculo, m=intensidad, i=información, "
-                f"u=botón con enlace)"]
+                f"u=botón con enlace, sx/sy=escala, sk=inclinación, "
+                f"op=opacidad)"]
 
     tipo = ic.get("t")
     if tipo not in conocidos:
@@ -644,6 +731,46 @@ def _revisar_icono(ic, sitio: str, conocidos: set, con_posicion: bool) -> list[s
             problemas.append(
                 f"{sitio}: la rotación {rot:.0f}° se sale de "
                 f"{MIN_ROT} a {MAX_ROT}")
+
+    # Las transformaciones, que llegaron con la version 2 del editor. Se comprueban
+    # juntas porque se parecen, pero cada una avisa de su cosa.
+    for clave, nombre in (("sx", "la escala horizontal"),
+                          ("sy", "la escala vertical")):
+        if clave not in ic:
+            continue
+        esc = ic[clave]
+        if not isinstance(esc, (int, float)) or isinstance(esc, bool):
+            problemas.append(f"{sitio}: {nombre} tiene que ser un numero")
+        elif abs(esc) < ESCALA_MINIMA:
+            # Aqui esta el fallo caro: una escala en cero deja el icono sin
+            # dibujo y desaparece. En el mapa eso se lee como «este icono no esta
+            # puesto», que no es lo que pasa, y no hay ningun error.
+            problemas.append(
+                f"{sitio}: {nombre} vale {esc:g}, y no puede valer menos de "
+                f"{ESCALA_MINIMA} en valor absoluto: por debajo el icono "
+                f"desaparece. Pon 1 para dejarlo como estaba")
+        elif not MIN_ESCALA <= esc <= MAX_ESCALA:
+            problemas.append(
+                f"{sitio}: {nombre} {esc:g} se sale de {MIN_ESCALA} a "
+                f"{MAX_ESCALA}")
+
+    if "sk" in ic:
+        incl = ic["sk"]
+        if not isinstance(incl, (int, float)) or isinstance(incl, bool):
+            problemas.append(f"{sitio}: la inclinación tiene que ser un numero")
+        elif not MIN_INCLINACION <= incl <= MAX_INCLINACION:
+            problemas.append(
+                f"{sitio}: la inclinación {incl:g}° se sale de "
+                f"{MIN_INCLINACION} a {MAX_INCLINACION}°")
+
+    if "op" in ic:
+        op = ic["op"]
+        if not isinstance(op, (int, float)) or isinstance(op, bool):
+            problemas.append(f"{sitio}: la opacidad tiene que ser un numero")
+        elif not MIN_OPACIDAD <= op <= MAX_OPACIDAD:
+            problemas.append(
+                f"{sitio}: la opacidad {op:g} se sale de {MIN_OPACIDAD} a "
+                f"{MAX_OPACIDAD}")
 
     if "a" in ic and ic["a"] not in ANIMACIONES:
         problemas.append(

@@ -269,7 +269,9 @@ def leer_objeto(texto: str, nombre: str):
 
 CROQUIS = Path("plantilla/croquis.html")
 EDITOR_HTML = Path("editor/editor.html")
+EDITOR_V2 = Path("editor/editor-v2.html")
 VALIDAR = Path("editor/validar.py")
+SERIALIZADOR = Path("editor/editor.py")
 
 
 def _cuerpo_de_keyframe(css: str, nombre: str) -> str | None:
@@ -3737,6 +3739,110 @@ def test_los_banners_estan_en_su_sitio() -> bool:
     return True
 
 
+def test_las_transformaciones_se_guardan_y_se_dibujan() -> bool:
+    """Las transformaciones se aceptan, se guardan y se dibujan.
+
+    Llegaron con la version 2 del editor. Antes el icono solo se podia girar (`r`)
+    y cambiar de tamano (`s`): para inclinarlo, achatarlo o darle la vuelta habia
+    que editar el croquis a mano. Y el grosor de la linea de una zona estaba
+    clavado en el CSS, con lo que no se podia tocar sin editar el archivo.
+
+    Se comprueban cuatro cosas, y cada una se rompe por su cuenta:
+
+      1. Que las claves se acepten y esten en su rango. La escala admite
+         negativos, porque un -1 es el icono del reves: es lo mismo que un
+         espejo y asi no hace falta una clave mas. El cero esta PROHIBIDO, y con
+         un motivo concreto: una escala en cero deja el icono sin dibujo, y en el
+         mapa eso se lee como «este icono no esta puesto», no como «este icono
+         esta roto», y no da ningun error.
+
+      2. Que el editor las escriba al guardar, y SOLO cuando se apartan de lo de
+         fabrica. Un icono corriente tiene que seguir guardandose byte a byte
+         igual, o el archivo se llena de `scale(1,1)` que no hacen nada y el
+         diff de git se ensucia.
+
+      3. Que el croquis las aplique al dibujar, en el orden correcto.
+
+      4. Que el orden de las transformaciones sea el que hace falta, que es el
+         que esta explicado en el codigo del croquis.
+    """
+    problemas = []
+    limpio = _sin_comentarios(CROQUIS.read_text(encoding="utf-8"))
+    val = VALIDAR.read_text(encoding="utf-8")
+
+    # --- 1. Las reglas ------------------------------------------------------
+    for clave in ("sx", "sy", "sk", "op"):
+        if f'"{clave}"' not in val and f"'{clave}'" not in val:
+            problemas.append(
+                f"validar.py no conoce la clave «{clave}» de las transformaciones")
+
+    # El cero, prohibido. Se comprueba el texto de la regla, porque el rango
+    # entero se lee en ESCALA_MINIMA.
+    if "ESCALA_MINIMA" not in val:
+        problemas.append(
+            "validar.py no tiene ESCALA_MINIMA: sin ella no se puede rechazar la "
+            "escala en cero, que deja el icono invisible sin avisar")
+
+    # --- 2. Que el editor las escriba, y solo si cambian ---------------------
+    ser = SERIALIZADOR.read_text(encoding="utf-8")
+    for clave, defecto in (("sx", "ESCALA_NULA"), ("sy", "ESCALA_NULA")):
+        if f'"{clave}"' not in ser:
+            problemas.append(
+                f"editor.py no escribe la clave «{clave}»: la transformacion "
+                f"se pondria en el editor y se perderia al guardar")
+    if f'"{clave}"' in ser and defecto not in ser:
+        problemas.append(
+            f"editor.py escribe «{clave}» sin comparar con {defecto}: un icono "
+            f"sin transformar growria una clave que no hace falta y el archivo "
+            f"dejaria de ser legible")
+
+    # --- 3. Que el croquis las aplique --------------------------------------
+    if "function transformacionesDe(" not in limpio:
+        problemas.append(
+            "el croquis no tiene transformacionesDe(): las transformaciones se "
+            "pueden guardar pero no se dibujan, y eso es el peor fallo posible: "
+            "el editor dice que el icono esta inclinado y en el mapa no se ve")
+    else:
+        cuerpo = limpio[limpio.find("function transformacionesDe("):]
+        cuerpo = cuerpo[:cuerpo.find("\n}")]
+        if '"scale("' not in cuerpo:
+            problemas.append(
+                "transformacionesDe no escribe el scale: `sx` y `sy` no se "
+                "aplican")
+        if "skewX" not in cuerpo:
+            problemas.append(
+                "transformacionesDe no escribe el skewX: la inclinacion no se "
+                "aplica")
+
+    # Y que se usen al construir el transform del icono.
+    if "transformacionesDe(ic)" not in limpio:
+        problemas.append(
+            "el render de iconos no llama a transformacionesDe: las "
+            "transformaciones se calculan pero no se ponen en el `<g>`")
+
+    # --- 4. Y que la opacidad no se meta en el transform --------------------
+    # La opacidad NO es un transform: si se metiera ahi, `transform` dejaria de
+    # ser una lista de movimientos valida y el navegador lo tiraria entero. Se
+    # comprueba que la lleve al `style`, que es donde si puede ir.
+    render = limpio[limpio.find("ICN.innerHTML"):limpio.find("ICN.innerHTML") + 2000]
+    if "opacity:" not in render:
+        problemas.append(
+            "la opacidad no aparece en el render de iconos: se puede guardar "
+            "pero no se aplica, y el icono se ve opaco sin decir nada")
+    elif 'style="' not in render or "Variables" not in render:
+        problemas.append(
+            "la opacidad se escribe sin ir en el `style`: si se metiera en el "
+            "transform, el navegador lo tiraria entero")
+
+    for p in problemas:
+        print(f"    {p}")
+    if problemas:
+        return False
+    print("    las transformaciones se aceptan, se omiten cuando valen lo de "
+          "fabrica y se dibujan en el orden correcto")
+    return True
+
+
 def test_los_vectores_van_sueltos_en_el_documento() -> bool:
     """Un icono de vector va EN el documento, no dentro de un `<image>`.
 
@@ -3863,6 +3969,8 @@ def main() -> int:
         ("animaciones e intensidad", test_animaciones_e_intensidad),
         ("el toque y el encabezado", test_el_toque_y_el_encabezado),
         ("los banners estan en su sitio", test_los_banners_estan_en_su_sitio),
+        ("las transformaciones se guardan y se dibujan",
+         test_las_transformaciones_se_guardan_y_se_dibujan),
         ("el sello y el boton de la ventana", test_el_sello_y_el_boton_de_la_ventana),
         ("el sello no se mide con getBBox", test_el_sello_no_se_mide_con_getbbox),
         ("las animaciones se paran cuando no se ven",
