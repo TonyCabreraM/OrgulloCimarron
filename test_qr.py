@@ -1433,6 +1433,36 @@ def test_el_freno_se_suelta_siempre() -> bool:
                     "también con el mapa ampliado. Lo que se comprobó es que se "
                     "olvide este pedazo cuando se toca el observador")
 
+        # --- Y que el conteo y el umbral salgan del MISMO conjunto ------------
+        # Esto ya se rompió una vez y por eso tiene prueba propia: el numero de
+        # observados sumaba iconos Y zonas (54) y el numero de marcados contaba
+        # SOLO iconos (44). El umbral era 54 * .9 = 48.6, y 44 > 48.6 nunca es
+        # cierto, con lo que el cortocircuito no se disparaba jamas. Parecia
+        # puesto y no hacia nada, que es la peor forma de estar.
+        umbral = re.search(r"(\w+)\.length\s*\*\s*\.9", bloque)
+        if not umbral:
+            problemas.append(
+                "el cortocircuito no compara el numero de marcados contra el "
+                "de observados: no hay forma de saber que esta mintiendo")
+        else:
+            lista = umbral.group(1)
+            # Se busca el acceso por indice, que es donde se recorre la lista:
+            # puede estar en la cabecera del `for` o en su cuerpo, segun como
+            # se escriba, asi que no se mira solo una de las dos.
+            if not re.search(re.escape(lista) + r"\[", bloque):
+                problemas.append(
+                    f"el cortocircuito compara contra `{lista}.length` pero no "
+                    f"recorre `{lista}` para contar los marcados: son dos "
+                    "conjuntos distintos y la comparacion no significa nada. "
+                    "Pasa siempre que uno sume iconos y zonas y el otro solo "
+                    "iconos: el umbral no se cumple nunca y el cortocircuito "
+                    "no se dispara nunca")
+            if "push(" not in bloque:
+                problemas.append(
+                    "el cortocircuito compara contra una lista que no se llena "
+                    "con `push` al observar: no se puede saber cuantos se "
+                    "observaron")
+
     for p in problemas:
         print(f"    {p}")
     if problemas:

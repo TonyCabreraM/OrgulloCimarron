@@ -45,7 +45,7 @@ p{color:#aaa;margin:0 0 14px}
 <p style="margin-top:18px"><a href="#" id="enseñar" style="color:#8cf">quitar
 el informe y mirar el mapa</a></p>
 </div>
-<iframe id="vento" src="croquis.html"></iframe>
+<iframe id="vento"></iframe>
 
 <script>
 // Esta pagina NO arregla nada: mira el croquis de verdad, en un <iframe> del
@@ -164,6 +164,36 @@ function pruebaElFreno(doc) {
   };
 }
 
+// --- Que version del croquis se esta mirando ---------------------------------
+// Sin esto, el informe es inutil en cuanto se arregla algo: GitHub Pages manda
+// Cache-Control: max-age=600 en el HTML, asi que el <iframe> se sirve una copia
+// vieja del croquis y el informe sale igual que antes, sin que el arreglo tenga
+// nada que ver. Ya ha pasado: se corrigio el observer y el telefono seguia
+// dando los mismos numeros, porque estaba mirando el croquis de antes.
+//
+// El <iframe> lleva una marca en la direccion para no usar la cache (abajo), y
+// ademas se comprueba que la hoja de estilo tenga lo que deberia. Si falta, el
+// informe lo dice en vez de dar un resultado que no es de este codigo.
+function cssDelCroquis(doc) {
+  var todo = "";
+  for (var i = 0; i < doc.styleSheets.length; i++) {
+    try {
+      var reglas = doc.styleSheets[i].cssRules;
+      for (var j = 0; j < reglas.length; j++) todo += reglas[j].cssText + "\n";
+    } catch (e) { /* una hoja que no se puede leer no es motivo para parar */ }
+  }
+  return todo;
+}
+
+function pruebaVersion(doc) {
+  var css = cssDelCroquis(doc);
+  return {
+    acerado: css.indexOf("#m.acercado .pausa.fuera") >= 0,
+    cortocircuito: css.length > 0,   // el cortocircuito es JS, no CSS
+    sinFiltro: css.indexOf("drop-shadow") < 0
+  };
+}
+
 // --- Lo que se ejecuta ------------------------------------------------------
 function mira() {
   var doc = document.getElementById("vento").contentDocument;
@@ -173,6 +203,18 @@ function mira() {
   }
   var w = doc.defaultView;
   var rojos = 0;
+
+  // 0. PRIMERO: que version se esta mirando. Si esto sale mal, todo lo demas
+  // es de otro codigo y no cuenta.
+  var ver = pruebaVersion(doc);
+  if (!ver.acerado) {
+    rojos++;
+    anota("no", "CROQUIS VIEJO",
+          "esta mirando una copia de la cache, sin el arreglo. Espera un par " +
+          "de minutos y recarga. Todo lo de abajo puede ser mentira");
+  } else {
+    anota("si", "Croquis al dia", "tiene el arreglo de «fuera»");
+  }
 
   anota("medio", "Movil", String(w.navigator.userAgent).slice(0, 70));
   anota(doc.hidden ? "no" : "si", "Pagina visible",
@@ -228,6 +270,11 @@ function mira() {
 }
 
 var ventana = document.getElementById("vento");
+// La marca en la direccion es para no usar la cache. GitHub Pages manda
+// Cache-Control: max-age=600 en el HTML, con lo que sin esto el <iframe> se
+// sirve el croquis de hace hasta diez minutos y el informe mide codigo viejo.
+// Es lo que paso la primera vez que se probo esto.
+ventana.src = "croquis.html?t=" + Date.now();
 ventana.addEventListener("load", function () {
   // Algo de margen: el croquis tiene que asentar su layout, que es lo que el
   // observador de «fuera» mira. Preguntar antes es medir el arranque, no lo que

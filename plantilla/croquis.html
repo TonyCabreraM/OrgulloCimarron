@@ -1450,7 +1450,10 @@ function elQueSePausa(nodo) {
 }
 
 if (window.IntersectionObserver) {
-  var observados = 0, observerRoto = false;
+  // Todos los nodos observados, en una sola lista. Hace falta para el
+  // cortocircuito: la cuenta de «fuera» y la de «cuantos hay» tienen que salir
+  // del MISMO conjunto, o la comparacion no significa nada.
+  var pausables = [], observerRoto = false;
   var vigia = new IntersectionObserver(function (entradas) {
     if (observerRoto) return;
     for (var j = 0; j < entradas.length; j++) {
@@ -1473,26 +1476,23 @@ if (window.IntersectionObserver) {
     // optimizacion y las animaciones se quedan andando. El precio de que NO se
     // dispare, con el observador roto, es un mapa congelado sin explicacion.
     // Ante la duda, que las animaciones anden.
-    if (observados >= 8) {
+    if (pausables.length >= 8) {
       var fuera = 0;
-      for (var f = 0; f < ICN.children.length; f++)
-        if (elQueSePausa(ICN.children[f]) &&
-            elQueSePausa(ICN.children[f]).classList.contains("fuera")) fuera++;
-      if (fuera > observados * .9) {
+      for (var f = 0; f < pausables.length; f++)
+        if (pausables[f].classList.contains("fuera")) fuera++;
+      if (fuera > pausables.length * .9) {
         observerRoto = true;
         vigia.disconnect();
-        for (var g = 0; g < ICN.children.length; g++) {
-          var pausable2 = elQueSePausa(ICN.children[g]);
-          if (pausable2) pausable2.classList.remove("fuera");
-        }
+        for (var g = 0; g < pausables.length; g++) pausables[g].classList.remove("fuera");
       }
     }
   }, {rootMargin: "160px"});
   var vigilar = function (grupo) {
     for (var j = 0; j < grupo.children.length; j++) {
-      if (elQueSePausa(grupo.children[j])) {
+      var pausable = elQueSePausa(grupo.children[j]);
+      if (pausable) {
         vigia.observe(grupo.children[j]);
-        observados++;
+        pausables.push(pausable);
       }
     }
   };
