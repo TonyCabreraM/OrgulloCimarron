@@ -22,12 +22,17 @@ editor/modelos.json
 # Lo importante esta fuera: lo que se publica es plantilla/rectoria-chico.webp,
 # y git guarda todas sus versiones. La fuente vive en el equipo de quien edita.
 #
-# Las otras versiones del mapa (.ai de 9 MB) SI estan en el repositorio: caben
-# y son la fuente de lo que se ve.
+# De las fuentes del mapa ahora mismo solo se usa FinalSinCosas.svg, que es de
+# donde salen el fondo y los dos banners (los hace preparar_mapa.py). Son 7 MB
+# por un archivo que solo genera cuatro imagenes que si estan en git. Final.ai
+# es el original en Illustrator y el .vectorcraft el editable de VectorCraft:
+# los tres son lo mismo, el poster, en tres formatos.
 #
-# FINAL3.ai es la que se usa AHORA, y son 97 MB. Entra por los pelos, pero un
+# FINAL3.ai, que se usaba antes, eran 97 MB. Entra por los pelos, pero un
 # archivo de ese tamano en el historial son 97 MB que se pagan para siempre en
-# cada clon, por un archivo que solo se usa para generar cuatro imagenes que si
-# estan en git. Se queda fuera, como CroquisSolo.ai.
+# cada clon.
 CroquisSolo.ai
 Mapa Dia del Orgullo Cimarron 2026 VERSION FINAL3.ai
+Final.ai
+FinalSinCosas.svg
+FinalSinCosas.vectorcraft

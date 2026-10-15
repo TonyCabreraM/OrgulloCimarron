@@ -694,19 +694,23 @@ body{
          debajo. -->
     <image id="bannerArriba" x="0" y="-216" width="1224" height="216"
            preserveAspectRatio="none"
-           href="banner-arriba.webp?v=0033723e"/>
+           href="banner-arriba.webp?v=89d21228"/>
     <g id="hoja">
-      <!-- El papel de debajo del dibujo es el gris del propio arte, #e5e7e7.
+      <!-- El papel de debajo del dibujo es el gris del propio arte, #e5e2e5.
            Antes era #f3f9ee, el verde palido del dibujo anterior: el fondo del
-           poster es un gris neutro y no un verde. Solo se ve un instante, mientras
-           la imagen baja, pero si no cuadrara se veria un cambio de color al
-           abrir el mapa. Una prueba lo compara contra la imagen de verdad.
+           poster es un gris neutro y no un verde. Y antes de ese era #e5e7e7, el
+           gris del .ai de Illustrator: el arte ahora es el SVG de VectorCraft,
+           que lleva encima un velo morado del 5 % y por eso el gris sale un
+           punto mas apagado. Solo se ve un instante, mientras la imagen baja,
+           pero si no cuadrara se veria un cambio de color al abrir el mapa.
+           Una prueba lo compara contra la imagen de verdad, y el numero lo
+           imprime `preparar_mapa.py`, que lo lee de la esquina del webp.
 
            El `--papel` de la hoja CSS sigue siendo verde palido a proposito, y no
            es contradiccion: ese lo usa la ventana de informacion, que es una
            tarjeta que flota ENCIMA del mapa, y sobre un fondo gris se separa
            mucho mejor en verde. -->
-      <rect x="0" y="0" width="1224" height="792" fill="#e5e7e7"/>
+      <rect x="0" y="0" width="1224" height="792" fill="#e5e2e5"/>
       <!-- El fondo va en DOS versiones del mismo dibujo, y las dos con su
            `?v=`, que es el sha1 del archivo en corto.
 
@@ -725,10 +729,10 @@ body{
 
            El chico es el que se abre siempre y el grande el que entra al
            acercar; el como y el por que estan en el script, mas abajo. -->
-      <image id="arte" href="rectoria-chico.webp?v=5335ecf9" x="0" y="0"
+      <image id="arte" href="rectoria-chico.webp?v=579df7d0" x="0" y="0"
              width="1224" height="792" preserveAspectRatio="none"/>
-      <!-- El fondo entra en DOS versiones, como antes, porque ahora el origen
-           vuelve a ser vectorial (el .ai del poster) y se rasteriza a 3400 px sin
+      <!-- El fondo entra en DOS versiones, como antes, porque el origen es
+           vectorial (el póster en SVG) y se rasteriza a 3400 px sin
            pixelarse. `arteGrande` es la que entra al acercar una zona, que es
            cuando hace falta el detalle. -->
       <image id="arteGrande" x="0" y="0" width="1224" height="792"
@@ -750,7 +754,7 @@ body{
          completa. -->
     <image id="bannerAbajo" x="0" y="792" width="1224" height="216"
            preserveAspectRatio="none"
-           href="banner-abajo.webp?v=4a7db9f9"/>
+           href="banner-abajo.webp?v=a6d0f6ee"/>
   </g>
 </svg>
 
@@ -2043,7 +2047,7 @@ var ARTE = document.getElementById("arte"),
     // El `?v=` de la grande. Lo comprueba una prueba contra el sha1 del
     // archivo, como el de la chica: un numero viejo no da ningun error, solo
     // un mapa que no cambia cuando deberia.
-    ARTE_URL = "rectoria.webp?v=85445477",
+    ARTE_URL = "rectoria.webp?v=1a09b09d",
     ANCHO_CHICO = 1600,
     pidiendoGrande = false;
 
