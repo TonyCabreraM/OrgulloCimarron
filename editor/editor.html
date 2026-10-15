@@ -744,6 +744,7 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <div class="fila" style="margin-top:10px">
         <button class="boton" id="btnImagen">Subir una imagen…</button>
         <input type="file" id="archivo" accept="image/*,.svg" hidden>
+        <input type="file" id="archivoCambio" accept="image/*,.svg" hidden>
       </div>
       <div class="pista">
         PNG, JPG, WebP, GIF, BMP o <b>SVG</b>. El SVG no se pixela al
@@ -803,6 +804,13 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
           Sin el círculo el icono se ve suelto. Los símbolos llevan un halo
           blanco para que no se pierdan sobre el pasto.
         </div>
+      </div>
+      <div class="campo" id="campoImagen" hidden>
+        <label>La imagen de este icono</label>
+        <div class="fila">
+          <button class="boton" id="btnCambiarImagen">Cambiar la imagen…</button>
+        </div>
+        <div class="pista" id="pistaImagen"></div>
       </div>
       <div class="campo">
         <label for="fInfoTitulo">
@@ -944,7 +952,7 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <div class="pista" id="nombreDialogo"></div>
       </div>
       <div id="ajustesDialogo">
-        <div class="campo">
+        <div class="campo" id="campoDNombre">
           <label for="dNombre">Nombre</label>
           <input type="text" id="dNombre" maxlength="24"
                  placeholder="extintor">
@@ -1100,12 +1108,22 @@ var s = document.getElementById("s"),
     dAnim = document.getElementById("dAnim"),
     dInt = document.getElementById("dInt"),
     campoDIntensidad = document.getElementById("campoDIntensidad"),
-    dAro = document.getElementById("dAro");
+    dAro = document.getElementById("dAro"),
+    campoImagen = document.getElementById("campoImagen"),
+    pistaImagen = document.getElementById("pistaImagen"),
+    btnCambiarImagen = document.getElementById("btnCambiarImagen"),
+    archivoCambio = document.getElementById("archivoCambio");
 
 // La imagen que se acaba de elegir y todavia no se ha aceptado, como data URL.
 // Vive aqui mientras el menú está abierto: hasta que se pulsa Añadir no se
 // manda nada al servidor, así que cancelar no deja rastro.
 var imagenPendiente = null;
+
+// Cuando el menú se abre para cambiar la imagen de un icono que ya está en el
+// mapa, aquí va su tipo. En ese caso el nombre NO se elige: se conserva el que
+// ya tiene, y por eso el cambio alcanza a todos los iconos de ese tipo a la
+// vez, que es justo lo que se busca.
+var reemplazo = null;
 
 // Una pila de estados anteriores de los iconos, para poder deshacer un
 // borrado. Guarda copias enteras, no diferencias: con un puñado de iconos una
@@ -1591,6 +1609,17 @@ function pintaPanel(mal) {
                        document.getElementById("pistaInt"));
     if (document.activeElement !== fEtiqueta) fEtiqueta.value = ic.n || "";
     fAro.checked = conAroDe(ic);
+    // El cambio de imagen solo tiene sentido si el icono es una imagen propia:
+    // un símbolo de serie no tiene imagen que cambiar. Y se dice en cuántos
+    // iconos del mapa se usa, para que se vea el alcance del cambio.
+    var esImagenPropia = !!E.propios[ic.t];
+    campoImagen.hidden = !esImagenPropia;
+    if (esImagenPropia) {
+      var usos = E.iconos.filter(function (x) { return x.t === ic.t }).length;
+      pistaImagen.textContent = "«" + ic.t + "» se usa en " + usos
+        + (usos === 1 ? " icono" : " iconos") + " del mapa. Al cambiar la imagen "
+        + "se actualizan todos a la vez.";
+    }
     if (document.activeElement !== fInfoTitulo) fInfoTitulo.value = ic.i ? ic.i[0] : "";
     if (document.activeElement !== fInfoTexto) fInfoTexto.value = ic.i ? ic.i[1] : "";
     // Los campos del boton se sincronizan con el icono de una vez y solo si
@@ -2504,22 +2533,50 @@ s.addEventListener("drop", function (ev) {
 //
 // Después cada icono colocado en el mapa se puede cambiar como cualquier otro:
 // esto solo decide con qué nace.
-function abrirDialogo(datosUrl, nombreArchivo) {
+function abrirDialogo(datosUrl, nombreArchivo, tipoReemplazo) {
   imagenPendiente = datosUrl;
-  // El nombre se propone a partir del archivo, sin extensión y en minúsculas,
-  // que es lo que va a acabar siendo en el croquis.
-  dNombre.value = (nombreArchivo || "").replace(/\.[^.]+$/, "")
-    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24);
-  // Y los ajustes arrancan con lo que el usuario tenga puesto en el panel, que
-  // es lo que estaba usando: el tamaño de los nuevos, sin animación y con
-  // círculo, que es lo de siempre.
-  dTam.value = +fTamNuevo.value;
-  dAnim.value = "";
-  dInt.value = 1;
-  dAro.checked = true;
+  reemplazo = tipoReemplazo || null;
+  if (reemplazo) {
+    // Cambiar la imagen de un icono propio: el nombre se conserva y los ajustes
+    // salen de los que ya tenga guardado ese tipo, para no cambiarlos sin
+    // querer cuando lo único que se toca es el dibujo.
+    var aj = E.ajustesPropios[reemplazo] || {};
+    dNombre.value = reemplazo;
+    dTam.value = aj.s || +fTamNuevo.value;
+    dAnim.value = aj.a || "";
+    dInt.value = (typeof aj.m === "number") ? aj.m : 1;
+    dAro.checked = aj.c !== 0;
+  } else {
+    // El nombre se propone a partir del archivo, sin extensión y en minúsculas,
+    // que es lo que va a acabar siendo en el croquis.
+    dNombre.value = (nombreArchivo || "").replace(/\.[^.]+$/, "")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24);
+    // Y los ajustes arrancan con lo que el usuario tenga puesto en el panel, que
+    // es lo que estaba usando: el tamaño de los nuevos, sin animación y con
+    // círculo, que es lo de siempre.
+    dTam.value = +fTamNuevo.value;
+    dAnim.value = "";
+    dInt.value = 1;
+    dAro.checked = true;
+  }
+  pintaModoDialogo();
   pintaPrevio();
   DIA.hidden = false;
   requestAnimationFrame(function () { DIA.classList.add("abierto") });
+}
+
+// Deja el menú en el modo que toca: dar de alta un icono nuevo o cambiar la
+// imagen de uno que ya está. El nombre decide, así que al cambiar se esconde
+// -no se puede elegir, es el del icono- y la pista lo explica.
+function pintaModoDialogo() {
+  var cambiando = !!reemplazo;
+  document.getElementById("tDialogo").textContent =
+    cambiando ? "Cambiar la imagen" : "Nuevo icono";
+  document.getElementById("campoDNombre").hidden = cambiando;
+  document.getElementById("btnAceptarDialogo").textContent =
+    cambiando ? "Cambiar la imagen" : "Añadir a la paleta";
+  document.getElementById("nombreDialogo").textContent =
+    dNombre.value || "(sin nombre)";
 }
 
 function cerrarDialogo() {
@@ -2528,6 +2585,7 @@ function cerrarDialogo() {
   setTimeout(function () {
     if (!DIA.classList.contains("abierto")) DIA.hidden = true;
     imagenPendiente = null;
+    reemplazo = null;
   }, 220);
   aviso("", "");
 }
@@ -2577,17 +2635,19 @@ DIA.addEventListener("pointerdown", function (ev) {
 document.getElementById("btnAceptarDialogo").addEventListener("click", function () {
   if (!imagenPendiente) { cerrarDialogo(); return }
   var ajustes = ajustesDelDialogo();
-  var nombre = dNombre.value.trim();
+  var cambiando = !!reemplazo;
+  var nombre = reemplazo || dNombre.value.trim();
   abrirOcupado();
   fetch("/api/icono", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({nombre: nombre || "icono", datos: imagenPendiente,
-                          ajustes: ajustes, existentes: Object.keys(E.propios)})
+                          ajustes: ajustes, existentes: Object.keys(E.propios),
+                          reemplazar: reemplazo || ""})
   }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
     .then(function (par) {
       var ok = par[0], d = par[1];
-      if (!ok) { aviso(d.mensaje || "No se pudo preparar la imagen.", "mal"); return }
       cerrarOcupado();
+      if (!ok) { aviso(d.mensaje || "No se pudo preparar la imagen.", "mal"); return }
       E.propios[d.nombre] = d.datos;
       E.ajustesPropios[d.nombre] = d.ajustes || {};
       E.vectores[d.nombre] = !!d.vector;
@@ -2601,10 +2661,15 @@ document.getElementById("btnAceptarDialogo").addEventListener("click", function 
           + "llevar: " + d.quitado.slice(0, 3).join(", ")
           + (d.quitado.length > 3 ? "…" : "") + "."
         : "";
-      aviso("«" + d.nombre + "» añadido a la paleta (" + Math.round(d.bytes / 1024)
-            + " KB" + (d.vector ? ", vector" : "") + "). Sale con "
-            + describeAjustes(d.ajustes) + "; púlsalo y cada clic en el mapa pone "
-            + "uno. Pulsa Guardar para publicarlo." + extra,
+      aviso(cambiando
+            ? "Imagen de «" + d.nombre + "» cambiada (" + Math.round(d.bytes / 1024)
+              + " KB" + (d.vector ? ", vector" : "") + "). Se actualizaron de una "
+              + "vez todos los iconos que la usan. Pulsa Guardar para publicarlo."
+              + extra
+            : "«" + d.nombre + "» añadido a la paleta (" + Math.round(d.bytes / 1024)
+              + " KB" + (d.vector ? ", vector" : "") + "). Sale con "
+              + describeAjustes(d.ajustes) + "; púlsalo y cada clic en el mapa pone "
+              + "uno. Pulsa Guardar para publicarlo." + extra,
             (d.quitado && d.quitado.length) ? "aviso" : "ok");
     })
     .catch(function (e) {
@@ -2647,12 +2712,12 @@ function refrescaIntensidad(anim, campo, control, pista) {
 function abrirOcupado() {
   var b = document.getElementById("btnAceptarDialogo");
   b.disabled = true;
-  b.textContent = "Preparando…";
+  b.textContent = reemplazo ? "Cambiando…" : "Preparando…";
 }
 function cerrarOcupado() {
   var b = document.getElementById("btnAceptarDialogo");
   b.disabled = false;
-  b.textContent = "Añadir a la paleta";
+  b.textContent = reemplazo ? "Cambiar la imagen" : "Añadir a la paleta";
 }
 
 // --- iconos propios -------------------------------------------------------
@@ -2679,6 +2744,44 @@ document.getElementById("archivo").addEventListener("change", function (ev) {
   // con qué ajustes entra. Hasta que no pulsa Añadir, cancelar no deja rastro.
   var lector = new FileReader();
   lector.onload = function () { abrirDialogo(lector.result, f.name) };
+  lector.onerror = function () { aviso("No se pudo leer el archivo.", "mal") };
+  lector.readAsDataURL(f);
+});
+
+// --- cambiar la imagen de un icono propio ----------------------------------
+// Con un icono elegido cuya imagen es tuya, se puede cambiar por otra sin tocar
+// el resto de sus ajustes. El nombre es el del tipo, asi que el cambio alcanza
+// de una vez a TODOS los iconos que usan esa imagen: subir el logo corregido
+// actualiza los veinte del mapa de un golpe, sin repetirlo uno por uno.
+btnCambiarImagen.addEventListener("click", function () {
+  if (!sel || sel.tipo !== "icono" || !E.iconos[sel.i]) {
+    aviso("Elige antes el icono al que quieres cambiarle la imagen.", "aviso");
+    return;
+  }
+  if (!E.propios[E.iconos[sel.i].t]) {
+    aviso("Ese icono es un símbolo de serie, no una imagen tuya: no hay imagen "
+          + "que cambiar. Sube una nueva con «Subir una imagen…».", "aviso");
+    return;
+  }
+  archivoCambio.click();
+});
+
+archivoCambio.addEventListener("change", function (ev) {
+  var f = ev.target.files && ev.target.files[0];
+  ev.target.value = "";
+  if (!f) return;
+  if (!sel || sel.tipo !== "icono" || !E.iconos[sel.i]) return;
+  var tipo = E.iconos[sel.i].t;
+  if (!E.propios[tipo]) return;
+  // Se mira el tipo y tambien el nombre: hay navegadores que dan
+  // `image/svg+xml` y otros que dan cadena vacia o `text/plain` para un SVG.
+  var esSvg = /\.svg$/i.test(f.name) || f.type === "image/svg+xml";
+  if (!esSvg && !/^image\//.test(f.type)) {
+    aviso("Eso no es una imagen. Sirven PNG, JPG, WebP, GIF, BMP y SVG.", "mal");
+    return;
+  }
+  var lector = new FileReader();
+  lector.onload = function () { abrirDialogo(lector.result, f.name, tipo) };
   lector.onerror = function () { aviso("No se pudo leer el archivo.", "mal") };
   lector.readAsDataURL(f);
 });

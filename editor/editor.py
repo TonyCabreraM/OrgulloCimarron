@@ -1202,9 +1202,26 @@ class Manejador(BaseHTTPRequestHandler):
                                                         datos.get("enlace")),
                             "git": estado_git()})
             elif ruta == "/api/icono":
+                # Reemplazar la imagen de un icono que ya existe. El nombre que
+                # se reemplaza cuenta como libre: es el mismo icono con otra
+                # imagen, no uno nuevo. Sin quitarlo de `ocupados`,
+                # `_nombre_libre` le anadiria un numero y dejaria al lado el
+                # viejo, que es justo lo que no se quiere.
+                #
+                # Solo vale para un icono que ya este en el croquis: si el
+                # nombre no esta, se trata como una subida normal. Asi una
+                # pestaña vieja no puede pisar un simbolo de serie con ese
+                # nombre.
+                existentes = set(datos.get("existentes") or [])
+                reemplazar = str(datos.get("reemplazar") or "").strip()
+                ocupados = set(SIMBOLOS) | existentes
+                if reemplazar in existentes:
+                    ocupados.discard(reemplazar)
+                elif reemplazar:
+                    reemplazar = ""
                 nombre, imagen, contenido, extension, quitado = preparar_icono(
-                    datos.get("datos"), str(datos.get("nombre") or ""),
-                    set(SIMBOLOS) | set(datos.get("existentes") or []))
+                    datos.get("datos"), reemplazar or str(datos.get("nombre") or ""),
+                    ocupados)
                 # Los ajustes se validan antes de guardar nada: unos ajustes
                 # malos no se notan al guardarlos, sino al estampar con ellos.
                 ajustes = limpiar_ajustes(datos.get("ajustes") or {})
@@ -1214,10 +1231,18 @@ class Manejador(BaseHTTPRequestHandler):
                 # Se guarda en la biblioteca ademas de mandarlo: asi se puede
                 # volver a poner mas adelante sin buscar la imagen otra vez, y
                 # con los ajustes que se le pusieron.
+                #
+                # Al reemplazar se borra antes lo que hubiera: si la imagen
+                # nueva es de otro tipo (un SVG por un PNG), el archivo viejo
+                # se quedaria al lado y la biblioteca ensenaria el icono dos
+                # veces, una con la imagen de antes.
+                if reemplazar:
+                    borra_de_biblioteca(nombre)
                 guarda_en_biblioteca(nombre, contenido, extension, ajustes)
                 self._json({"ok": True, "nombre": nombre, "datos": imagen,
                             "bytes": len(imagen), "ajustes": ajustes,
-                            "vector": extension == "svg", "quitado": quitado})
+                            "vector": extension == "svg", "quitado": quitado,
+                            "reemplazo": bool(reemplazar)})
             elif ruta == "/api/biblioteca":
                 # Recuperar un icono guardado, o quitarlo de la despensa.
                 if datos.get("quitar"):
