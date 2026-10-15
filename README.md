@@ -1000,18 +1000,51 @@ baja son entre 15 y 30 ms por fotograma de forma continua, y ahí es donde se
 traba: no por un icono de más, sino por no parar nunca.
 
 Por eso lo único que sirve de verdad es **no producir fotogramas cuando no hacen
-falta**, y se para en los tres casos en que nadie las mira:
+falta**, y se para en los cuatro casos en que nadie las mira:
 
 | Cuándo | Cómo | Qué se gana |
 | --- | --- | --- |
 | La página está escondida | `visibilitychange` + `document.hidden` | Todo. Un mapa abierto en una pestaña de fondo no gasta nada |
 | El mapa se está moviendo | `frenaUnRato(800)` al empezar el zoom | El zoom no compite con 44 animaciones por el mismo sitio |
 | El icono quedó fuera de la pantalla | `IntersectionObserver`, clase `.fuera` | Ampliado en un móvil se ven 4 o 5 de los 48; los otros 43 se paran |
+| **El mapa está entero, sin ampliar** | `#m:not(.acercado) .pausa` | **La vista general pasa de 30 fps a 60 fps clavados** |
+
+La cuarta se puso la última, y contradice lo que decía esta misma tabla antes:
+que sin ampliar no se perdía nada por no parar, porque se ve el mapa entero. Se
+ve, sí, pero verlo no es animarlo gratis. Medido en Chromium con la CPU frenada
+ocho veces y densidad 3, que es lo más parecido a un teléfono de gama media que
+se puede tener en un portátil:
+
+| Vista general | Fotograma mediano | Fotogramas de más de 32 ms |
+| --- | --- | --- |
+| Tal cual | 33,3 ms (**30 fps**) | 66 % |
+| Sin animaciones | 16,7 ms (**60 fps**) | 0 % |
+| Con la regla nueva | 16,7 ms (**60 fps**) | 0 % |
+
+El suelo de 0 % confirma lo de arriba: el problema no es que las animaciones sean
+pesadas una a una, sino que **en cuanto hay algo moviéndose** el compositor
+produce un fotograma a la frecuencia de la pantalla sin parar. Y lo que se ve al
+acercar es un icono de veinte píxeles flotando tres, que no se distingue de uno
+parado —al ampliar se vuelven grandes, la animación se ve, y `.acercado` la deja
+correr—.
+
+Lo que se probó y **no** funciona, para que no se repita:
+
+| Arreglo | Vista general | Mapa ampliado |
+| --- | --- | --- |
+| Una capa por icono animado (`will-change: transform` en los 44) | 66 % | 25 % |
+| Una sola capa para todo el mapa | 66 % | 25 % |
+| Las dos cosas juntas | 0 % | **52 %** — peor que antes |
 
 Se para con **`animation-play-state: paused`, no quitando la animación.** La
 diferencia importa: quitar la animación la reinicia desde el principio, así que
-al volver a mirar los iconos darían un salto; pausarla la deja donde estaba.
+al volver a mirar los iconos darían un salto; pausarla la deja donde estaba. Por
+eso al ampliar las animaciones reanudan por donde iban y no se ve ningún tirón.
 
+La regla de la vista general va al revés que la de `.fuera` por un motivo que ya
+estaba escrito aquí: en iOS el `IntersectionObserver` dice que no hay nada en
+pantalla ni con el mapa entero a la vista, y si esta regla no mirara `acercado`
+el mapa se quedaría callado entero al ampliar.
 El `IntersectionObserver` lleva un `rootMargin` de 160 px para que los iconos
 que asoman por el borde ya estén moviéndose al entrar, en vez de arrancar de
 golpe.

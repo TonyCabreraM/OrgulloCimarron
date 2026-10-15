@@ -455,14 +455,46 @@ body{
    intersecta NADA, ni con el mapa entero a la vista. Los 56 elementos pillan
    «fuera», los 44 animados se quedan con `animation-play-state: paused` y el
    mapa aparece congelado entero, sin un error en la consola. Por ahi empezo todo:
-   parecia un freno pegado, y el freno estaba suelto desde el principio.
-
-   Sin `acercado` no se para nada. Y no se pierde nada con quitarlo: la vista
-   normal enseña el mapa entero, con lo que TODOS los iconos estan a la vista
-   de verdad y no hay nada que ahorrar. El ahorro del que habla esta
-   optimizacion es justo el de mirar una zona de cerca en un movil, y para eso
-   esta puesto el `.acercado`. */
+   parecia un freno pegado, y el freno estaba suelto desde el principio. */
 #m.acercado .pausa.fuera{animation-play-state:paused}
+
+/* --- Sin `acercado`, tampoco hay nada animandose --------------------------
+   Este deja el mapa quieto en la vista general, y es lo que hace que no se trabe.
+
+   Lo de arriba decia justo lo contrario -«sin `acercado` no se para nada, y no
+   se pierde nada, porque en la vista normal se ve el mapa entero»-, y estaba
+   equivocado en lo que importa. Que se vean todos los iconos no es lo mismo que
+   que animarlos salga gratis.
+
+   MEDIDO, en Chromium con la CPU frenada ocho veces y densidad 3, que es lo mas
+   parecido a un telefono de gama media que se puede tener en un portatil:
+
+       vista general, tal cual        30 fps   66 % de los fotogramas tardan
+                                                 mas de 32 ms
+       vista general, sin animaciones  60 fps   0 %
+       vista general, con esta regla   60 fps   0 %
+       mapa ampliado, con esta regla   igual que antes
+
+   El suelo de 0 % dice que el problema no es que las animaciones sean pesadas
+   una a una -eso ya estaba medido-, sino que EN QUE HAY ALGO MOVIENDOSE el
+   navegador tiene que componer un fotograma a la frecuencia de la pantalla, sin
+   parar, para siempre. Con las animaciones de los iconos corriendo a 60 Hz eso
+   son miles de fotogramas por segundo de composicion para un mapa que, en un
+   movil, se ve entero con los iconos de veinte pixeles.
+
+   Y ahi no se ve la animacion, que es justo lo que hace que la parada no se
+   note: en la vista general un icono que flota de tres pixeles no se distingue
+   de uno parado. Al ampliar, los iconos se vuelven grandes, la animacion se ve,
+   y `.acercado` las deja correr. Como va con `animation-play-state` y no
+   quitando la animacion, reanudan por donde iban: no hay ningun salto al
+   acercar.
+
+   Lo que NO se ha hecho, y esta medido tambien, porque sale peor: darle una
+   capa propia a cada icono animado (`will-change: transform` en los cuarenta y
+   cuatro) no mejora nada en la vista general -66 %-, y combinado con esta regla
+   el mapa ampliado pasa de 28 % a 52 % de fotogramas caidos. Una capa para todo
+   el mapa, tampoco: 66 %. */
+#m:not(.acercado) .pausa{animation-play-state:paused}
 
 /* La del sistema (`prefers-reduced-motion`) se quito a proposito. Donde estaba
    y por que se explica arriba, en la seccion de las animaciones de los iconos. */

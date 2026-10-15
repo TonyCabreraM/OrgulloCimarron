@@ -1158,9 +1158,22 @@ def test_las_animaciones_se_paran_cuando_no_se_ven() -> bool:
     #
     # Sin `acercado` no se pierde nada, porque en la vista normal se ve el mapa
     # entero y no hay nada fuera que ahorrar.
+    #
+    # Y hay una tercera regla, que se puso despues y por lo mismo de fondo: en la
+    # vista general NO hay nada que ver. Lo de arriba decia que no se perdia nada
+    # por no parar ahi, y se comprobo que era falso -medido: las animaciones se
+    # comen el 66 % de los fotogramas del reposo, y con ellas paradas va a 60 fps
+    # clavados-. Lo que se ve al ampliar es un icono de veinte pixeles flotando
+    # tres, que no se distingue de uno parado.
+    #
+    # La de `:not(.acercado)` va al reves que la de `.fuera` por el mismo motivo de
+    # iOS: si el IntersectionObserver dijera que no hay nada en pantalla -que es
+    # lo que hace-, con esta regla el mapa se quedaria callado entero al ampliar.
+    # Por eso la condicion es al reves, con `acercado` NO se para.
     reglas = {
         "el freno": r"#m\.frenado \.pausa\{([^}]*)\}",
         "lo que esta fuera": r"#m\.acercado \.pausa\.fuera\{([^}]*)\}",
+        "la vista general": r"#m:not\(\.acercado\) \.pausa\{([^}]*)\}",
     }
     cuerpos = {}
     for nombre, patron in reglas.items():
@@ -1303,8 +1316,8 @@ def test_las_animaciones_se_paran_cuando_no_se_ven() -> bool:
     if problemas:
         return False
     print(f"    {len(animados)} animaciones que se paran al esconderse la "
-          f"pagina, al moverse el mapa y al quedar fuera de la pantalla, sin "
-          f"perderse ninguna")
+          f"pagina, al moverse el mapa, al quedar fuera de la pantalla y en la "
+          f"vista general, sin perderse ninguna")
     return True
 
 
