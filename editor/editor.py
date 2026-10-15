@@ -48,8 +48,16 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 CROQUIS = RAIZ / "plantilla" / "croquis.html"
-MAPA = RAIZ / "plantilla" / "rectoria.webp"
+# El fondo del croquis, que es el poster entero en una sola pieza. Solo se usa
+# como valor de reserva: lo de verdad sale del `<image>` del propio croquis, y
+# asi el editor no puede ensenar un fondo que el croquis no tenga.
+MAPA = RAIZ / "plantilla" / "FinalSinCosas.svg"
 EDITOR_HTML = Path(__file__).resolve().parent / "editor.html"
+# La version 2 del editor, en su propia ruta. Vive aparte a proposito, y no
+# sustituye a la anterior: los dos escriben en el mismo croquis, asi que abrir
+# los dos a la vez es pedir que uno se pise al otro al guardar. Cada uno en su
+# pestana y ya.
+EDITOR_V2_HTML = Path(__file__).resolve().parent / "editor-v2.html"
 RESPALDO = Path(__file__).resolve().parent / "_respaldo"
 # Los PNG ya preparados, uno por icono propio. Es lo que permite volver a
 # poner un icono que se quito del mapa sin tener que buscar otra vez la imagen
@@ -227,7 +235,11 @@ def leer_croquis() -> dict:
     _, _, cuerpo_iconos = _tramos(texto, "ICONOS")
     _, _, cuerpo_propios = _tramos(texto, "PROPIOS")
     vista = re.search(r"var VISTA = \[([-\d,\s]+)\]", texto)
-    mapa = re.search(r'<image[^>]+href="([^"]+)"', texto)
+    # El fondo. Se busca el `<image>` que se llama `arte` y no el primero que
+    # sale: antes el primer `<image>` del documento era el banner de arriba, y el
+    # editor acababa enseñando un banner en la pestana del mapa. Con una sola
+    # pieza ya no hay duda, pero el nombre sigue siendo el que dice que es.
+    mapa = re.search(r'<image id="arte"[^>]+href="([^"]+)"', texto)
     # El boton del croquis. Se busca con una expresion y no con los marcadores
     # a proposito: asi tambien se lee en un croquis guardado antes de que el
     # bloque existiera, y en ese caso sale sin boton en vez de dar un error.
@@ -241,7 +253,7 @@ def leer_croquis() -> dict:
         "propios": _objeto(cuerpo_propios, "PROPIOS"),
         "enlace": enlace,
         "vista": [int(v) for v in vista.group(1).split(",")] if vista else [0, 0, ANCHO, ALTO],
-        "mapa": mapa.group(1) if mapa else "rectoria.webp",
+        "mapa": mapa.group(1) if mapa else "FinalSinCosas.svg",
     }
 
 
@@ -1085,6 +1097,14 @@ class Manejador(BaseHTTPRequestHandler):
         try:
             if ruta in ("/", "/editor.html"):
                 self._archivo(EDITOR_HTML, "text/html; charset=utf-8")
+            elif ruta in ("/v2", "/editor-v2.html"):
+                # La v2. Si el archivo no esta, se dice con un mensaje claro en
+                # vez de un 404 de pelo: es el unico fallo posible aqui y es
+                # Facil de arreglar, pero un 404 no dice nada.
+                if not EDITOR_V2_HTML.is_file():
+                    self._error("La version 2 del editor no esta en el equipo.", 404)
+                    return
+                self._archivo(EDITOR_V2_HTML, "text/html; charset=utf-8")
             elif ruta == "/mapa":
                 # La misma imagen que usa el croquis publicado. Se sirve desde
                 # aqui y no desde la web para poder trabajar sin conexion y

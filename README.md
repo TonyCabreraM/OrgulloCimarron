@@ -285,9 +285,9 @@ byte.
 ```
 Final.ai                El póster original en Illustrator, 1224 x 1224 pt. NO está
                         en git (es una fuente, y pesa); de aquí sale el SVG
-FinalSinCosas.svg  El póster exportado a SVG, 1224 x 1224. Es la fuente de la
-                  que salen el fondo y los dos banners. NO está en git
-                  (son 7 MB por un archivo que solo genera cuatro imágenes)
+FinalSinCosas.svg  El póster exportado a SVG, 1224 x 1224, en la raiz. NO está
+                  en git: es la fuente, y la que se publica es la copia de
+                  plantilla/, que va sin tocar
 Logos/ ... FINAL2.webp  El póster exportado a WebP, 1224 px. Ya no se usa: se
                         quedó sin el detalle de los pictogramas, que es lo que
                         lo hace inservible
@@ -296,15 +296,12 @@ Logos/ ... FINAL2.svg   El mismo póster en SVG. No se usa: trae los pictogramas
 CroquisSolo.ai          El mapa anterior, 1224 x 792 pt. Ya no se publica; se queda
                         porque es contra el que se midió el desplazamiento del nuevo
 generar_qr.py      Generador: mide, empaqueta y dibuja el QR
-preparar_mapa.py   Saca el fondo y los banners del póster en SVG
 test_qr.py         Pruebas del ciclo completo
 d.html             Página base, solo para el modo servidor
 plantilla/
   croquis.html     El mapa interactivo (este es el que se publica)
-  rectoria-chico.webp  El fondo: 1224 x 792 px, 101 KB
-  rectoria.webp        El fondo en alta: 3400 x 2200 px, 372 KB
-  banner-arriba.webp   El banner del título, 1224 x 216 px, 26 KB
-  banner-abajo.webp    El banner de abajo, 1224 x 216 px, 17 KB
+  FinalSinCosas.svg   El fondo: el póster entero, 6 438 KB, con los dos banners
+                      dentro. Va tal cual, sin recortar ni rasterizar
   plantilla.html   Documento de ejemplo
   planos/          Croquis del campus descargados (referencia vieja)
 editor/            Herramienta de edición. NO se publica.
@@ -366,31 +363,15 @@ los enlaces de salida no sean `javascript:` y que, si abren en pestaña nueva,
 lleven `rel="noopener"`. Sin ese atributo, la página de destino puede
 manipular la del mapa.
 
-### El arte viene de Illustrator, y sale por un SVG
+### El fondo es el póster entero, en una sola pieza
 
-El original es `Final.ai`: el póster completo, 1224 × 1224 pt. De ahí sale
-`FinalSinCosas.svg`, que es el póster exportado, y **de ese SVG salen las cuatro
-imágenes**. **El origen es vectorial, así que 3400 px son 3400 px de verdad y no un
-estiramiento.**
+El fondo del croquis **es el póster**: `plantilla/FinalSinCosas.svg`, el archivo
+del que sale el mapa y los dos banners, tal cual, sin recortar y sin rasterizar.
+En el croquis es un único `<image>` de 1224 × 1224.
 
-**Lo dibuja Chromium, no PyMuPDF.** Un SVG hay que dibujarlo, y aquí no está
-Inkscape ni rsvg ni ImageMagick. **PyMuPDF no sirve**: no lee el `<style>` de clases
-ni los rellenos `url(#pattern)`, y el mapa le sale entero en negro —se comprobó con
-dos rectángulos de prueba, uno con `fill:#4fac48` en el estilo y otro con un
-patrón, y los dos negros—. Así que `preparar_mapa.py` pone el SVG dentro de una
-página y le pide a **el Chromium de Playwright** una captura a píxeles, que es el
-mismo motor que pinta el croquis en el móvil. Por eso lo que sale de ahí se ve
-igual en la página.
-
-Ese Chromium es lo único que hay que tener descargado, y es una sola vez —son
-115 MB—:
-
-```bash
-.venv\Scripts\python.exe -m playwright install chromium
-```
-
-Sin él, `preparar_mapa.py` dice que falta. Las pruebas (`test_qr.py`) **no** lo
-necesitan: solo leen los WebP que ya están escritos.
+**El original es `Final.ai`**, el póster completo en Illustrator, y de ahí sale el
+SVG. El SVG es el que se publica; el `.ai` y el `.vectorcraft` se quedan fuera de
+git, que son las fuentes.
 
 **Y qué versión del póster vale.** El FINAL2 y el `.webp` que se exportó de él **no
 valen para el fondo**: traen el mapa con los pictogramas dentro —aseos, agua,
@@ -402,6 +383,52 @@ se nota en la pantalla.
 `FinalSinCosas.svg` es el que evita eso de origen: trae las calles, las tiras de
 puestos y las etiquetas, pero sin los pictogramas. De ahí el nombre.
 
+**POR QUÉ UNA SOLO PIEZA, Y NO TRES IMÁGENES**
+---------------------------------------------
+Antes eran tres: el mapa y los dos banners, cada una con su archivo. Con eso había
+un modo de fallo que no da ningún error: que una llegue antes que otra. El mapa
+tarda mucho más en bajar que los banners, así que se veía el cartel con el título y
+el dibujo de abajo, y en medio un rect gris del tamaño del mapa.
+
+Con una sola pieza no hay orden que sincronizar: llega el poster o no llega nada.
+
+| | antes | ahora |
+| --- | --- | --- |
+| Peticiones | 2 al abrir, 1 al acercar | **1** |
+| Al abrir | 144 KB (mapa + los dos banners) | **2 948 KB con gzip** |
+| Al acercar | + 372 KB | **nada: el SVG escala** |
+
+**LO QUE SE PAGA: 2,9 MB EN LA PRIMERA CARGA**
+----------------------------------------------
+El SVG pesa 6 438 KB en crudo y **2 948 KB con gzip**, que es lo que sirve GitHub
+Pages. Antes, en la primera carga, un móvil bajaba 144 KB. **Son veinte veces
+más**, y en una conexión lenta se nota mucho: mientras baja, lo que se ve es el
+rect del papel.
+
+Y de dónde salen esos 2 948 KB, medido quitando cada cosa por separado:
+
+| | KB con gzip |
+| --- | --- |
+| El patrón de la hierba: nueve mil trazados en un mosaico de 153 × 141 px | **1 327** |
+| Los dos PNG de los banners, incrustados en el archivo (1 708 KB de PNG en base64) | **1 431** |
+| El resto: el mapa, las calles y las etiquetas | **190** |
+
+> **Las tres maneras de bajarlo, todas medidas.** Se pueden aplicar una a una o
+> juntas, y ninguna toca el dibujo: convertir los dos PNG incrustados en WebP los
+> deja en 384 KB, y rasterizar la hierba en un mosaico de 3× la deja en 49 KB. Con
+> las dos cosas el archivo se quedaría alrededor de los **400 KB**, por debajo de
+> los 516 KB que pesaban los WebP, y con el mapa vectorial igual. No es lo que se
+> ha puesto, porque el encargo era usar el archivo tal cual, pero está medido.
+
+**Y ya no hace falta ningún renderizador.** No hay Inkscape ni rsvg ni ImageMagick, y
+**PyMuPDF no sirve** para dibujar un SVG: no lee el `<style>` de clases ni los
+rellenos `url(#pattern)`, y el mapa le sale entero en negro —se comprobó con dos
+rectángulos de prueba, uno con `fill:#4fac48` en el estilo y otro con un patrón, y
+los dos negros—. Mientras hubo que rasterizar, `preparar_mapa.py` pintaba el SVG
+con el Chromium de Playwright, que son 115 MB que había que descargar. **Ahora el
+navegador dibuja el fondo por su cuenta**, que es lo que siempre se quiso, y ni el
+repositorio ni el equipo necesitan nada instalado.
+
 > Eso costó tres iteraciones. La primera cogió el mapa del `.ai` y salió con todo
 > duplicado. La segunda usó el `.webp` de `Logos/`, que era la versión limpia pero
 > estaba exportada a 1224 px, así que no había versión en alta y todo se veía algo
@@ -411,13 +438,15 @@ puestos y las etiquetas, pero sin los pictogramas. De ahí el nombre.
 
 **El poster son tres franjas:** el banner con el título de `y=0` a `216`, el mapa
 de `216` a `1008`, y el banner de abajo de `1008` a `1224`. En el croquis el mapa
-se publica de `0` a `792` y los banners se colocan alrededor, de `-216` a `0` y
-de `792` a `1008`.
+se publica de `0` a `792` —donde estaba— y los dos banners van alrededor. Los tres
+ya no se colocan: **van dentro de la pieza, que es el poster entero**, así que la
+única cuenta es dónde se pone esa pieza.
 
 **Y el mapa va desplazado un píxel.** En el poster está un píxel más abajo que en
-el dibujo anterior, así que `preparar_mapa.py` lo sube uno (`DESPLAZE_Y`). Está
-medido, no supuesto: es el desplazamiento que más correlación da entre los dos
-dibujos, y el pico es clarísimo.
+el dibujo anterior, así que la pieza va en `y = -217` en vez de `y = -216`. Es el
+mismo `DESPLAZE_Y` que medía `preparar_mapa.py`, y sigue siendo un número medido,
+no supuesto: es el desplazamiento que más correlación da entre los dos dibujos,
+y el pico es clarísimo.
 
 | desplazamiento | correlación con el fondo anterior |
 | --- | --- |
@@ -426,45 +455,41 @@ dibujos, y el pico es clarísimo.
 | 0 | 0.8917 |
 | **+1** | **0.9900** |
 
-El `+1` dice que el mapa de este SVG hay que subirlo un píxel, que es lo que hace
-`DESPLAZE_Y = -1`. El 0.9900 dice además que es **el mismo dibujo**: 0.99 entre dos
-imágenes es, prácticamente, la misma imagen.
+El `+1` dice que hay que subir el mapa un píxel. El 0.9900 dice además que es **el
+mismo dibujo**: 0.99 entre dos imágenes es, prácticamente, la misma imagen.
 
 Sin ese píxel, las diez zonas y los cuarenta y seis iconos —que están escritos
 en coordenadas fijas— quedarían desplazados respecto al dibujo. Y no se vería en
 la imagen: se vería cuando alguien toca y le abre otra zona.
 
+> Y que el cambio no lo movió está comprobado, no supuesto: la página se
+> fotografió antes y después en un móvil emulado, a 390 × 844 con densidad 2, y se
+> compararon píxel a píxel. **99,98 % de los píxeles idénticos, diferencia media
+> 0,00.** El mismo método aplicado a la misma comparación con la imagen movida un
+> píxel da 4,80 de media y un 4,7 % de píxeles con diferencia grande, así que
+> detecta el desplazamiento: el mapa sigue exactamente donde estaba.
+
+**Y por qué el lienzo mide 1223 de alto y no 1224.** La pieza va en `y = -217` y
+mide 1224, con lo que ocupa de −217 a 1007. Un lienzo de 1224 de alto llegaría a
+1008 y dejaría **una fila de papel al pie**, y en el poster esa fila es verde. Con
+`viewBox="0 -216 1224 1223"` el lienzo acaba justo donde acaba la pieza, y la
+última fila del poster —la del borde de abajo del banner— se sigue viendo. Es un
+píxel de diferencia en el lienzo, y ninguno en el mapa.
+
 | | |
 | --- | --- |
 | Tamaño del poster | 1224 × 1224 |
-| Mapa dentro | banda de y=216 a y=1008, colocada en y=−1 |
-| Fondo del dibujo | gris `#e5e2e5` (el `.ai` daba `#e5e7e7`; el SVG lleva encima un velo morado del 5 %) |
-| Rásteres que se publican | `rectoria-chico.webp` 1224 × 792 px, 101 KB · `rectoria.webp` 3400 × 2200 px, 372 KB |
-
-**Por qué el fondo va en dos tamaños y los banners en uno.** El fondo es el 90 %
-de lo que baja el móvil: la chica, para verlo entero al abrir, y la grande, para
-el detalle al acercar. Los banners son uno solo porque no cambian con el zoom —se
-van con el mapa entero—, así que nunca hace falta uno mayor que el que está en
-pantalla. Y en el SVG los dos vienen incrustados como PNG de 1224 px, así que
-agrandarlos no sacaría detalle: solo más bytes de lo mismo.
-
-**El SVG no está en git.** Son 7 MB por un archivo que solo genera cuatro imágenes
-que sí están en git, con todas sus versiones. Y antes el origen era el `.ai`, de
-97 MB, que además rozaba el límite de GitHub. Vive en el equipo donde se dibuja.
-
-**Por qué el SVG no va directo al croquis.** Podría: es vectorial, así que se vería
-nítido a cualquier zoom. **Se probó y pesa 1.5 MB con gzip**, de los que 1 327 KB
-son el patrón de la hierba —nueve mil trazados en un mosaico de 153 × 141 px—, y
-el móvil al abrir baja 101 KB. Con la hierba rasterizada a un mosaico de 49 KB se
-queda en 242 KB: mejor que los 473 KB de los dos WebP juntos, pero el doble al
-abrir, por una nitidez que en un móvil de 3× no se ve —los 3400 px del fondo actual
-ya son más que los ~2250 que pide la pantalla—. **Se publica como WebP.**
+| Dónde va la pieza | `x=0`, `y=−217`, 1224 × 1224 |
+| Dónde queda el mapa | de 0 a 792, donde estaba |
+| Lienzo | `viewBox="0 -216 1224 1223"` |
+| Papel de debajo | `#e4e0e4`: el gris del poster (`#eae8e8`) con el velo morado del 5 % de la exportación de VectorCraft encima |
+| Lo que se publica | `plantilla/FinalSinCosas.svg`, 6 438 KB, tal cual |
 
 **Al cambiar el arte hay que subir el `?v=` de la dirección.** En `croquis.html`
-la imagen se pide como `rectoria-chico.webp?v=579df7d0`, y ese número es el sha1 del
+la imagen se pide como `FinalSinCosas.svg?v=14a13a19`, y ese número es el sha1 del
 propio archivo en corto.
 
-Hace falta de verdad: GitHub Pages sirve la imagen con
+Hace falta de verdad: GitHub Pages sirve el archivo con
 `Cache-Control: max-age=600`, así que **durante diez minutos después de subir un
 cambio se sigue viendo el mapa anterior, recargando inclusive**. Con la
 dirección cambiada no queda nada que reutilizar y el cambio se ve al instante.
@@ -476,7 +501,7 @@ lo compara con el sha1 real del archivo y, si no cuadra, dice exactamente qué
 poner. Para calcularlo:
 
 ```bash
-python -c "import hashlib,pathlib;print(hashlib.sha1(pathlib.Path('plantilla/rectoria-chico.webp').read_bytes()).hexdigest()[:8])"
+python -c "import hashlib,pathlib;print(hashlib.sha1(pathlib.Path('plantilla/FinalSinCosas.svg').read_bytes()).hexdigest()[:8])"
 ```
 
 **El texto del mapa son contornos, no texto.** Al convertir las tipografías,
@@ -1192,8 +1217,9 @@ que se fue.
 
 Se sustituyen dos cosas y nada más:
 
-1. `plantilla/rectoria-chico.webp` — el ráster nuevo, siempre a 1224 × 792 de
-   proporción (si cambia el tamaño de página, hay que cambiar el `viewBox`).
+1. `plantilla/FinalSinCosas.svg` — el póster nuevo, entero y con los dos banners
+   dentro. Siempre de 1224 × 1224 (si cambia el tamaño, hay que cambiar el
+   `viewBox` y el `y` de la pieza).
 2. Los polígonos de `ZONAS` — las coordenadas en puntos, leídas sobre el póster.
 
 El zoom, el encuadre y la ficha se calculan solos. La prueba
@@ -1330,8 +1356,8 @@ hecho y el aviso lo dice: se puede reintentar sin perder nada. Después hay que
 esperar uno o dos minutos a que GitHub Pages reconstruya, y el QR ya abre la
 versión nueva.
 
-> **Ojo con el fondo.** GitHub Pages sirve la imagen con
-> `Cache-Control: max-age=600`, así que un cambio en `rectoria-chico.webp` **tarda
+> **Ojo con el fondo.** GitHub Pages sirve el archivo con
+> `Cache-Control: max-age=600`, así que un cambio en `FinalSinCosas.svg` **tarda
 > diez minutos en verse, recargando inclusive**. Para que no pase, la dirección
 > lleva un `?v=` con el sha1 del archivo: al cambiar el arte hay que subirlo, y
 > una prueba avisa si se te olvida. Los detalles están en la sección del mapa.
@@ -1508,12 +1534,12 @@ croquis o la página base:
   `dashoffset: calc(-16 * var(--m))`. Si los dos números se separan, el bucle
   da un salto en cada vuelta.
 - **Un recurso con la misma dirección y contenido nuevo no se ve.** GitHub
-  Pages sirve las imágenes con `Cache-Control: max-age=600`, así que al cambiar
-  `rectoria-chico.webp` el navegador **y el CDN** siguen enseñando la copia vieja
+  Pages sirve el fondo con `Cache-Control: max-age=600`, así que al cambiar
+  `FinalSinCosas.svg` el navegador **y el CDN** siguen enseñando la copia vieja
   durante diez minutos, aunque se recargue. El fallo se lee como «no se subió el
   cambio» o «se subió mal», y no hay ningún error en ninguna parte: el servidor
   tiene el archivo nuevo y lo que pasa es que nadie lo pide. La solución es que
-  la dirección cambie con el contenido — `rectoria-chico.webp?v=<sha1 corto>` — y que
+  la dirección cambie con el contenido — `FinalSinCosas.svg?v=<sha1 corto>` — y que
   una prueba compare ese número con el sha1 de verdad, porque un número que se
   queda viejo falla exactamente igual de callado.
 - **Un salto de línea de más en un comentario rompe el archivo entero.** En

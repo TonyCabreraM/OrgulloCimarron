@@ -1,0 +1,10 @@
+# El fondo del croquis es un SVG, y es un ARCHIVO, no texto.
+#
+# Con `core.autocrlf=true`, que es lo que trae Git en Windows, un checkout pasa
+# los finales de linea de LF a CRLF en cualquier archivo que huela a texto. En un
+# SVG de 6 MB eso son 6 MB de bytes distintos, con lo que el sha1 cambia y el
+# `?v=` del croquis -que es el sha1 en corto- deja de cuadrar: la prueba avisa y
+# el numero que va en el HTML es el del equipo de quien lo editó.
+#
+# Con esto el archivo entra y sale siempre igual de bytes, en el equipo que sea.
+*.svg -text

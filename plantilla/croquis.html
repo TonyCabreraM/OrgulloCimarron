@@ -90,12 +90,6 @@ body{
    El filo de `#hoja` (`croquis.html`, el `rect` de `stroke:#b8d4bb`) se queda:
    ese separa la hoja del fondo de verdad y no cuesta nada, porque es un trazo
    y no un filtro. */
-/* La version grande del fondo entra por encima de la chica, y solo cuando ya
-   esta cargada: asi el cambio no se ve. Cambiarle el `href` a una sola imagen
-   dejaria el mapa en blanco mientras llega, que es peor que verlo algo
-   borroso un instante. */
-#arteGrande{opacity:0;transition:opacity .35s ease}
-
 /* Los iconos son los simbolos de punto: banos, primeros auxilios, comida...
    Van encima del mapa y por defecto NO reciben el toque, que sigue siendo de
    las zonas; si no, un icono plantado en medio de un estacionamiento se
@@ -671,10 +665,14 @@ body{
 </style>
 </head>
 <body>
-<!-- El lienzo son los DOS banners y el mapa en medio, que es el poster entero.
-     El `viewBox` empieza en -216 y no en 0 porque el mapa se queda donde estaba,
-     de 0 a 792, y los banners se colocan alrededor: el de arriba de -216 a 0 y
-     el de abajo de 792 a 1008.
+<!-- El lienzo es el POSTER ENTERO, y el poster es una sola pieza: un unico
+     `<image>` con el SVG, con los dos banners y el mapa dentro. Antes eran tres
+     imagenes -el mapa y los dos banners-, y eso hacia posible que una se
+     quedara atras: el mapa unloaded mientras el titulo ya estaba, o al reves.
+
+     El `viewBox` empieza en -216 y no en 0 porque el mapa se queda donde
+     estaba, de 0 a 792, y los banners van alrededor: el de arriba de -216 a 0 y
+     el de abajo de 791 a 1007.
 
      ASI, Y NO MOVIENDO EL MAPA, es lo que permite este cambio. Las zonas, los
      iconos, `validar.py`, `encuadra()` y `getScreenCTM()` siguen hablando de un
@@ -682,79 +680,69 @@ body{
      se hubiera desplazado el mapa a y=216 para que todo cuadrara desde cero,
      habria que mover tambien las diez zonas, los cuarenta y seis iconos y el
      encuadre, y cualquier numero que se quedara viejo seria una zona que se
-     toca en el sitio equivocado. -->
-<svg id="s" viewBox="0 -216 1224 1224" preserveAspectRatio="xMidYMid meet">
+     toca en el sitio equivocado.
+
+     Y POR QUE EL ALTO ES 1223 Y NO 1224
+     ------------------------------------
+     El SVG mide 1224 de alto y va en `y=-217`, un pixel mas arriba de donde
+     lo pondria el poster, porque el mapa esta un pixel mas abajo de donde lo
+     quiere el croquis (el `DESPLAZE_Y` que media `preparar_mapa.py`, y que ya no
+     existe: ahora el poster se publica tal cual y el pixel va aqui). Con eso la
+     imagen ocupa de -217 a 1007 y el lienzo, si llegara a 1008, dejaria una fila
+     de papel al pie que en el poster es verde. Bajando el alto del `viewBox` a
+     1223 el lienzo acaba en 1007, que es justo donde acaba la imagen, y la
+     ultima fila del poster -la del borde de abajo del banner- se sigue viendo.
+     Es un pixel de diferencia en el lienzo, y ninguno en el mapa. -->
+<svg id="s" viewBox="0 -216 1224 1223" preserveAspectRatio="xMidYMid meet">
   <defs>
     <clipPath id="recorte"><circle cx="0" cy="0" r="12.2"/></clipPath>
   </defs>
   <g id="m">
-    <!-- El banner de arriba, con el titulo. Va DENTRO de `#m` a proposito: al
-         ampliar una zona se va con el mapa, que es lo que tiene que pasar. Si se
-         dejara fuera          se queda pegado al borde de la pantalla mientras el mapa se mueve
-         debajo. -->
-    <image id="bannerArriba" x="0" y="-216" width="1224" height="216"
-           preserveAspectRatio="none"
-           href="banner-arriba.webp?v=89d21228"/>
     <g id="hoja">
-      <!-- El papel de debajo del dibujo es el gris del propio arte, #e5e2e5.
-           Antes era #f3f9ee, el verde palido del dibujo anterior: el fondo del
-           poster es un gris neutro y no un verde. Y antes de ese era #e5e7e7, el
-           gris del .ai de Illustrator: el arte ahora es el SVG de VectorCraft,
-           que lleva encima un velo morado del 5 % y por eso el gris sale un
-           punto mas apagado. Solo se ve un instante, mientras la imagen baja,
-           pero si no cuadrara se veria un cambio de color al abrir el mapa.
-           Una prueba lo compara contra la imagen de verdad, y el numero lo
-           imprime `preparar_mapa.py`, que lo lee de la esquina del webp.
+      <!-- El papel de debajo del dibujo es el gris del propio arte, #e4e0e4: el
+           papel del poster -#eae8e8- con el velo morado del 5 % que le pone la
+           exportacion de VectorCraft encima. Antes era #e5e7e7, el gris del .ai de
+           Illustrator. Solo se ve mientras el SVG baja, que es bastante rato,
+           pero si no cuadrara se veria un cambio de color al abrir el mapa. Una
+           prueba lo comprueba contra los colores del propio SVG, y no se escribe
+           a mano.
+
+           Ahora el rect cubre el POSTER entero y no solo el mapa, porque ahora
+           el papel esta debajo de los tres: si se dejara en 0,0 1224 x 792, al
+           abrir el mapa se veria el gris en las franjas de los banners.
 
            El `--papel` de la hoja CSS sigue siendo verde palido a proposito, y no
            es contradiccion: ese lo usa la ventana de informacion, que es una
            tarjeta que flota ENCIMA del mapa, y sobre un fondo gris se separa
            mucho mejor en verde. -->
-      <rect x="0" y="0" width="1224" height="792" fill="#e5e2e5"/>
-      <!-- El fondo va en DOS versiones del mismo dibujo, y las dos con su
-           `?v=`, que es el sha1 del archivo en corto.
+      <rect x="0" y="-216" width="1224" height="1223" fill="#e4e0e4"/>
+      <!-- EL POSTER, UNA SOLA PIEZA. Va DENTRO de `#m` a proposito: al ampliar
+           una zona se va con el mapa, que es lo que tiene que pasar. Si se
+           dejara fuera se quedaria pegado al borde de la pantalla mientras el
+           mapa se mueve debajo.
 
-           El `?v=` sirve para lo unico que hace falta: que al cambiar el arte
-           cambie la direccion. Sin el, el navegador y el CDN de GitHub Pages
-           se quedan con la copia vieja y se sigue viendo el mapa de antes. Y
-           no es una teoria: Pages manda `Cache-Control: max-age=600` en la
-           imagen, asi que durante diez minutos despues de subir un cambio se
-           ve el anterior, recargando inclusive.
+           Es el SVG tal cual, sin recortar ni rasterizar: por eso el mapa se ve
+           igual de nitido a dos que a seis veces, y por eso no hace falta una
+           version en alta para el acercar. Lo que se paga es el peso, que se
+           mide en el README.
 
-           Los dos numeros NO se escriben a mano: los comprueba una prueba
-           contra el sha1 de cada archivo, porque un numero que se queda viejo
-           no da ningun error, solo un mapa que no cambia. Se sacan con:
+           El `?v=` es el sha1 del archivo en corto, y sirve para lo unico que
+           hace falta: que al cambiar el arte cambie la direccion. Sin el, el
+           navegador y el CDN de GitHub Pages se quedan con la copia vieja y se
+           sigue viendo el mapa de antes. Y no es una teoria: Pages manda
+           `Cache-Control: max-age=600`, asi que durante diez minutos despues de
+           subir un cambio se ve el anterior, recargando inclusive.
 
-               python preparar_mapa.py
-
-           El chico es el que se abre siempre y el grande el que entra al
-           acercar; el como y el por que estan en el script, mas abajo. -->
-      <image id="arte" href="rectoria-chico.webp?v=579df7d0" x="0" y="0"
-             width="1224" height="792" preserveAspectRatio="none"/>
-      <!-- El fondo entra en DOS versiones, como antes, porque el origen es
-           vectorial (el póster en SVG) y se rasteriza a 3400 px sin
-           pixelarse. `arteGrande` es la que entra al acercar una zona, que es
-           cuando hace falta el detalle. -->
-      <image id="arteGrande" x="0" y="0" width="1224" height="792"
-             preserveAspectRatio="none"/>
+           El numero NO se escribe a mano: lo comprueba una prueba contra el
+           sha1 real del archivo, porque un numero que se queda viejo no da
+           ningun error, solo un mapa que no cambia. -->
+      <image id="arte" href="FinalSinCosas.svg?v=14a13a19" x="0" y="-217"
+             width="1224" height="1224" preserveAspectRatio="none"/>
       <rect x="1" y="1" width="1222" height="790" fill="none"
             stroke="#b8d4bb" stroke-width="2"/>
     </g>
     <g id="zonas"></g>
     <g id="iconos"></g>
-    <!-- Y el de abajo, que es solo el dibujo. Una sola version, y no dos como
-         el fondo: estos no cambian con el zoom -se van con el mapa entero-, asi
-         que no hay ningun momento en que haga falta una version mas grande que
-         la que se ve a pantalla. Son 20 KB y se quedan 20 KB.
-
-         `preparar_mapa.py` saca tambien una de 2448 px de cada uno, por si
-        alguna vez se quisiera el cambio por capas como el del fondo, pero de
-         momento no se usa: se dejaria pagar 99 KB a todo el mundo para algo que
-         solo se nota en un monitor de densidad 2 con el mapa a pantalla
-         completa. -->
-    <image id="bannerAbajo" x="0" y="792" width="1224" height="216"
-           preserveAspectRatio="none"
-           href="banner-abajo.webp?v=a6d0f6ee"/>
   </g>
 </svg>
 
@@ -902,16 +890,15 @@ var ZONAS = [
 ];
 /* === FIN ZONAS === */
 
-// Vista general: el POSTER entero, con los dos banners y el mapa en medio.
+// Vista general: el POSTER entero, que es una sola pieza. Lo mismo que el
+// `viewBox`, y por eso se escribe con los mismos numeros: de -216 a 1007 en
+// vertical -los dos banners de 216 y el mapa de 792 en medio-, y 1224 de ancho.
 //
 // Antes era `[110, 100, 1005, 640]`, un recorte del campus con las calles que lo
 // enmarcan. Con los banners no vale: ese rectangulo no los incluye, con lo que
 // en la vista general no se veria ni el titulo ni el dibujo de abajo, que es
 // justo lo que se ha pedido.
-//
-// Ahora es el poster completo, de -216 a 1008 en vertical -los dos banners de 216
-// y el mapa de 792 en medio-, que es lo mismo que el `viewBox`.
-var VISTA = [0, -216, 1224, 1224];
+var VISTA = [0, -216, 1224, 1223];
 
 /* === INICIO ENLACE === */
 var ENLACE = {"t": "Programa del evento", "u": "RecursosExtra/11x17pl_Orgullo CImarron_Vrs4.jpg"};
@@ -1456,11 +1443,6 @@ function sel(k) {
   PISTA.textContent = z[3];
   F.classList.add("on");
   encuadra(c[0], c[1], c[2], c[3], 1.14);
-  // Acercar es exactamente el momento en que hace falta el detalle del fondo,
-  // asi que aqui es donde entra la version grande. No hay mas sitios que
-  // acerquen: el mapa se acerca tocando una zona o un boton, y los dos pasan
-  // por aqui.
-  traeLaGrande();
 }
 
 function todo() {
@@ -2023,116 +2005,31 @@ CH.addEventListener("click", function (e) {
   if (c) sel(+c.dataset.i);
 });
 
-// --- El fondo, en dos tamanos -----------------------------------------------
-// El fondo es el 90 % de lo que se descarga el movil -483 KB- y ocupa 30 MB en
-// memoria al dibujarlo, mas que todo lo demas junto. Por eso hay DOS versiones
-// del mismo dibujo: una de 1600 px que es la que se abre siempre, y otra de
-// 3400 que entra al acercar una zona, que es cuando hace falta el detalle.
+// --- El fondo, que es una sola pieza ---------------------------------------
+// El fondo es el POSTER ENTERO -el mapa y los dos banners- en un solo archivo,
+// el SVG del que sale todo. Antes eran cuatro WebP: el fondo en dos tamanos y
+// los dos banners, y habia que decidir cual se pedia y cuando.
 //
-// Medido: en un telefono en vertical el mapa se ve a 375 x 242 px nada mas
-// abrir, o sea la sexta parte de su ancho. Se bajaba y decodificaba la imagen
-// entera -y sus 30 MB- para ensenar eso. Con las dos, el primer pintado baja
-// de 540 KB a unos 230 KB y la memoria de 30 MB a 6,6 MB, y el detalle llega
-// cuando se pide. Quien solo mira el mapa no se baja nunca la grande.
+// Ahora no hay nada que decidir. El SVG es vectorial, asi que el mapa se ve
+// igual de nitido a dos que a seis veces, y por eso no hace falta una version
+// en alta ni pedirla al acercar: no habria nada que ganar. Lo que se paga es el
+// peso de arranque, que se mide en el README.
 //
-// Las dos salen del mismo dibujo y con los mismos ajustes -las hace
-// `preparar_mapa.py`-, asi que al cambiar de una a otra no se nota el salto.
+// Y el mapa no se ha movido ni un pixel: la pieza va en `y=-217`, que es donde
+// el poster estaba menos el pixel de `DESPLAZE_Y`, el mismo que arrastraba el
+// fondo rasterizado. Las diez zonas y los cuarenta y seis iconos siguen en las
+// coordenadas de siempre.
 //
-// No se le cambia el `href` a una sola imagen: se ENCIENDE la grande encima
-// cuando ya esta cargada. Cambiarle la direccion a la que se esta viendo deja
-// el mapa en blanco mientras llega, y eso se ve; un fundido de un tercio de
-// segundo, no.
-var ARTE = document.getElementById("arte"),
-    ARTE_GRANDE = document.getElementById("arteGrande"),
-    // El `?v=` de la grande. Lo comprueba una prueba contra el sha1 del
-    // archivo, como el de la chica: un numero viejo no da ningun error, solo
-    // un mapa que no cambia cuando deberia.
-    ARTE_URL = "rectoria.webp?v=1a09b09d",
-    ANCHO_CHICO = 1600,
-    pidiendoGrande = false;
-
-function traeLaGrande() {
-  if (pidiendoGrande) return;
-  pidiendoGrande = true;
-  ARTE_GRANDE.setAttribute("href", ARTE_URL);
-  ARTE_GRANDE.addEventListener("load", function () {
-    ARTE_GRANDE.style.opacity = "1";
-    // Y la chica se suelta: debajo ya no se ve, y son 6,6 MB que no hacen
-    // falta para nada. Se espera a que acabe el fundido, o habria un
-    // fotograma sin fondo entre que se suelta una y se ve la otra.
-    setTimeout(function () {
-      ARTE.removeAttribute("href");
-      ARTE.style.display = "none";
-    }, 420);
-  }, {once: true});
-}
-
-// Cuantos pixeles reales ocupa el mapa de ancho con el encuadre de arranque.
-// El <svg> es mas ancho que el mapa -lo que sobra se queda de margen-, asi que
-// hay que quedarse con el menor de los dos lados.
-//
-// Las medidas salen del propio `viewBox` y no de dos numeros escritos aqui:
-// el dia que cambie el lienzo, esto sigue diciendo la verdad solo.
-function anchoNecesario() {
-  var vb = s.viewBox.baseVal;
-  var lado = Math.min(s.clientWidth, s.clientHeight * vb.width / vb.height);
-  return lado * (devicePixelRatio || 1);
-}
-
-// Cuando traer la grande por adelantado. Es lo que evita el unico defecto de
-// tener dos versiones: si solo se trajera al acercar, entre el toque y la
-// llegada del archivo el mapa se veria blando, y en un movil con pantalla
-// densa eso se nota.
-//
-// Con una conexion rapida esos 483 KB no se notan y nadie llega a verlo
-// blando. Con una lenta -o si quien mira ha pedido ahorrar datos- se espera a
-// que de verdad se acerque, y se ahorra.
-//
-// `effectiveType` solo tiene cuatro valores -slow-2g, 2g, 3g y 4g-, y el 4g
-// quiere decir «no va mal», no la tecnologia. No existe el 5g ahi.
-function conexionRapida() {
-  var c = navigator.connection;
-  if (!c) return true;             // sin dato, se supone que si
-  if (c.saveData) return false;
-  return !c.effectiveType || c.effectiveType === "4g";
-}
+// Lo que si se necesita es esperar a que el SVG este antes de medir el lienzo:
+// hasta que no se ha pintado, el <svg> no tiene tamano real y el encuadre
+// saldria mal.
+var ARTE = document.getElementById("arte");
 
 // El encuadre depende del alto del encabezado y del panel, que cambian al
 // girar el movil o al cruzar el punto donde el panel pasa a lateral.
 addEventListener("resize", function () { A >= 0 ? sel(A) : todo() });
-// El mapa tarda un poco en cargar: hasta que no este, el <svg> no tiene
-// tamano real y el encuadre saldria mal.
 if (!ARTE.complete) ARTE.addEventListener("load", todo);
 todo();
-// Con la pantalla delante se puede medir de verdad cuanto ocupa el mapa, asi
-// que la decision de empezar por la grande se toma aqui y no apurado antes.
-//
-// Se empieza por la chica salvo que ni de lejos llegue: un monitor normal con
-// la pantalla densa necesita mas de 1600 px solo para mirarlo de lejos, y ahi
-// ahorrar esa descarga no tendria sentido -es instantanea- a cambio de verlo
-// borroso.
-//
-// En un movil en vertical, que es de donde venia el problema, el mapa ocupa
-// unos 375 px de ancho: 750 reales en una pantalla densa, menos de la mitad de
-// 1600. Ahi si se empieza por la chica, y la grande espera a que alguien
-// acerque.
-//
-// Con el poster entero el lienzo es cuadrado, y eso hace que
-// `anchoNecesario()` de menos pixeles en un monitor ancho, que antes se
-// emparejaba con la anchura de la pantalla y ahora se empareja con la altura:
-// en un 16:9 manda la altura. Y asi tiene que ser, porque el mapa ya no ocupa
-// la pantalla entera sino las dos terceras partes de un lienzo cuadrado. El
-// numero bajo no es que se haya estropeado: es que de verdad hacen falta menos
-// pixeles.
-if (anchoNecesario() > ANCHO_CHICO) {
-  traeLaGrande();
-} else if (conexionRapida()) {
-  // Se trae sola un momento despues de pintar, para no competir con lo que se
-  // ve. En una conexion rapida no se nota, y asi el mapa nunca se ve blando al
-  // acercar porque ya esta.
-  var cuando = window.requestIdleCallback || function (f) { setTimeout(f, 1400) };
-  cuando(function () { traeLaGrande() }, {timeout: 3000});
-}
 </script>
 </body>
 </html>

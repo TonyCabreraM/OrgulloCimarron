@@ -343,79 +343,67 @@ def test_croquis_zonas_coherentes() -> bool:
     if problemas:
         return False
 
-    # Los fondos se nombran en DOS sitios, y los dos con su `?v=`:
+    # EL FONDO: una sola pieza, y es el poster entero.
     #
-    #   el chico   lo pone el marcado, y es el que se abre siempre
-    #   el grande  lo pone el script, y entra al acercar una zona
+    # Antes eran dos -el chico, que se abria siempre, y el grande, que entraba al
+    # acercar-, y cada uno con su `?v=`. Ahora es UN `<image>` con el SVG del
+    # poster, que lo es vectorial: no hay version en alta que sacar, porque a dos
+    # o a seis veces se ve igual. Lo que no puede ser es que apunte a un archivo
+    # que no exista, o que se quede con un `?v=` viejo, asi que eso si se
+    # comprueba.
     #
-    # Antes eran dos archivos distintos porque el origen era un .ai y se podia
-    # renderizar a 1224 y a 3400 px. Ahora el origen es el poster exportado, que
-    # es de 1224 px, y no hay version en alta que sacar. ASI QUE PUEDEN SER EL
-    # MISMO ARCHIVO, y no es un fallo: el navegador lo pide una vez y el mapa se
-    # ve igual. Lo que NO puede ser es que apunten a un archivo que no exista, o
-    # que se queden con un `?v=` viejo, asi que eso si se comprueba.
+    # Y que sea un SVG es parte de lo que se comprueba: un WebP aqui seria un
+    # retroceso silencioso, porque volveria a hacer falta la version en alta y
+    # nadie se enteraria hasta que alguien mirara el mapa ampliado en un monitor
+    # grande.
     #
-    # Si no estǭn junto al HTML, la pǭgina sale con el fondo vac��o y ni un
-    # error en consola.
-    #
-    # Y el `?v=` hace falta de verdad: GitHub Pages sirve la imagen con
-    # `Cache-Control: max-age=600`, as�� que durante diez minutos despuǸs de
-    # subir un cambio se sigue viendo el fondo anterior, recargando inclusive.
-    # Un nǧmero que se queda viejo no da ningǧn error: solo un mapa que no
-    # cambia, que es justo el fallo que parece ��no se subi����. Por eso no se
-    # escribe a mano y se comprueba aqu��.
-    fondos = [("el chico", re.search(r'id="arte"[^>]*href="([^"]+)"', texto)),
-              ("el grande", re.search(r'ARTE_URL = "([^"]+)"', texto))]
-    if not all(m for _, m in fondos):
-        print("    (no se encuentran los dos fondos en el croquis: uno de los")
-        print("     dos no estǭ, o le cambiaron el nombre a su variable)")
+    # Y el `?v=` hace falta de verdad: GitHub Pages sirve el archivo con
+    # `Cache-Control: max-age=600`, asi que durante diez minutos despues de subir
+    # un cambio se sigue viendo el fondo anterior, recargando inclusive. Un
+    # numero que se queda viejo no da ningun error: solo un mapa que no cambia,
+    # que es justo el fallo que parece «no se subio». Por eso no se escribe a
+    # mano y se comprueba aqui.
+    fondo = re.search(r'id="arte"[^>]*href="([^"]+)"', texto)
+    if not fondo:
+        print("    (no se encuentra el fondo del croquis: el `<image id=\"arte\">`")
+        print("     no esta, o le cambiaron el nombre)")
         return False
-    if fondos[0][1].group(1).split("?")[0] == fondos[1][1].group(1).split("?")[0]:
-        print("    (los dos fondos apuntan al mismo archivo: no hay version en "
-              "alta,\n     que es lo que pasa cuando el origen son 1224 px)")
-
-    resumen = []
-    for cual, m in fondos:
-        archivo, _, version = m.group(1).partition("?v=")
-        ruta = Path("plantilla") / archivo
-        if not ruta.is_file():
-            print(f"    ({cual} apunta a {ruta}, que no existe junto al HTML)")
-            return False
-        sha = hashlib.sha1(ruta.read_bytes()).hexdigest()[:8]
-        if not version:
-            print(f"    ({cual} no lleva «?v=»: los navegadores seguirán diez")
-            print(f"     minutos con el fondo viejo. Ponle «{archivo}?v={sha}»)")
-            return False
-        if version != sha:
-            print(f"    ({cual} cambió y su dirección sigue con el número de")
-            print(f"     antes: el navegador seguirá enseñando el fondo viejo")
-            print(f"     aunque se recargue. Pon «{archivo}?v={sha}»)")
-            return False
-        resumen.append((ruta, ruta.stat().st_size // 1024, version))
-
-    # Y, si son dos archivos distintos, tienen que estar en el orden que espera
-    # el croquis: la que se abre primero TIENE que ser la que menos pesa. Si se
-    # cruzaran, el ahorro se perdería sin que nada avisara.
-    #
-    # Cuando apuntan al MISMO archivo no hay orden que comprobar -pesan lo mismo
-    # porque son lo mismo-, y solo queda que el peso no se dispare, que es lo
-    # unico que se puede pedir cuando no hay version grande.
-    if resumen[0][0] == resumen[1][0]:
-        if resumen[0][1] > 400:
-            print(f"    (el fondo pesa {resumen[0][1]} KB y no hay version en "
-                  f"alta con la que sustituirlo:\n     en un movil es la mayor "
-                  f"parte de lo que se baja. Suele ser que el origen se ha "
-                  f"exportado\n     a mas de 1224 px y `preparar_mapa.py` no "
-                  f"lo ha vuelto a sacar.)")
-            return False
-    elif resumen[0][1] >= resumen[1][1]:
-        print(f"    (el fondo que se abre primero pesa más que el otro: "
-              f"{resumen[0][1]} KB contra {resumen[1][1]} KB, y de eso va el")
-        print(f"     asunto. Cambia cuál pone el marcado y cuál el script)")
+    archivo, _, version = fondo.group(1).partition("?v=")
+    if not archivo.lower().endswith(".svg"):
+        print(f"    (el fondo es {archivo} y no un SVG: el poster tiene que ir "
+              f"entero, con los\n     dos banners dentro, y en vector, que es lo "
+              f"que hace que no haga\n     falta una version en alta.)")
+        return False
+    ruta = Path("plantilla") / archivo
+    if not ruta.is_file():
+        print(f"    (el fondo apunta a {ruta}, que no existe junto al HTML: la")
+        print("     pagina sale con el fondo vacio y ni un error en consola)")
+        return False
+    sha = hashlib.sha1(ruta.read_bytes()).hexdigest()[:8]
+    if not version:
+        print(f"    (el fondo no lleva «?v=»: los navegadores seguirán diez")
+        print(f"     minutos con el fondo viejo. Ponle «{archivo}?v={sha}»)")
+        return False
+    if version != sha:
+        print("    (el fondo cambió y su dirección sigue con el número de")
+        print("     antes: el navegador seguirá enseñando el fondo viejo")
+        print(f"     aunque se recargue. Pon «{archivo}?v={sha}»)")
         return False
 
+    # Y que no queden rastros de la machinery de las dos versiones. Si volvieran
+    # a aparecer sin querer, `sel()` llamaria a una funcion que ya no esta y el
+    # zoom se quedaria sin pintar al tocar una zona: no da error, se ve mal.
+    for rastro in ("ARTE_URL", "ARTE_GRANDE", "traeLaGrande", "arteGrande",
+                   "conexionRapida", "anchoNecesario"):
+        if rastro in texto:
+            print(f"    (queda «{rastro}» en el croquis: es del fondo en dos "
+                  f"tamanos, que ya no\n     existe, y si se vuelve a llamar "
+                  f"desde algún sitio el zoom se queda sin pintar)")
+            return False
+
+    kb = ruta.stat().st_size // 1024
     print(f"    {len(zonas)} zonas y {len(iconos)} iconos ({len(propios)} propios), "
-          + " y ".join(f"{r.name} {kb} KB (v{v})" for r, kb, v in resumen))
+          f"y el poster entero en una pieza: {archivo} {kb} KB (v{version})")
     return True
 
 
@@ -3400,28 +3388,26 @@ def test_el_mapa_no_se_queda_en_una_capa() -> bool:
                 "solo corre con la pagina a la vista: cambiando de pestana en "
                 "mitad de un zoom se quedaria puesta")
 
-    # --- 4. Y el fondo grande se pide cuando hace falta, no siempre -----
-    # Solo al acercar, o por adelantado si la conexion es rapida. Sin esta
-    # segunda parte, entre el toque y la llegada del archivo el mapa se veria
-    # blando, que es el unico defecto de tener dos versiones del fondo.
-    if "function conexionRapida(" not in texto:
-        problemas.append(
-            "no se mira la conexion: con una conexion lenta y con \"ahorrar "
-            "datos\" puesto se bajaria la version grande igual")
-    if "saveData" not in texto:
-        problemas.append(
-            "no se respeta «ahorrar datos», que es justo para quien lo pide")
-    if "requestIdleCallback" not in texto:
-        problemas.append(
-            "la version grande no se pide por adelantado en conexion rapida: "
-            "el mapa se veria blando hasta que llegue")
+    # --- 4. Y que no quede nada de cuando el fondo eran dos archivos --------
+    # El fondo era un WebP chico y otro grande, y se pedia el grande al acercar
+    # o por adelantado si la conexion iba bien. Con el poster entero en un SVG
+    # eso no existe: es vectorial, se ve igual a cualquier zoom y no hay nada
+    # que pedir. Quedaria rastro en `ARTE_GRANDE`, en `traeLaGrande()` y en las
+    # reglas de la capa, y si algo los llamara se quedaria a medias sin error.
+    for rastro in ("conexionRapida", "saveData", "requestIdleCallback",
+                   "traeLaGrande", "ARTE_GRANDE"):
+        if rastro in texto:
+            problemas.append(
+                f"queda «{rastro}» en el croquis: es de cuando el fondo eran dos "
+                f"WebP y habia que decidir cual se pedia. Con el poster entero "
+                f"en un SVG no hay nada que decidir")
 
     for p in problemas:
         print(f"    {p}")
     if problemas:
         return False
-    print("    el `will-change` del mapa dura lo que el movimiento, y el fondo "
-          "grande se pide al acercar o por adelantado si la conexion va bien")
+    print("    el `will-change` del mapa dura lo que el movimiento, y no queda "
+          "rastro del fondo en dos versiones")
     return True
 
 
@@ -3596,147 +3582,178 @@ def test_el_sello_no_se_mide_con_getbbox() -> bool:
     return True
 
 
-def test_los_banners_estan_en_su_sitio() -> bool:
-    """El poster es los dos banners y el mapa, y las tres cosas donde deben.
+def test_el_poster_es_una_sola_pieza() -> bool:
+    """El poster entero es un `<image>`, y esta donde tiene que estar.
 
-    El croquis se dibuja con el poster entero: el banner con el titulo arriba, el
-    mapa en medio y el banner de abajo. Lo que hay que vigilar es que las tres
-    cosas sigan en su sitio, porque el fallo es silencioso: si el banner se queda
-    un poco mas abajo, no da ningun error, solo un titulo que no esta donde
-    tocaba.
+    El croquis se dibuja con el POSTER ENTERO -el mapa y los dos banners- en una
+    sola pieza, que es el SVG tal cual. Antes eran tres imagenes y lo que habia
+    que vigilar era que las tres siguieran en su sitio, porque el fallo es
+    silencioso: si un banner se queda un poco mas abajo, no da ningun error,
+    solo un titulo que no esta donde tocaba.
+
+    Ahora lo que se vigila es de otro estilo, y mas fuerte por tener menos que
+    mirar: que la pieza este donde tiene que estar, que el lienzo la recorte
+    justo, que la vista general la abarque entera y que el papel de debajo sea
+    EL DEL ARTE.
 
     **Y el mapa no se mueve.** El `viewBox` empieza en -216 y no en 0 para poder
-    poner el banner de arriba ENCIMA sin desplazar el mapa: este sigue de 0 a 792,
-    donde estaba, y las diez zonas y los cuarenta y seis iconos siguen hablando de
-    las mismas coordenadas. La razon de hacerlo asi y no moviendo el mapa a
-    y=216 es que un numero que se queda viejo en una zona es una zona que se toca
-    en el sitio equivocado, y eso no se ve en el dibujo: se ve cuando alguien
-    toca.
+    poner el poster ENCIMA sin desplazar el mapa: este sigue de 0 a 792, donde
+    estaba, y las diez zonas y los cuarenta y seis iconos siguen hablando de las
+    mismas coordenadas. La razon de hacerlo asi y no moviendo el mapa a y=216 es
+    que un numero que se queda viejo en una zona es una zona que se toca en el
+    sitio equivocado, y eso no se ve en el dibujo: se ve cuando alguien toca.
 
-    El banner de abajo va dentro de `#m` tambien, y con una sola version: no
-    cambia con el zoom -se va con el mapa entero-, asi que no hay ningun momento
-    en que haga falta una mas grande que la que se ve a pantalla.
+    Y el `y=-217` de la pieza es lo mismo: el poster esta un pixel mas abajo de
+    donde lo quiere el croquis -el `DESPLAZE_Y` que media `preparar_mapa.py`, que
+    ya no existe porque el poster se publica tal cual-, asi que se sube un pixel
+    la pieza entera. Sin ese pixel las diez zonas se quedan un pixel corridas
+    respecto al dibujo.
     """
     texto = CROQUIS.read_text(encoding="utf-8")
     problemas = []
 
-    # --- 1. El lienzo, que tiene que dar a los tres --------------------------
+    # --- 1. El lienzo, que tiene que dar al poster entero -------------------
     lienzo = re.search(r'<svg id="s" viewBox="([^"]*)"', texto)
     if not lienzo:
         problemas.append(
-            "no se encuentra el `viewBox` del `<svg>`: sin el no se sabe si los "
-            "banners caben o se salen de la pantalla")
+            "no se encuentra el `viewBox` del `<svg>`: sin el no se sabe si el "
+            "poster cabe o se sale de la pantalla")
+        alto_lienzo = None
     else:
         partes = lienzo.group(1).split()
         if len(partes) != 4:
             problemas.append(f"el `viewBox` esta mal escrito: {lienzo.group(1)}")
+            alto_lienzo = None
         else:
             x, y, ancho, alto = (float(p) for p in partes)
+            alto_lienzo = alto
             # El mapa sigue donde estaba: de 0 a 792. Si esto cambia, el mapa se
             # ha movido y con el todas las zonas.
-            if (x, y, ancho) != (0.0, -216.0, 1224.0) or alto != 1224.0:
+            #
+            # El alto es 1223 y no 1224, y no es un descuido: la pieza va en
+            # y=-217 y mide 1224, con lo que acaba en 1007. Un lienzo que
+            # llegara a 1008 dejaria una fila de papel al pie, y en el poster esa
+            # fila es verde. Con 1223 el lienzo acaba donde acaba la pieza y la
+            # ultima fila del poster se sigue viendo.
+            if (x, y, ancho) != (0.0, -216.0, 1224.0) or alto != 1223.0:
                 problemas.append(
                     f"el lienzo es {lienzo.group(1)} y deberia ser "
-                    f"0 -216 1224 1224: el mapa tiene que seguir de 0 a 792 y "
-                    f"los banners alrededor. Un `y` que no sea -216 significa "
+                    f"0 -216 1224 1223: el mapa tiene que seguir de 0 a 792 y "
+                    f"el poster alrededor. Un `y` que no sea -216 significa "
                     f"que el mapa se ha movido, y con el todas las zonas")
 
-    # --- 2. Los dos banners, cada uno en su sitio ---------------------------
-    # Se mide lo que dice el render, no lo que hay en un comentario.
-    for ident, y_esperado, nombre in (("bannerArriba", -216, "arriba"),
-                                      ("bannerAbajo", 792, "abajo")):
-        etiqueta = re.search(r'<image id="%s"[^>]*>' % ident, texto, flags=re.S)
-        if not etiqueta:
-            problemas.append(
-                f"no esta el `<image id=\"{ident}\">`: el banner de {nombre} no "
-                f"se dibujaria")
-            continue
-        marca = etiqueta.group(0)
-        y = re.search(r'\by="(-?\d+)"', marca)
-        alto = re.search(r'\bheight="(\d+)"', marca)
-        ancho = re.search(r'\bwidth="(\d+)"', marca)
-        if not y or float(y.group(1)) != y_esperado:
-            problemas.append(
-                f"el banner de {nombre} esta en y={y.group(1) if y else '?'} y "
-                f"tiene que estar en {y_esperado}: si se separa del mapa se ve "
-                f"un trozo de pagina en medio, y si se solapa, el mapa queda "
-                f"tapado")
-        for dim, valor in (("width", 1224), ("height", 216)):
-            m = re.search(r'\b%s="(\d+)"' % dim, marca)
-            if not m or int(m.group(1)) != valor:
+    # --- 2. La pieza, en su sitio y con su tamano ---------------------------
+    # Se mide lo que dice el marcado, no lo que hay en un comentario.
+    pieza = re.search(r'<image id="arte"[^>]*>', texto, flags=re.S)
+    if not pieza:
+        problemas.append(
+            "no esta el `<image id=\"arte\">`: sin el no se dibuja ni el mapa ni "
+            "los banners, y la pagina sale con un rect gris")
+    else:
+        marca = pieza.group(0)
+        for atributo, valor in (("x", "0"), ("y", "-217"),
+                                ("width", "1224"), ("height", "1224")):
+            m = re.search(r'\b%s="(-?\d+)"' % atributo, marca)
+            if not m or m.group(1) != valor:
                 problemas.append(
-                    f"el banner de {nombre} mide {dim}={m.group(1) if m else '?'} "
-                    f"y tiene que medir {valor}, que es el ancho del mapa")
+                    f"la pieza del poster tiene {atributo}={m.group(1) if m else '?'} "
+                    f"y tiene que tener {valor}: el `y` es el pixel de "
+                    f"DESPLAZE_Y, y sin el el mapa queda un pixel corrido")
 
     # --- 3. Y que la vista general enseñe el poster entero -------------------
     # Antes era un recorte del campus. Con los banners, ese rectangulo no los
     # incluye y en la vista general no se veria ni el titulo ni el dibujo de
     # abajo: el mapa se abriria sin el banner y pareceria que no se ha subido.
+    #
+    # Se compara con el `viewBox` y no con numeros escritos aqui, que es lo que
+    # haria que el cambio de 1224 a 1223 no hubiera roto nada.
     vista = re.search(r"var VISTA = \[([^\]]*)\]", texto)
     if not vista:
         problemas.append("(no se encuentra VISTA, el encuadre de la vista general)")
     else:
         nums = [float(p) for p in vista.group(1).split(",")]
-        if len(nums) == 4 and (nums[1] > -216 or nums[2] < 1224 or nums[3] < 1224):
-            problemas.append(
-                f"VISTA es {nums} y no abarca el poster entero: tiene que "
-                f"llegar de y=-216 a y=1008 y medir 1224 de ancho, o los "
-                f"banners no se ven al abrir el mapa")
+        if len(nums) == 4 and alto_lienzo is not None:
+            if (nums[1] > -216 or nums[0] > 0
+                    or nums[2] < 1224 or nums[3] < alto_lienzo):
+                problemas.append(
+                    f"VISTA es {nums} y no abarca el poster entero: tiene que "
+                    f"llegar de y=-216 a y={-216 + alto_lienzo:.0f} y medir 1224 "
+                    f"de ancho, o los banners no se ven al abrir el mapa")
 
-    # --- 4. Que los dos archivos existan con su `?v=` -----------------------
-    # El `?v=` es el sha1 del archivo. Sin el, GitHub Pages y su CDN siguen
-    # sirviendo la copia vieja durante diez minutos y el sintoma es un banner que
-    # no cambia, que es justo el fallo que parece «no se subio».
+    # --- 4. Que el papel de debajo sea EL DEL ARTE --------------------------
+    # El rect se ve mientras el SVG baja, que es bastante rato, asi que si su
+    # color no fuera el del arte se veria un cambio de color al abrir el mapa.
+    # Pasó dos veces: al cambiar el arte del poster, que pasó de verde pálido a
+    # gris neutro, el rect se quedó en el verde; y al pasar el fondo al SVG, que
+    # lleva un velo morado del 5 % encima.
     #
-    # Y que sean UNO cada uno, sin la coletilla `-chico`: ahora que el origen es
-    # el poster exportado, que es de 1224 px, no hay version en alta que sacar y
-    # un `-chico` no significaria nada.
-    for nombre in ("banner-arriba", "banner-abajo"):
-        if f"{nombre}.webp?v=" not in texto:
-            problemas.append(
-                f"el {nombre}.webp no lleva su `?v=`: sin el numero se sigue "
-                f"viendo la copia vieja del banner aunque se suba otra")
-        if f"{nombre}-chico.webp" in texto:
-            problemas.append(
-                f"el banner se sigue pidiendo como {nombre}-chico.webp, que ya "
-                f"no se saca: el origen es el poster exportado, de 1224 px, y no "
-                f"tiene mas resolucion que amplificar")
-
-    # --- 5. Y que el mapa no se haya movido de sitio -----------------------
-    # El fondo y el filo siguen en 0,0 y miden 1224 x 792. Si esto cambia, el
-    # mapa se ha desplazado y las zonas se han quedado donde estaban antes.
-    hoja = re.search(r'<rect x="0" y="0" width="1224" height="792"'
+    # El color se lee del PROPIO SVG, no de una raster: el papel es el primer
+    # `<path>` del dibujo -el fondo del poster- con el velo del segundo grupo
+    # encima, y se mezclan aqui igual que los mezcla el navegador. Se acepta un
+    # nivel de margen porque el navegador mezcla en coma flotante y redondea.
+    hoja = re.search(r'<rect x="0" y="-216" width="1224" height="1223"'
                      r' fill="(#[0-9a-fA-F]{6})"', texto)
     if not hoja:
         problemas.append(
-            "la hoja del mapa ya no mide 1224 x 792 en 0,0: el mapa se ha "
-            "movido y las diez zonas se han quedado en el sitio viejo")
+            "el papel ya no mide 1224 x 1223 en 0,-216: tiene que ir debajo del "
+            "POSTER entero y no solo del mapa, o al abrir el mapa se ve el gris "
+            "en las franjas de los banners")
     else:
-        # Y que ese papel sea EL DEL ARTE, no el de antes. Este rect se ve un
-        # instante mientras la imagen baja, asi que si no coincide con el dibujo
-        # se ve un cambio de color al abrir el mapa. Pasó: al cambiar el arte del
-        # poster, que paso de verde palido a gris neutro, el rect se quedo en el
-        # verde y el mapa aparecia claro y luego gris.
-        fondo = CROQUIS.parent / "rectoria-chico.webp"
-        if not fondo.is_file():
-            problemas.append("(no esta rectoria-chico.webp, no se puede comparar)")
+        svg = CROQUIS.parent / "FinalSinCosas.svg"
+        if not svg.is_file():
+            problemas.append("(no esta FinalSinCosas.svg, no se puede comparar)")
         else:
-            with Image.open(fondo) as imagen:
-                esquina = imagen.convert("RGB").getpixel((4, 4))
-            del_arte = "#%02x%02x%02x" % esquina
-            if hoja.group(1).lower() != del_arte:
+            # Se lee el CUERPO del SVG y no el archivo entero: en los `<defs>`
+            # tambien hay `<path>`, y son de la mascara y de los degradados, que
+            # no son el papel de nada.
+            dibujo = svg.read_text(encoding="utf-8")
+            cuerpo = dibujo[dibujo.find("</defs>"):]
+            clases = dict(re.findall(r"\.(cls-\d+)\{([^}]*)\}", dibujo))
+            capas = re.findall(r'<path[^>]*class="(cls-\d+)"', cuerpo)
+            try:
+                fondo = _mezcla_clases(clases[capas[0]], clases[capas[1]])
+            except (IndexError, KeyError, AttributeError):
                 problemas.append(
-                    f"la hoja del mapa se pinta de {hoja.group(1)} pero el "
-                    f"fondo del arte es {del_arte}: se ve un cambio de color al "
-                    f"abrir el mapa, mientras la imagen baja")
+                    "(el SVG ya no tiene el papel y el velo como los dos primeros "
+                    "trazos del cuerpo: no se puede saber de que color es el fondo)")
+                fondo = None
+            if fondo:
+                pinta = [int(hoja.group(1)[1 + i * 2:3 + i * 2], 16) for i in range(3)]
+                if pinta != list(fondo) and any(abs(a - b) > 2
+                                                for a, b in zip(pinta, fondo)):
+                    problemas.append(
+                        f"el papel se pinta de {hoja.group(1)} pero el papel "
+                        f"del arte es {_hexa(fondo)}: se ve un cambio de color al "
+                        f"abrir el mapa, mientras el SVG baja")
 
     for p in problemas:
         print(f"    {p}")
     if problemas:
         return False
-    print("    el poster entero en el lienzo, los dos banners en su sitio, y el "
-          "mapa sin moverse un pixel de donde estaba")
+    print("    el poster entero en una sola pieza, en su sitio, con el papel del "
+          "arte debajo, y el mapa sin moverse un pixel de donde estaba")
     return True
+
+
+def _mezcla_clases(base: str, velo: str) -> tuple:
+    """El color del papel, como canal: el del fondo del poster con el velo encima.
+
+    Las dos reglas de CSS del SVG, tal cual estan, y se mezclan como lo haria el
+    navegador. Sale del arte y no de aqui escrito, que es justo lo que evita que
+    el papel se quede viejo en silencio.
+    """
+    def canales(regla: str) -> tuple:
+        h = re.search(r"fill:(#\w{6})", regla).group(1)[1:]
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+    opacidad = float(re.search(r"opacity:([\d.]+)", velo).group(1))
+    return tuple(round(d + (e - d) * opacidad)
+                 for d, e in zip(canales(base), canales(velo)))
+
+
+def _hexa(canal: tuple) -> str:
+    """Lo mismo, en hexadecimal y con la almohadilla, para leerlo."""
+    return "#%02x%02x%02x" % canal
 
 
 def test_las_transformaciones_se_guardan_y_se_dibujan() -> bool:
@@ -3968,7 +3985,7 @@ def main() -> int:
         ("iconos y simbolos coinciden", test_iconos_y_simbolos_coinciden),
         ("animaciones e intensidad", test_animaciones_e_intensidad),
         ("el toque y el encabezado", test_el_toque_y_el_encabezado),
-        ("los banners estan en su sitio", test_los_banners_estan_en_su_sitio),
+         ("el poster es una sola pieza", test_el_poster_es_una_sola_pieza),
         ("las transformaciones se guardan y se dibujan",
          test_las_transformaciones_se_guardan_y_se_dibujan),
         ("el sello y el boton de la ventana", test_el_sello_y_el_boton_de_la_ventana),
