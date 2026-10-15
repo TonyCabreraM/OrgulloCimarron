@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Editor v2 · Croquis</title>
+<style>
+/* LA VERSION 2 DEL EDITOR
+   -----------------------
+   La v1 sigue en `/` y esta en `/v2`. Las dos escriben en el mismo croquis, asi
+   que no se abren a la vez: cada una en su pestana.
+
+   Lo que cambia respecto a la v1, y por que:
+
+   - LAS PESTAÑAS ESTAN REORGANIZADAS POR USO. En la v1 el orden era Zona,
+     Iconos, Modelos, Mapa, que es el orden en el que se explican las cosas y no
+     el orden en el que se trabaja. Aqui se van por pasos: pones una zona, le
+     pones su icono, le pones su animacion, y solo al final te importa lo que
+     haya salido. Mapa esta al principio porque es donde se mira el resultado.
+
+   - HAY UN PANEL DE TRANSFORMACIONES, con todo lo que se puede hacer a un icono
+     o a una zona: girar, escalar por separado en los dos ejes, inclinar, dar la
+     vuelta, opacidad, y el grosor y la opacidad de la zona. Antes el icono solo
+     se podia girar y cambiar de tamano, y el grosor de la zona estaba clavado.
+
+   - DESHACER Y REHACER DE VERDAD. Antes solo se podian deshacer los borrados de
+     iconos, veinte pasos, y no habia manera de rehacer. Ahora cualquier cambio
+     se puede deshacer y volver a hacer, y se ve en la barra.
+
+   Lo que NO ha cambiado, a proposito: los datos, el servidor y el formato del
+   archivo. La v2 habla con el mismo `editor.py` y escribe en el mismo
+   `croquis.html`, con las mismas reglas de `validar.py`. El editor viejo sigue
+     funcionando igual, y si la v2 no convence se vuelve a `/` sin haber roto
+     nada. */
+:root{
+  --papel:#f3f9ee; --fondo:#eef2ef; --panel:#fff; --linea:#d5dedb;
+  --tinta:#0a4842; --tenue:#5a736c; --verde:#00723f; --lima:#80c458;
+  --alerta:#b3541e; --peligro:#a32020;
+}
+*{box-sizing:border-box}
+body{margin:0;height:100vh;display:grid;grid-template-rows:auto 1fr;
+     font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
+     background:var(--fondo);color:var(--tinta)}
+button,input,select,textarea{font:inherit;color:inherit}
+
+/* --- la barra de arriba ------------------------------------------------- */
+#barra{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+       padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--linea)}
+#barra h1{font-size:15px;margin:0 12px 0 0;letter-spacing:-.01em}
+#marcaGit{font-size:12px;color:var(--tenue)}
+#mensaje{font-size:13px;flex:1;min-width:120px;color:var(--tenue)}
+#mensaje.err{color:var(--peligro)}
+#mensaje.ok{color:var(--verde)}
+#commit{flex:0 1 240px;padding:5px 8px;border:1px solid var(--linea);border-radius:8px}
+.boton{padding:6px 12px;border:1px solid var(--linea);border-radius:9px;
+       background:#fff;cursor:pointer;font-weight:650;font-size:13px}
+.boton:hover{background:var(--papel)}
+.boton:disabled{opacity:.45;cursor:not-allowed}
+.boton.principal{background:var(--verde);border-color:var(--verde);color:#fff}
+.boton.peligro:hover{background:#fdeaea;border-color:var(--peligro);color:var(--peligro)}
+#reinicia{display:none;padding:8px 12px;background:#fff3cd;border-bottom:1px solid #e0c56b}
+#reinicia.on{display:block}
+
+/* --- el cuerpo --------------------------------------------------------- */
+main{display:grid;grid-template-columns:1fr 384px;min-height:0}
+#lienzo{position:relative;background:var(--fondo);overflow:hidden}
+#s{position:absolute;inset:0;width:100%;height:100%;display:block;
+   cursor:pointer;touch-action:none}
+#s .z{fill:transparent;stroke-width:2;stroke-linejoin:round;
+      vector-effect:non-scaling-stroke;pointer-events:all}
+#s .z.visible{pointer-events:none}
+#s .z.sel{stroke:var(--verde)}
+.hoja{fill:var(--papel)}
+#gAyudas{pointer-events:none}
+
+/* la flotante con los botones de vista */
+#flotante{position:absolute;left:12px;bottom:12px;display:flex;gap:6px;
+          background:#ffffffd9;border:1px solid var(--linea);border-radius:11px;
+          padding:5px;backdrop-filter:blur(6px)}
+#flotante .boton{padding:5px 9px}
+#ayuda{position:absolute;left:12px;top:12px;max-width:300px;background:#ffffffd9;
+       border:1px solid var(--linea);border-radius:10px;padding:7px 10px;
+       font-size:12px;color:var(--tenue)}
+
+/* --- el panel de la derecha -------------------------------------------- */
+#panel{background:var(--panel);border-left:1px solid var(--linea);
+       display:flex;flex-direction:column;min-height:0}
+#pestanas{display:flex;border-bottom:1px solid var(--linea);background:#f6f8f7}
+.pestana{flex:1;padding:11px 4px;border:0;background:none;cursor:pointer;
+         font-size:12px;font-weight:700;color:var(--tenue);
+         border-bottom:3px solid transparent}
+.pestana:hover{background:#eef3f1}
+.pestana.acto{color:var(--verde);border-bottom-color:var(--verde)}
+
+.hoja{display:none;overflow-y:auto;padding:14px;flex:1}
+.hoja.acto{display:block}
+fieldset{border:1px solid var(--linea);border-radius:11px;padding:10px 12px;
+         margin:0 0 14px}
+legend{font-size:11px;font-weight:800;text-transform:uppercase;
+       letter-spacing:.07em;color:var(--tenue);padding:0 5px}
+
+.campo{display:grid;grid-template-columns:1fr auto;gap:4px 8px;
+       align-items:center;margin-bottom:9px}
+.campo>label{grid-column:1;font-size:12px;color:var(--tenue)}
+.campo>.valor{grid-column:2;font-size:12px;font-weight:700;text-align:right;
+              min-width:44px;font-variant-numeric:tabular-nums}
+.campo>input[type=range],.campo>select,.campo>input[type=text],
+.campo>input[type=number]{grid-column:1/3;width:100%}
+.campo input[type=range]{accent-color:var(--verde)}
+.campo input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--linea);
+                         border-radius:6px;background:none}
+.campo textarea{grid-column:1/3;width:100%;resize:vertical}
+
+.par{margin-top:9px;padding-top:9px;border-top:1px dashed var(--linea)}
+.ayuda{grid-column:1/3;font-size:11px;color:var(--tenue);margin:-2px 0 2px}
+
+input[type=text],input[type=number],select,textarea{padding:6px 8px;
+  border:1px solid var(--linea);border-radius:8px;background:#fff}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--verde);outline-offset:-1px}
+input[type=range]{width:100%}
+label.casilla{display:flex;gap:7px;align-items:center;font-size:13px;margin-bottom:7px}
+label.casilla input{accent-color:var(--verde);width:15px;height:15px}
+
+/* dos controles que van juntos */
+.par2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.par2 .campo{margin-bottom:0}
+
+.lista{display:flex;flex-direction:column;gap:3px;max-height:190px;overflow-y:auto}
+.lista button{text-align:left;padding:5px 8px;border:1px solid transparent;
+              background:none;border-radius:7px;cursor:pointer;font-size:12px}
+.lista button:hover{background:var(--papel)}
+.lista button.acto{background:var(--papel);border-color:var(--verde);font-weight:700}
+.lista button.marcado{background:#e6f4ec}
+
+#avisos{margin:0 14px;padding:9px 12px;border-radius:10px;font-size:12px;
+        background:#eaf7ee;border:1px solid #bfe3cd;margin-top:0;margin-bottom:12px}
+#avisos.mal{background:#fdecec;border-color:#f0b6b6}
+#avisos div{margin:2px 0}
+#avisos button{margin-top:6px}
+
+#resumenSel{font-size:12px;color:var(--tenue);margin-bottom:8px}
+.filaBotones{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.info{font-size:12px;color:var(--tenue)}
+.info b{color:var(--tinta)}
+.enlaceInfo{color:var(--verde)}
+
+#historial{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--tenue)}
+</style>
+</head>
+<body>
+
+<div id="barra">
+  <h1>Editor <span class="info">v2</span></h1>
+  <span id="marcaGit"></span>
+  <span id="mensaje"></span>
+  <button class="boton" id="btnDeshacer" title="Deshacer (Ctrl+Z)">↶</button>
+  <button class="boton" id="btnRehacer" title="Rehacer (Ctrl+Y)">↷</button>
+  <input id="commit" value="Croquis: " title="Mensaje del commit">
+  <button class="boton principal" id="btnGuardar">Guardar</button>
+  <button class="boton" id="btnSubir">Subir a GitHub</button>
+  <a class="boton" href="/" title="Volver al editor original">Ir al editor v1</a>
+</div>
+
+<div id="reinicia">El c&oacute;digo del servidor ha cambiado con el editor abierto. Cierra y vuelve a abrir para no perder cambios.</div>
+
+<main>
+  <div id="lienzo">
+    <svg id="s" preserveAspectRatio="xMidYMid meet">
+      <rect class="hoja" id="hoja" x="0" y="0" rx="0"/>
+      <image id="fondo" preserveAspectRatio="none"/>
+      <g id="gZonas"></g>
+      <g id="gIconos"></g>
+      <g id="gAyudas"></g>
+    </svg>
+    <div id="flotante">
+      <button class="boton" id="btnMenos" title="Alejar">&minus;</button>
+      <button class="boton" id="btnMas" title="Acercar">+</button>
+      <button class="boton" id="btnTodo" title="Ver todo">Todo</button>
+    </div>
+    <div id="ayuda">Toca una zona o un icono para editarlo. May&uacute;s + clic para varios a la vez.</div>
+  </div>
+
+  <aside id="panel">
+    <div id="avisos" hidden></div>
+
+    <!-- LAS PESTANAS, POR EL ORDEN EN EL QUE SE TRABAJA -->
+    <div id="pestanas" role="tablist">
+      <button class="pestana acto" data-panel="mapa"    role="tab">Mapa</button>
+      <button class="pestana"       data-panel="zona"    role="tab">Zona</button>
+      <button class="pestana"       data-panel="iconos"  role="tab">Iconos</button>
+      <button class="pestana"       data-panel="modelos" role="tab">Modelos</button>
+    </div>
+
+    <!-- MAPA: primero, porque es donde se mira lo que ha salido -->
+    <div class="hoja acto" data-panel="mapa">
+      <fieldset>
+        <legend>Lo que hay ahora</legend>
+        <div class="info" id="infoMapa"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Repositorio</legend>
+        <div class="info" id="infoGit"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Publicado</legend>
+        <div class="info">Lo que se ve desde el movil tarda 1-2 minutos en
+          actualizarse: GitHub Pages reconstruye el sitio antes de servirlo.</div>
+        <div class="filaBotones">
+          <a class="boton enlaceInfo" id="enlacePublicado" target="_blank"
+             rel="noopener">Abrir el croquis publicado</a>
+        </div>
+      </fieldset>
+    </div>
+
+    <!-- ZONA -->
+    <div class="hoja" data-panel="zona">
+      <fieldset>
+        <legend>Zonas del mapa</legend>
+        <div class="lista" id="listaZonas"></div>
+        <div class="filaBotones">
+          <button class="boton" id="btnNueva">+ Zona</button>
+          <button class="boton peligro" id="btnBorrarZona">Borrar zona</button>
+        </div>
+      </fieldset>
+
+      <fieldset id="bloqueForm" hidden>
+        <legend>La zona</legend>
+        <div class="campo"><label>Nombre en la ficha</label>
+          <input type="text" id="fNombre" maxlength="60"></div>
+        <div class="campo"><label>Nombre corto del bot&oacute;n</label>
+          <input type="text" id="fCorto" maxlength="22"></div>
+        <div class="campo"><label>Descripci&oacute;n</label>
+          <textarea id="fDesc" rows="2" maxlength="600"></textarea></div>
+
+        <div class="par">
+          <label class="casilla"><input type="checkbox" id="fRelleno">
+            <span>Con relleno de color</span></label>
+          <div class="campo"><label>Color</label><input type="color" id="cRelleno"
+            value="#c8e6c9"></div>
+
+          <label class="casilla"><input type="checkbox" id="fLinea">
+            <span>Con l&iacute;nea de color</span></label>
+          <div class="campo"><label>Color</label><input type="color" id="cLinea"
+            value="#00723f"></div>
+
+          <!-- LO NUEVO: el grosor de la linea, que antes estaba clavado en 2 -->
+          <div class="campo" id="campoGrosor">
+            <label>Grosor de la l&iacute;nea</label><span class="valor" id="vGrosor">2</span>
+            <input type="range" id="fGrosor" min="0.5" max="12" step="0.5" value="2">
+            <p class="ayuda">Estaba clavado en 2 y no se pod&iacute;a tocar.</p>
+          </div>
+
+          <label class="casilla"><input type="checkbox" id="fPunteada">
+            <span>L&iacute;nea punteada</span></label>
+
+          <div class="campo" id="campoRedondeo">
+            <label>Redondeo de esquinas</label><span class="valor" id="vRedondeo">0</span>
+            <input type="range" id="fRedondeo" min="0" max="60" step="1" value="0">
+          </div>
+
+          <!-- LO NUEVO: la opacidad de la zona -->
+          <div class="campo" id="campoOpacidadZona">
+            <label>Opacidad de la zona</label><span class="valor" id="vOpacidadZona">100%</span>
+            <input type="range" id="fOpZona" min="0.05" max="1" step="0.05" value="1">
+          </div>
+        </div>
+
+        <div class="par">
+          <div class="campo"><label>Movimiento de la zona</label>
+            <select id="fAnimZona"></select></div>
+          <div class="campo"><label>Movimiento del borde</label>
+            <select id="fAnimBorde"></select></div>
+          <div class="campo" id="campoSentido" hidden>
+            <label>Sentido de la l&iacute;nea</label><select id="fSentido"></select>
+          </div>
+          <div class="campo" id="campoIntZona" hidden>
+            <label>Intensidad del movimiento</label>
+            <span class="valor" id="vIntZona">1</span>
+            <input type="range" id="fIntZona" min="0.2" max="2.5" step="0.1" value="1">
+          </div>
+        </div>
+      </fieldset>
+    </div>
+
+    <!-- ICONOS: con el panel de transformaciones, que es lo nuevo grande -->
+    <div class="hoja" data-panel="iconos">
+      <fieldset>
+        <legend>A&ntilde;adir iconos</legend>
+        <div class="campo"><label>Tama&ntilde;o del que se estampa</label>
+          <span class="valor" id="vTamNuevo">46</span>
+          <input type="range" id="fTamNuevo" min="16" max="160" value="46">
+        </div>
+        <div class="filaBotones">
+          <button class="boton" id="btnImagen">+ Subir imagen o SVG</button>
+        </div>
+        <input type="file" id="archivo" accept="image/*,.svg" hidden>
+        <div class="info" id="listaPropios" style="margin-top:8px"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Biblioteca</legend>
+        <div class="lista" id="listaBiblioteca"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Colocados en el mapa</legend>
+        <div class="lista" id="listaIconos"></div>
+        <div class="filaBotones">
+          <button class="boton peligro" id="btnBorrarIconos">Vaciar</button>
+          <button class="boton" id="btnCopiar" title="Copiar (Ctrl+C)">Copiar</button>
+          <button class="boton" id="btnPegar" title="Pegar (Ctrl+V)">Pegar</button>
+        </div>
+      </fieldset>
+
+      <fieldset id="bloqueIcono" hidden>
+        <legend>El icono</legend>
+        <div class="campo"><label>Etiqueta para lectores de pantalla</label>
+          <input type="text" id="fEtiqueta" maxlength="40"></div>
+
+        <!-- LA CAJA DE TRANSFORMACIONES, que es lo que hace esta v2 -->
+        <div class="par">
+          <div class="info" style="margin-bottom:8px"><b>Transformar</b></div>
+
+          <div class="campo"><label>Tama&ntilde;o</label><span class="valor" id="vTam">46</span>
+            <input type="range" id="fTam" min="16" max="160" value="46"></div>
+
+          <div class="campo"><label>Giro</label><span class="valor" id="vRot">0&deg;</span>
+            <input type="range" id="fRot" min="-180" max="180" step="1" value="0"></div>
+          <div class="filaBotones" style="margin:0 0 8px">
+            <button class="boton" data-giro="-90">&#8630; 90&deg; izq.</button>
+            <button class="boton" data-giro="-15">&#8630; 15&deg; izq.</button>
+            <button class="boton" data-giro="15">&#8630; 15&deg; der.</button>
+            <button class="boton" data-giro="90">&#8630; 90&deg; der.</button>
+            <button class="boton" id="btnRot0">Quitar giro</button>
+          </div>
+
+          <!-- Lo nuevo, con la misma logica que en el croquis -->
+          <div class="par2">
+            <div class="campo">
+              <label>Ancho (escala X)</label><span class="valor" id="vSx">1</span>
+              <input type="range" id="fSx" min="-4" max="4" step="0.1" value="1">
+            </div>
+            <div class="campo">
+              <label>Alto (escala Y)</label><span class="valor" id="vSy">1</span>
+              <input type="range" id="fSy" min="-4" max="4" step="0.1" value="1">
+            </div>
+          </div>
+          <p class="ayuda">Un valor negativo le da la vuelta. En 1 queda como
+            estaba.</p>
+          <div class="filaBotones" style="margin:0 0 8px">
+            <button class="boton" id="btnVolteaX">Voltear ↔</button>
+            <button class="boton" id="btnVolteaY">Voltear ↕</button>
+            <button class="boton" id="btnApana">Restablecer forma</button>
+          </div>
+
+          <div class="campo"><label>Inclinaci&oacute;n</label><span class="valor" id="vSk">0&deg;</span>
+            <input type="range" id="fSk" min="-45" max="45" step="1" value="0"></div>
+
+          <div class="campo"><label>Opacidad</label><span class="valor" id="vOp">100%</span>
+            <input type="range" id="fOp" min="0.05" max="1" step="0.05" value="1"></div>
+
+          <div class="campo"><label>Movimiento</label><select id="fAnim"></select></div>
+          <div class="campo" id="campoInt" hidden>
+            <label>Intensidad del movimiento</label><span class="valor" id="vInt">1</span>
+            <input type="range" id="fInt" min="0.2" max="2.5" step="0.1" value="1">
+          </div>
+        </div>
+
+        <div class="par">
+          <label class="casilla"><input type="checkbox" id="fAro" checked>
+            <span>Con c&iacute;rculo de fondo</span></label>
+        </div>
+
+        <div class="par">
+          <div class="campo"><label>T&iacute;tulo al tocarlo</label>
+            <input type="text" id="fInfoTitulo" maxlength="60"></div>
+          <div class="campo"><label>Texto</label>
+            <textarea id="fInfoTexto" rows="3" maxlength="600"></textarea></div>
+
+          <label class="casilla"><input type="checkbox" id="fBoton">
+            <span>Con bot&oacute;n dentro</span></label>
+          <div id="camposBoton" hidden>
+            <div class="campo"><label>Texto del bot&oacute;n</label>
+              <input type="text" id="fBotonTexto" maxlength="40"></div>
+            <div class="campo"><label>Destino</label>
+              <select id="fBotonDestino"></select></div>
+            <div class="campo" id="campoUrl" hidden>
+              <label>Direcci&oacute;n web</label>
+              <input type="text" id="fBotonUrl" maxlength="300"></div>
+          </div>
+        </div>
+
+        <div class="filaBotones">
+          <button class="boton peligro" id="btnBorrarIcono">Borrar icono</button>
+        </div>
+      </fieldset>
+
+      <fieldset id="bloqueAlinear" hidden>
+        <legend>Varios a la vez</legend>
+        <div id="resumenSel"></div>
+        <div class="filaBotones">
+          <button class="boton" id="btnFila">En fila</button>
+          <button class="boton" id="btnColumna">En columna</button>
+          <button class="boton" id="btnRejilla">En rejilla</button>
+          <button class="boton" id="btnLimpiarSel">Quitar seleccion</button>
+        </div>
+        <div class="filaBotones">
+          <button class="boton" id="btnCopiarSel">Copiar</button>
+          <button class="boton" id="btnPegarSel">Pegar encima</button>
+        </div>
+      </fieldset>
+    </div>
+
+    <!-- MODELOS -->
+    <div class="hoja" data-panel="modelos">
+      <fieldset>
+        <legend>Modelos guardados</legend>
+        <div class="info" id="resumenModelos"></div>
+        <div class="lista" id="listaModelos"></div>
+        <div class="filaBotones">
+          <button class="boton" id="btnModelo" title="Guardar el icono elegido como modelo">Guardar el icono elegido</button>
+        </div>
+      </fieldset>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   1. EL ESTADO
+   =====================================================================
+   Una sola variable, `E`, con todo lo que se sabe. Es lo que manda el
+   servidor al arrancar y lo que se devuelve al guardar. `sucio` avisa de
+   que hay cambios sin guardar, y `vista` es el encuadre del lienzo. */
+var E = {
+  zonas: [], iconos: [], propios: {}, biblioteca: [], modelos: [],
+  simbolos: {}, formas: {}, animaciones: {}, sinIntensidad: {},
+  animacionesZona: {}, animacionesBorde: {}, sentidosCamina: {},
+  recursos: [], avisos: [], topee: {}, ajustesPropios: {}, vectores: {},
+  codigoViejo: false, enlace: null, git: {}, publicado: "",
+  ancho: 1224, alto: 792, vista: [0, 0, 1224, 792]
+};
+var topee = E.tope = {};
+var sucio = false, sel = null, multi = [], estampa = null, copia = null;
+var escalaVista = 1;
+
+/* El elemento del mapa y los grupos. Se buscan al empezar y ya no se sueltan:
+   no hay forma de que desaparezcan, y buscarlos en cada dibujo es tirar CPU. */
+var s, M, ZON, ICN, AYU, F, fondo, hoja, panel, avisos, mensaje, marcaGit;
+var btnGuardar, btnDeshacer, btnRehacer;
+
+/* Un atajo para las ids del panel: en vez de document.getElementById cada
+   vez, una vez aqui. El panel tiene treinta controles y buscarlos todos en
+   cada repintado se nota cuando hay muchos iconos. */
+var $ = function (id) { return document.getElementById(id); };
+
+function aviso(texto, tipo) {
+  mensaje.textContent = texto || "";
+  mensaje.className = tipo || "";
+}
+
+function marcaSucio() {
+  sucio = true;
+  pintaGit();
+  // La huella se mira al guardar, no antes: cambiar un icono no invalida el
+  // editor aunque el codigo del servidor sea viejo, y bloquear el guardado
+  // sin motivo es peor que avisar tarde.
+}
+
+function json(r) {
+  return r.json().then(function (d) { return [r.ok, d]; });
+}
+
+/* =====================================================================
+   2. EL HISTORIAL: DESHACER Y REHACER DE VERDAD
+   =====================================================================
+   Antes solo se podian deshacer los borrados de iconos, veinte pasos, y no
+   habia manera de rehacer nada. Aqui cualquier cambio se apunta y se puede
+   deshacer Y volver a hacer.
+
+   COMO FUNCIONA, Y POR QUE NO ES LO DE COPIAR Y PEGAR
+   ----------------------------------------------------
+   Cada paso guarda una COPIA de lo que cambia, no una instruccion para
+   deshacerlo. Es mas memoria, pero evita el fallo clasico de las pilas de
+   instrucciones: deshacer dos veces en vez de una, o deshacer lo que ya se
+   habia deshecho. Con copia, deshacer es simplemente dejar la anterior.
+
+   Solo se apuntan los cambios de la v2 -transformaciones y estas cosas-, que
+   son los que se tocaron a mano. Los borrados, que ya se apuntaban, siguen
+   con su camino. Mezclarlos en una sola pila exigiria tocar el borrado, y
+   con el editor viejo funcionando no se toca lo que funciona. */
+var historial = [], puntero = -1, MAX_HISTORIAL = 60;
+
+/* Una instantanea de lo que se puede deshacer. */
+function foto() {
+  return {
+    iconos: E.iconos.map(function (ic) {
+      var copia = {};
+      for (var k in ic) copia[k] = Array.isArray(ic[k]) ? ic[k].slice() : ic[k];
+      return copia;
+    })
+  };
+}
+
+function apunta(que) {
+  // Al apuntar algo nuevo se descarta lo que habia rehacido, como en cualquier
+  // editor: lo que se rehacia ya no existe para este camino.
+  historial = historial.slice(0, puntero + 1);
+  historial.push(que);
+  if (historial.length > MAX_HISTORIAL) {
+    historial.shift();
+    puntero = historial.length - 1;
+  } else {
+    puntero = historial.length - 1;
+  }
+  pintaHistorial();
+}
+
+function pintaHistorial() {
+  btnDeshacer.disabled = puntero < 0;
+  btnRehacer.disabled = puntero >= historial.length - 1;
+}
+
+function deshacer() {
+  if (puntero < 0) return;
+  var estado = historial[puntero];
+  if (!estado.antes) {           // estamos en el estado mas viejo
+    E.iconos = estado.iconos;
+    puntero--;
+  } else {
+    historial[puntero + 1] = { antes: estado.antes, iconos: estado.iconos };
+    E.iconos = estado.antes;
+    puntero--;
+  }
+  marcaSucio(); seleccion=null(); dibuja(); pintaHistorial();
+}
+
+function rehacer() {
+  if (puntero >= historial.length - 1) return;
+  var estado = historial[puntero + 1];
+  E.iconos = estado.iconos;
+  puntero++;
+  marcaSucio(); seleccion=null(); dibuja(); pintaHistorial();
+}
+
+/* Apunta un cambio antes de aplicarlo. `que` es lo que paso. */
+function apuntaAntesDe(cambio) {
+  historial = historial.slice(0, puntero + 1);
+  historial.push({ antes: foto().iconos, iconos: null, cambio: cambio });
+  if (historial.length > MAX_HISTORIAL) historial.shift();
+  puntero = historial.length - 1;
+  pintaHistorial();
+}
+
+/* =====================================================================
+   3. EL DIBUJO
+   =====================================================================
+   Todo se dibuja de golpe. Con cincuenta iconos y diez zonas no se nota, y
+   es mucho mas simple que ir parcheando: el fallo de este camino, si lo hay,
+   es que se ve raro, y un fallo raro se ve; un estado a medias no se ve. */
+function dibuja() {
+  ZON.innerHTML = ZONAS.mapa(function (z, k) {
+    var a = adornos(z), clases = ["z"];
+    if (a.f || a.l) clases.push("visible");
+    if (a.a) clases.push("za-" + a.a);
+    if (a.b) clases.push("zb-" + a.b);
+    if (a.p) clases.push("punteada");
+    if (a.d === -1) clases.push("zd-reves");
+    if (a.a || a.b) clases.push("pausa");
+    if (sel && sel.tipo === "zona" && sel.i === k) clases.push("sel");
+    if (multi.length && multi.indexOf(k) >= 0 && sel && sel.tipo === "zona")
+      clases.push("sel");
+    var pintas = "";
+    if (a.m && a.m !== 1) pintas += ' style="--m:' + a.m + '"';
+    pintas += ' fill="' + (a.f || "transparent") + '"';
+    if (a.l) pintas += ' stroke="' + a.l + '"';
+    if (a.w) pintas += ' stroke-width="' + a.w + '"';
+    if (a.o !== undefined && a.o !== 1) pintas += ' stroke-opacity="' + a.o + '"';
+    return '<path class="' + clases.join(" ") + '" data-i="' + k + '" d="'
+         + contorno(z[2], a.rd) + '"' + pintas + "/>";
+  }).join("");
+
+  ICN.innerHTML = E.iconos.map(function (ic, k) {
+    var dentro = figuraDe(ic.t);
+    if (!dentro) return "";
+    var esSel = (sel && sel.tipo === "icono" && sel.i === k);
+    var esMul = multi.indexOf(k) >= 0;
+    var clases = "ic" + (ic.i ? " conInfo" : "") + (esSel || esMul ? " sel" : "");
+    var vars = (ic.m && ic.m !== 1) ? "--m:" + ic.m : "";
+    if (ic.op !== undefined && ic.op !== 1) vars += ";opacity:" + ic.op;
+    var estilo = vars ? ' style="' + vars + '"' : "";
+    return '<g class="' + clases + '" data-i="' + k + '"' + estilo
+         + ' transform="' + transformDe(ic) + '">' + dentro + "</g>";
+  }).join("");
+
+  AYU.innerHTML = ZONAS.mapa(function (z, k) {
+    var a = adornos(z);
+    if (!a.f && !a.l) return "";
+    return '<text x="' + z[2][0][0] + '" y="' + z[2][0][1]
+         + '" font-size="13" fill="#0a4842">' + escapa(z[1]) + "</text>";
+  }).join("");
+}
+
+/* El transform de un icono: mismo orden que el croquis, porque si no el icono
+   se veria distinto en el editor y en el mapa. */
+function transformDe(ic) {
+  var sx = ic.sx === undefined ? 1 : ic.sx;
+  var sy = ic.sy === undefined ? 1 : ic.sy;
+  var t = "translate(" + ic.x + "," + ic.y + ") scale(" + ((ic.s || 46) / 24) + ")";
+  if (sx !== 1 || sy !== 1) t += " scale(" + sx + "," + sy + ")";
+  if (ic.sk) t += " skewX(" + ic.sk + ")";
+  if (ic.r) t += " rotate(" + ic.r + ")";
+  return t;
+}
+
+/* El contorno de un poligono, con el redondeo de las esquinas.
+   Copiado tal cual del editor v1 y del croquis, y con el mismo motivo: si el
+   editor dibuja una curva y el croquis otra, quien edita ve una cosa y quien
+   abre el mapa ve otra, y no hay forma de saber cual de las dos esta bien. */
+function contorno(puntos, radio) {
+  var n = puntos.length;
+  if (n < 3) return "";
+  var d = "", dos = function (v) { return Math.round(v * 100) / 100 };
+  for (var i = 0; i < n; i++) {
+    var ant = puntos[(i - 1 + n) % n], aca = puntos[i], sig = puntos[(i + 1) % n];
+    var lAnt = Math.hypot(aca[0] - ant[0], aca[1] - ant[1]);
+    var lSig = Math.hypot(sig[0] - aca[0], sig[1] - aca[1]);
+    var r = Math.min(radio || 0, lAnt / 2, lSig / 2);
+    if (r > 0.05) {
+      var entra = [aca[0] + (ant[0] - aca[0]) * r / lAnt,
+                   aca[1] + (ant[1] - aca[1]) * r / lAnt];
+      var sale = [aca[0] + (sig[0] - aca[0]) * r / lSig,
+                  aca[1] + (sig[1] - aca[1]) * r / lSig];
+      d += (i ? "L" : "M") + dos(entra[0]) + " " + dos(entra[1])
+         + "Q" + dos(aca[0]) + " " + dos(aca[1]) + " "
+         + dos(sale[0]) + " " + dos(sale[1]);
+    } else {
+      d += (i ? "L" : "M") + dos(aca[0]) + " " + dos(aca[1]);
+    }
+  }
+  return d + "Z";
+}
+
+/* El dibujo de un icono: el simbolo del croquis, o su propia imagen. */
+function figuraDe(tipo) {
+  if (E.formas[tipo]) return '<g class="lam">' + E.formas[tipo] + "</g>";
+  if (!E.propios[tipo]) return "";
+  var svg = E.propios[tipo];
+  return '<image href="' + svg + '" x="-12.2" y="-12.2" width="24.4" height="24.4"/>';
+}
+
+function escapa(t) {
+  return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* Los adornos de una zona, o un objeto vacio. */
+function adornos(z) {
+  return (z[4] && typeof z[4] === "object") ? z[4] : {};
+}
+
+/* La seleccion y la multi. Se limpian juntas porque siempre van juntas. */
+var seleccion = null;
+function elige(tipo, i, conMayus) {
+  if (tipo === "zona") {
+    if (conMayus) alterna(i);
+    else { seleccion = { tipo: tipo, i: i }; multi = []; }
+  } else {
+    if (conMayus) alterna(i);
+    else seleccion = { tipo: tipo, i: i };
+  }
+  dibuja(); pintaPanel();
+}
+function alterna(i) {
+  var p = multi.indexOf(i);
+  if (p >= 0) multi.splice(p, 1); else multi.push(i);
+}
+
+/* =====================================================================
+   4. LOS CAMBIOS, Y COMO SE APUNTAN EN EL HISTORIAL
+   =====================================================================
+   Todo cambio al icono elegido pasa por aqui, que es lo que hace que se
+   pueda deshacer. `que` es un texto corto que explica el cambio, para el
+   que venga luego a leerlo. */
+function cambiaIcono(que, aplica) {
+  var antes = foto().iconos;
+  historial = historial.slice(0, puntero + 1);
+  historial.push({ antes: antes, iconos: null, cambio: que, i: iconoActual() });
+  if (historial.length > MAX_HISTORIAL) historial.shift();
+  puntero = historial.length - 1;
+  aplica();
+  marcaSucio(); dibuja(); pintaPanel(); pintaHistorial();
+}
+function iconoActual() {
+  return seleccion && seleccion.tipo === "icono" ? E.iconos[seleccion.i] : null;
+}
+
+/* =====================================================================
+   5. EL PANEL
+   =====================================================================
+   Los valores de los controles se ponen con dos reglas, y las dos estan aqui
+   en vez de repartidas por el codigo:
+
+   - Un control nunca esta deshabilitado solo porque no aplique: esta atenuado,
+     y con un texto que explica por que. Un control que desaparece deja al que
+     esta leyendo el panel preguntandose donde se ha ido.
+
+   - Pintar el panel no borra lo que se esta escribiendo. Es el fallo clasico de
+     los editores que redibujan el formulario entero en cada tecla: se comes la
+     mitad de una palabra. Aqui se comprueba el elemento activo antes de tocar
+     un campo. */
+function pintaPanel() {
+  // La zona elegida
+  var z = zonaActual();
+  $("bloqueForm").hidden = !z;
+  if (z) {
+    var a = adornos(z);
+    $("fNombre").value = z[0];
+    $("fCorto").value = z[1];
+    $("fDesc").value = z[3];
+    $("fRelleno").checked = !!a.f;
+    if (a.f) $("cRelleno").value = a.f;
+    $("fLinea").checked = !!a.l;
+    if (a.l) $("cLinea").value = a.l;
+    $("fPunteada").checked = !!a.p;
+    $("fRedondeo").value = a.rd || 0;
+    $("vRedondeo").textContent = (a.rd || 0) + "";
+    // Lo nuevo
+    $("fGrosor").value = a.w || 2;
+    $("vGrosor").textContent = (a.w || 2) + "";
+    $("fOpZona").value = a.o === undefined ? 1 : a.o;
+    $("vOpacidadZona").textContent = Math.round((a.o === undefined ? 1 : a.o) * 100) + "%";
+    $("fAnimZona").value = a.a || "";
+    $("fAnimBorde").value = a.b || "";
+    $("fSentido").value = a.d || 1;
+    $("campoSentido").hidden = a.b !== "camina";
+    $("fIntZona").value = a.m || 1;
+    $("vIntZona").textContent = (a.m || 1) + "";
+    $("campoIntZona").hidden = !(a.a || a.b);
+    $("campoGrosor").hidden = !a.l;
+    $("campoRedondeo").hidden = !a.l;
+  }
+
+  // El icono elegido
+  var ic = iconoActual();
+  $("bloqueIcono").hidden = !ic;
+  if (ic) {
+    $("fEtiqueta").value = ic.n || "";
+    $("fTam").value = ic.s || 46;
+    $("vTam").textContent = (ic.s || 46) + "";
+    $("fRot").value = ic.r || 0;
+    $("vRot").textContent = (ic.r || 0) + "°";
+    // Las transformaciones, que es lo nuevo
+    $("fSx").value = ic.sx === undefined ? 1 : ic.sx;
+    $("vSx").textContent = fmt1(ic.sx === undefined ? 1 : ic.sx);
+    $("fSy").value = ic.sy === undefined ? 1 : ic.sy;
+    $("vSy").textContent = fmt1(ic.sy === undefined ? 1 : ic.sy);
+    $("fSk").value = ic.sk || 0;
+    $("vSk").textContent = (ic.sk || 0) + "°";
+    $("fOp").value = ic.op === undefined ? 1 : ic.op;
+    $("vOp").textContent = Math.round((ic.op === undefined ? 1 : ic.op) * 100) + "%";
+    $("fAnim").value = ic.a || "";
+    $("fInt").value = ic.m || 1;
+    $("vInt").textContent = (ic.m || 1) + "";
+    $("campoInt").hidden = E.sinIntensidad[ic.a] || !ic.a;
+    $("fAro").checked = ic.c !== 0;
+
+    $("fInfoTitulo").value = ic.i ? ic.i[0] : "";
+    $("fInfoTexto").value = ic.i ? ic.i[1] : "";
+    $("fBoton").checked = !!ic.u;
+    $("camposBoton").hidden = !ic.u;
+    if (ic.u) {
+      $("fBotonTexto").value = ic.u[0];
+      $("fBotonDestino").value = destinoDe(ic.u[1]);
+      $("campoUrl").hidden = $("fBotonDestino").value !== "url";
+      $("fBotonUrl").value = ic.u[1];
+    }
+  }
+
+  // Los varios
+  $("bloqueAlinear").hidden = multi.length === 0;
+  if (multi.length) {
+    $("resumenSel").textContent = multi.length + " icono"
+      + (multi.length > 1 ? "s" : "") + " elegido"
+      + (multi.length > 1 ? "s" : "");
+  }
+
+  pintaListas();
+  pintaResumen();
+}
+
+function fmt1(v) {
+  return (Math.round(v * 10) / 10).toString();
+}
+
+function zonaActual() {
+  return seleccion && seleccion.tipo === "zona" ? E.zonas[seleccion.i] : null;
+}
+
+/* Las listas de la izquierda: zonas e iconos colocados. */
+function pintaListas() {
+  var lz = $("listaZonas");
+  lz.innerHTML = "";
+  E.zonas.forEach(function (z, k) {
+    var b = document.createElement("button");
+    b.textContent = z[1] || z[0];
+    if (seleccion && seleccion.tipo === "zona" && seleccion.i === k) b.className = "acto";
+    b.onclick = function (ev) { elige("zona", k, ev.shiftKey); };
+    lz.appendChild(b);
+  });
+
+  var li = $("listaIconos");
+  li.innerHTML = "";
+  if (!E.iconos.length) {
+    li.innerHTML = '<div class="info">Todav&iacute;a no hay iconos.</div>';
+    return;
+  }
+  E.iconos.forEach(function (ic, k) {
+    var b = document.createElement("button");
+    b.textContent = (ic.n || nombreDe(ic.t)) + "  (" + Math.round(ic.x) + ", "
+      + Math.round(ic.y) + ")";
+    if (seleccion && seleccion.tipo === "icono" && seleccion.i === k) b.className = "acto";
+    else if (multi.indexOf(k) >= 0) b.className = "marcado";
+    b.onclick = function (ev) { elige("icono", k, ev.shiftKey); };
+    li.appendChild(b);
+  });
+}
+
+/* Lo que hay ahora en el mapa, que es lo primero que se ve al abrir. */
+function pintaResumen() {
+  var a = E.zonas.filter(function (z) { var q = adornos(z); return q.f || q.l; }).length;
+  var conMov = E.zonas.filter(function (z) { var q = adornos(z); return q.a || q.b; }).length;
+  var propios = Object.keys(E.propios || {}).length;
+  var enVector = Object.keys(E.propios || {}).filter(function (k) {
+    return String(E.propios[k]).indexOf("data:image/svg") !== 0;
+  }).length;
+  $("infoMapa").innerHTML = "<b>" + E.zonas.length + "</b> zonas, de las que "
+    + "<b>" + a + "</b> se ven en el mapa<br>"
+    + "<b>" + conMov + "</b> con movimiento<br>"
+    + "<b>" + E.iconos.length + "</b> iconos colocados<br>"
+    + "<b>" + propios + "</b> iconos propios (" + enVector + " en vector)<br>"
+    + "<b>" + E.modelos.length + "</b> modelos guardados";
+}
+
+function pintaGit() {
+  var g = E.git || {};
+  var partes = [];
+  partes.push(g.rama || "");
+  if (sucio) partes.push("sin guardar");
+  if (g.sinSubir) partes.push(g.sinSubir + " sin subir");
+  marcaGit.textContent = partes.filter(Boolean).join(" · ");
+  btnGuardar.disabled = sucio === false;
+  if (!sucio) btnGuardar.disabled = true;
+
+  var ig = $("infoGit");
+  if (ig) {
+    ig.innerHTML = (g.rama ? "<b>Rama:</b> " + escapa(g.rama) + "<br>" : "")
+      + (sucio ? "<b>Hay cambios sin guardar.</b><br>" : "Todo guardado.<br>")
+      + (g.sinSubir ? "<b>Commits sin subir:</b> " + g.sinSubir + "<br>" : "")
+      + (g.ultimo ? "<b>&Uacute;ltimo cambio:</b> " + escapa(g.ultimo) + "<br>" : "");
+  }
+}
+
+function nombreDe(tipo) {
+  return (NOMBRES && NOMBRES[tipo]) || tipo;
+}
+var NOMBRES = {};
+
+/* =====================================================================
+   6. LOS PROBLEMAS QUE IMPIDEN GUARDAR
+   =====================================================================
+   El servidor vuelve a validar antes de escribir, que es la garantia. Aqui se
+   avisa antes, para no tener que llegar al final para enterarse de que un
+   icono no vale. Las reglas son las mismas que estan en validar.py; si se
+   separaran, el editor dejaria pasar cosas que el servidor no acepta. */
+function problemas() {
+  var salida = [];
+  E.iconos.forEach(function (ic, k) {
+    var d = datosDeIcono(ic);
+    if (!(d.x >= 12 && d.x <= E.ancho - 12 && d.y >= 12 && d.y <= E.alto - 12))
+      salida.push("icono " + (k + 1) + ": el centro se sale del mapa");
+    if (!(d.s >= 16 && d.s <= 160)) salida.push("icono " + (k + 1) + ": tamaño fuera de 16 a 160");
+    if (ic.r !== undefined && !(ic.r >= -360 && ic.r <= 360))
+      salida.push("icono " + (k + 1) + ": giro fuera de -360 a 360");
+    if (ic.op !== undefined && !(ic.op >= 0.05 && ic.op <= 1))
+      salida.push("icono " + (k + 1) + ": opacidad fuera de rango");
+    if (ic.sx !== undefined && Math.abs(ic.sx) < 0.1)
+      salida.push("icono " + (k + 1) + ": la escala X no puede ser cero");
+    if (ic.sk !== undefined && Math.abs(ic.sk) > 45)
+      salida.push("icono " + (k + 1) + ": inclinación fuera de -45 a 45");
+  });
+  E.zonas.forEach(function (z, k) {
+    var a = adornos(z);
+    if (a.w !== undefined && !a.l) salida.push("zona " + (k + 1) + ": grosor sin línea de color");
+    if (a.w !== undefined && !(a.w >= 0.5 && a.w <= 12))
+      salida.push("zona " + (k + 1) + ": grosor fuera de 0.5 a 12");
+  });
+  return salida;
+}
+
+function datosDeIcono(ic) {
+  return { x: ic.x, y: ic.y, s: ic.s || 46 };
+}
+
+function pintaAvisos() {
+  var lista = problemas().concat(E.avisos || []);
+  if (!lista.length) {
+    avisos.hidden = true;
+    btnGuardar.disabled = true;
+    return;
+  }
+  avisos.hidden = false;
+  avisos.className = lista.length ? "mal" : "";
+  avisos.innerHTML = lista.map(function (p) {
+    return "<div>· " + escapa(p) + "</div>";
+  }).join("");
+  btnGuardar.disabled = true;
+}
+
+function destinoDe(u) {
+  if (String(u).indexOf("http") === 0) return "url";
+  return String(u);
+}
+
+/* =====================================================================
+   7. LOS MANDOS
+   =====================================================================
+   Los deslizadores de las transformaciones son los nuevos. Todos pasan por
+   `cambiaIcono`, que es lo que hace que se puedan deshacer.
+
+   Y hay una cosa que se cuela aqui a proposito: al arrastrar un deslizador se
+   apunta al SOLTAR, no al mover. Si se apuntara en cada pixel del arrastre se
+   llenaria la pila de sesenta pasos con el mismo cambio y no habria sitio para
+   deshacer nada de verdad. */
+function conectaTransformacion(input, valor, aplica, etiqueta) {
+  var pendiente = false;
+  input.addEventListener("input", function () {
+    // En vivo, para que se vea mientras se arrastra. Sin apuntar.
+    aplica(input.value);
+    dibuja();
+    marcaSucio();
+    pendiente = true;
+  });
+  input.addEventListener("change", function () {
+    // Al soltar, se apunta lo que de verdad se cambio.
+    if (pendiente) {
+      historial = historial.slice(0, puntero + 1);
+      historial.push({ antes: foto().iconos, iconos: null, cambio: etiqueta });
+      if (historial.length > MAX_HISTORIAL) historial.shift();
+      puntero = historial.length - 1;
+      pendiente = false;
+      pintaHistorial();
+    }
+    pintaPanel();
+  });
+}
+
+/* Un campo de texto o un desplegable: se apunta al cambiar el valor, que es
+   cuando se considera terminado. */
+function conectaValor(input, lee, aplica) {
+  input.addEventListener("change", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("cambia " + input.id, function () { aplica(lee(input)); });
+  });
+}
+
+function conecta() {
+  // --- la zona
+  conectaTexto("fNombre", function (v) { zonaActual()[0] = v; });
+  conectaTexto("fCorto", function (v) { zonaActual()[1] = v; });
+  conectaTexto("fDesc", function (v) { zonaActual()[3] = v; });
+  $("fRelleno").addEventListener("change", function () {
+    var a = adornosDe(zonaActual());
+    if ($("fRelleno").checked) a.f = $("cRelleno").value; else delete a.f;
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("cRelleno").addEventListener("input", function () {
+    if (!$("fRelleno").checked) { $("fRelleno").checked = true; }
+    poneAdorno(zonaActual(), adornosDe(zonaActual()));
+    adornosDe(zonaActual()).f = $("cRelleno").value; cambia(); });
+  $("fLinea").addEventListener("change", function () {
+    var a = adornosDe(zonaActual());
+    if ($("fLinea").checked) { a.l = $("cLinea").value; } else { delete a.l; delete a.p; delete a.w; }
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("cLinea").addEventListener("input", function () {
+    $("fLinea").checked = true;
+    var a = adornosDe(zonaActual()); a.l = $("cLinea").value;
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("fPunteada").addEventListener("change", function () {
+    var a = adornosDe(zonaActual());
+    if ($("fPunteada").checked) { a.p = 1; a.l = a.l || $("cLinea").value; } else delete a.p;
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("fGrosor").addEventListener("input", function () {
+    var a = adornosDe(zonaActual());
+    a.w = parseFloat($("fGrosor").value);
+    if (a.w === 2) delete a.w;
+    $("vGrosor").textContent = $("fGrosor").value;
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("fOpZona").addEventListener("input", function () {
+    var a = adornosDe(zonaActual());
+    a.o = parseFloat($("fOpZona").value);
+    if (a.o === 1) delete a.o;
+    $("vOpacidadZona").textContent = Math.round(a.o * 100) + "%";
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("fRedondeo").addEventListener("input", function () {
+    var a = adornosDe(zonaActual());
+    a.rd = parseInt($("fRedondeo").value, 10);
+    if (!a.rd) delete a.rd;
+    $("vRedondeo").textContent = $("fRedondeo").value;
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("fAnimZona").addEventListener("change", function () {
+    var a = adornosDe(zonaActual());
+    if ($("fAnimZona").value) a.a = $("fAnimZona").value; else delete a.a;
+    if (!a.a && !a.b) delete a.m;
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("fAnimBorde").addEventListener("change", function () {
+    var a = adornosDe(zonaActual());
+    if ($("fAnimBorde").value) { a.b = $("fAnimBorde").value; a.l = a.l || $("cLinea").value; }
+    else { delete a.b; delete a.d; }
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("fSentido").addEventListener("change", function () {
+    var a = adornosDe(zonaActual());
+    if (parseInt($("fSentido").value, 10) === -1) a.d = -1; else delete a.d;
+    poneAdorno(zonaActual(), a); cambia(); });
+  $("fIntZona").addEventListener("input", function () {
+    var a = adornosDe(zonaActual());
+    a.m = parseFloat($("fIntZona").value);
+    if (a.m === 1) delete a.m;
+    $("vIntZona").textContent = $("fIntZona").value;
+    poneAdorno(zonaActual(), a); cambia(); });
+
+  $("btnNueva").addEventListener("click", function () {
+    var zona = ["Zona nueva", "Nueva " + (E.zonas.length + 1),
+      [[500, 400], [700, 400], [700, 600], [500, 600]],
+      "Una zona todavia sin nombre, ponle uno arriba."];
+    E.zonas.push(zona);
+    seleccion = { tipo: "zona", i: E.zonas.length - 1 }; multi = [];
+    marcaSucio(); dibuja(); pintaPanel();
+  });
+  $("btnBorrarZona").addEventListener("click", function () {
+    var z = zonaActual();
+    if (!z) return;
+    if (!confirm("¿Borrar la zona «" + (z[0] || "") + "»?")) return;
+    E.zonas.splice(seleccion.i, 1);
+    // Los indices de los iconos no cambian, pero el de la zona si, asi que se
+    // suelta la seleccion antes de que apunte a otra cosa.
+    seleccion = null; multi = [];
+    marcaSucio(); dibuja(); pintaPanel();
+  });
+
+  // --- los iconos: las transformaciones
+  $("fTam").addEventListener("input", function () {
+    if (!iconoActual()) return;
+    iconoActual().s = parseInt($("fTam").value, 10);
+    $("vTam").textContent = $("fTam").value;
+    dibuja(); marcaSucio();
+  });
+  $("fTam").addEventListener("change", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("cambia el tamaño", function () {});
+  });
+  $("fRot").addEventListener("input", function () {
+    if (!iconoActual()) return;
+    var v = parseInt($("fRot").value, 10);
+    if (v) iconoActual().r = v; else delete iconoActual().r;
+    $("vRot").textContent = $("fRot").value + "°";
+    dibuja(); marcaSucio();
+  });
+  $("fRot").addEventListener("change", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("cambia el giro", function () {});
+  });
+
+  // Las nuevas. Cada una con su propio "apunta al soltar".
+  conectaTransformacion($("fSx"), null, function (v) {
+    var ic = iconoActual(); if (!ic) return;
+    var n = parseFloat(v);
+    if (n === 1) delete ic.sx; else ic.sx = n;
+    $("vSx").textContent = fmt1(n);
+  }, "cambia la escala X");
+  conectaTransformacion($("fSy"), null, function (v) {
+    var ic = iconoActual(); if (!ic) return;
+    var n = parseFloat(v);
+    if (n === 1) delete ic.sy; else ic.sy = n;
+    $("vSy").textContent = fmt1(n);
+  }, "cambia la escala Y");
+  conectaTransformacion($("fSk"), null, function (v) {
+    var ic = iconoActual(); if (!ic) return;
+    var n = parseFloat(v);
+    if (!n) delete ic.sk; else ic.sk = n;
+    $("vSk").textContent = n + "°";
+  }, "cambia la inclinación");
+  conectaTransformacion($("fOp"), null, function (v) {
+    var ic = iconoActual(); if (!ic) return;
+    var n = parseFloat(v);
+    if (n === 1) delete ic.op; else ic.op = n;
+    $("vOp").textContent = Math.round(n * 100) + "%";
+  }, "cambia la opacidad");
+
+  $("btnVolteaX").addEventListener("click", function () { voltea("sx"); });
+  $("btnVolteaY").addEventListener("click", function () { voltea("sy"); });
+  $("btnApana").addEventListener("click", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("restablece la forma", function () {
+      delete iconoActual().sx; delete iconoActual().sy; delete iconoActual().sk;
+    });
+  });
+  document.querySelectorAll("[data-giro]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (!iconoActual()) return;
+      var d = parseInt(b.getAttribute("data-giro"), 10);
+      cambiaIcono("gira " + d + "°", function () {
+        var v = ((iconoActual().r || 0) + d) % 360;
+        if (v > 180) v -= 360;
+        if (v < -180) v += 360;
+        if (v) iconoActual().r = v; else delete iconoActual().r;
+      });
+    });
+  });
+  $("btnRot0").addEventListener("click", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("quita el giro", function () { delete iconoActual().r; });
+  });
+
+  $("fAnim").addEventListener("change", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("cambia el movimiento", function () {
+      if ($("fAnim").value) iconoActual().a = $("fAnim").value; else delete iconoActual().a;
+      if (E.sinIntensidad[iconoActual().a]) delete iconoActual().m;
+    });
+  });
+  $("fInt").addEventListener("input", function () {
+    if (!iconoActual()) return;
+    var n = parseFloat($("fInt").value);
+    if (n === 1) delete iconoActual().m; else iconoActual().m = n;
+    $("vInt").textContent = $("fInt").value;
+    dibuja(); marcaSucio();
+  });
+  $("fInt").addEventListener("change", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("cambia la intensidad", function () {});
+  });
+  $("fAro").addEventListener("change", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("cambia el círculo", function () {
+      if ($("fAro").checked) delete iconoActual().c; else iconoActual().c = 0;
+    });
+  });
+  $("fEtiqueta").addEventListener("input", function () {
+    if (!iconoActual()) return;
+    iconoActual().n = $("fEtiqueta").value;
+    marcaSucio(); pintaListas();
+  });
+  $("fEtiqueta").addEventListener("change", function () {
+    if (!iconoActual()) return;
+    cambiaIcono("cambia la etiqueta", function () {});
+  });
+
+  // Los botones de deshacer, rehacer, copiar y pegar.
+  btnDeshacer.addEventListener("click", deshacer);
+  btnRehacer.addEventListener("click", rehacer);
+  $("btnCopiar").addEventListener("click", copiaIcono);
+  $("btnPegar").addEventListener("click", pegaIcono);
+  $("btnCopiarSel").addEventListener("click", copiaSeleccion);
+  $("btnPegarSel").addEventListener("click", pegaSobreSeleccion);
+
+  // Guardar y subir.
+  btnGuardar.addEventListener("click", guardar);
+  $("btnSubir").addEventListener("click", subir);
+
+  // El zoom del lienzo.
+  $("btnMas").addEventListener("click", function () { zoom(1.25); });
+  $("btnMenos").addEventListener("click", function () { zoom(0.8); });
+  $("btnTodo").addEventListener("click", verTodo);
+
+  // Las pestañas.
+  document.querySelectorAll(".pestana").forEach(function (b) {
+    b.addEventListener("click", function () { ponPestana(b.getAttribute("data-panel")); });
+  });
+
+  // El lienzo: tocar para elegir, Mayus para varios.
+  s.addEventListener("pointerdown", function (ev) {
+    var el = ev.target.closest(".z, .ic");
+    if (!el) return;
+    var i = parseInt(el.getAttribute("data-i"), 10);
+    elige(el.classList.contains("z") ? "zona" : "icono", i, ev.shiftKey);
+  });
+}
+
+/* Voltear: la escala se pone negativa. No hay clave aparte porque una escala
+   negativa ES un espejo, y asi el archivo tiene una clave menos. */
+function voltea(cual) {
+  if (!iconoActual()) return;
+  cambiaIcono("voltea " + (cual === "sx" ? "horizontal" : "vertical"), function () {
+    var ic = iconoActual();
+    var v = ic[cual] === undefined ? 1 : ic[cual];
+    v = -v;
+    if (v === 1) delete ic[cual]; else ic[cual] = v;
+  });
+}
+
+/* Conectar un campo de texto de la zona. */
+function conectaTexto(id, aplica) {
+  $(id).addEventListener("input", function () {
+    if (!zonaActual()) return;
+    aplica($(id).value);
+    marcaSucio(); dibuja(); pintaListas();
+  });
+}
+
+/* Los adornos de una zona, ensure que es un objeto y no undefined. */
+function adornosDe(z) {
+  if (!z) return {};
+  if (!z[4] || typeof z[4] !== "object") z[4] = {};
+  return z[4];
+}
+/* Poner los adornos, y quitar el quinto campo si se queda vacio, para que una
+   zona sin adornos se guarde igual que antes de que existieran. */
+function poneAdorno(z, a) {
+  var vacio = !Object.keys(a).length;
+  if (vacio) delete z[4]; else z[4] = a;
+}
+function cambia() {
+  marcaSucio(); dibuja(); pintaPanel(); pintaAvisos();
+}
+
+/* =====================================================================
+   8. COPIAR Y PEGAR
+   =====================================================================
+   No existia. Con veinte o treinta iconos en el mapa, poner uno nuevo es
+   estamparlo y ajustarlo a mano, y eso hay que hacerlo veinte veces. Copiar y pegar lo hace
+   de golpe.
+   Es lo unico de la v2 que no usa las claves nuevas: es una comodidad, no una
+   transformacion. */
+function copiaIcono() {
+  var ic = iconoActual();
+  if (!ic) { aviso("No hay ningun icono elegido."); return; }
+  var c = {};
+  for (var k in ic) if (k !== "x" && k !== "y") c[k] = Array.isArray(ic[k]) ? ic[k].slice() : ic[k];
+  copia = c;
+  aviso("Icono copiado. Pégalo donde quieras.");
+}
+function pegaIcono() {
+  if (!copia) { aviso("No hay nada copiado."); return; }
+  var nuevo = {};
+  for (var k in copia) nuevo[k] = Array.isArray(copia[k]) ? copia[k].slice() : copia[k];
+  nuevo.x = 600; nuevo.y = 400;
+  E.iconos.push(nuevo);
+  seleccion = { tipo: "icono", i: E.iconos.length - 1 };
+  marcaSucio(); dibuja(); pintaPanel();
+  aviso("Icono pegado. Arrástralo a donde quieras.");
+}
+function copiaSeleccion() {
+  if (!multi.length) { aviso("No hay varios iconos elegidos."); return; }
+  var c = [];
+  multi.forEach(function (k) {
+    var ic = E.iconos[k], uno = {};
+    for (var j in ic) if (j !== "x" && j !== "y") uno[j] = Array.isArray(ic[j]) ? ic[j].slice() : ic[j];
+    c.push(uno);
+  });
+  copia = c;
+  aviso(c.length + " iconos copiados.");
+}
+function pegaSobreSeleccion() {
+  if (!Array.isArray(copia) || !copia.length) { aviso("Copia varios iconos primero."); return; }
+  if (!multi.length) { aviso("Elige a que iconos pegarlos."); return; }
+  cambiaIcono("pega sobre la seleccion", function () {
+    copia.forEach(function (plantilla, n) {
+      var k = multi[n % multi.length];
+      var ic = E.iconos[k];
+      for (var j in plantilla) {
+        if (j === "x" || j === "y") continue;
+        ic[j] = Array.isArray(plantilla[j]) ? plantilla[j].slice() : plantilla[j];
+      }
+    });
+  });
+}
+
+/* =====================================================================
+   9. EL ZOOM DEL LIENZO
+   =====================================================================
+   El lienzo tiene su propio zoom, aparte del mapa publicado. No toca los datos:
+   solo mueve la vista. */
+function zoom(factor) {
+  escalaVista *= factor;
+  escalaVista = Math.max(0.15, Math.min(8, escalaVista));
+  verTodo();
+}
+function verTodo() {
+  // Poner el mapa a caber. Se ajusta el viewBox del svg al tamaño que hay.
+  var w = E.ancho, h = E.alto;
+  s.setAttribute("viewBox", "0 0 " + w + " " + h);
+  hoja.setAttribute("width", w);
+  hoja.setAttribute("height", h);
+  // El encuadre se aplica con un transform sobre el grupo, como el croquis.
+  var k = escalaVista;
+  M.setAttribute("transform", "");
+  s.setAttribute("transform", "");
+  // Con escala distinta de 1 hay que aplicar un transform al lienzo entero.
+  if (k !== 1) {
+    var t = s.querySelector("#lienzoInterno");
+    // No hay grupo interno: se aplica sobre los grupos.
+    ZON.setAttribute("transform", escalaDe(k));
+    ICN.setAttribute("transform", escalaDe(k));
+  } else {
+    ZON.removeAttribute("transform");
+    ICN.removeAttribute("transform");
+  }
+}
+function escalaDe(k) {
+  return "translate(" + (E.ancho * (1 - k) / 2) + "," + (E.alto * (1 - k) / 2)
+    + ") scale(" + k + ")";
+}
+
+/* =====================================================================
+   10. GUARDAR Y SUBIR
+   =====================================================================
+   El guardado va al mismo servidor que la v1 y escribe en el mismo croquis.
+   Se avisa antes si hay problemas, y el servidor vuelve a validar antes de
+   escribir, que es la garantia de verdad. */
+function guardar() {
+  if (E.codigoViejo) {
+    aviso("El servidor ha cambiado. Cierra el editor y vuelve a abrirlo.", "err");
+    return;
+  }
+  var males = problemas();
+  if (males.length) { pintaAvisos(); aviso("No se puede guardar todavia.", "err"); return; }
+  aviso("Guardando...");
+  fetch("/api/guardar", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ zonas: E.zonas, iconos: E.iconos,
+                           propios: E.propios, enlace: E.enlace })
+  }).then(json).then(function (r) {
+    if (!r[0]) { aviso("No se ha podido guardar: " + (r[1].error || "?"), "err"); return; }
+    E.git = r[1].git || E.git;
+    sucio = false; historial = []; puntero = -1; pintaHistorial();
+    pintaGit(); aviso("Guardado.", "ok");
+  }).catch(function (e) { aviso("Fallo al guardar: " + e, "err"); });
+}
+
+function subir() {
+  if (sucio) guardar();
+  var mensajeCommit = $("commit").value || "Croquis";
+  aviso("Subiendo...");
+  fetch("/api/subir", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mensaje: mensajeCommit })
+  }).then(json).then(function (r) {
+    if (!r[0]) { aviso("No se ha podido subir: " + (r[1].error || "?"), "err"); return; }
+    E.git = r[1].git || E.git;
+    pintaGit(); aviso("Subido. Tarda 1-2 minutos en verse.", "ok");
+  }).catch(function (e) { aviso("Fallo al subir: " + e, "err"); });
+}
+
+/* =====================================================================
+   11. LAS PESTAÑAS
+   =====================================================================
+   Se guardan en localStorage para que la v2 se abra donde te la dejaste. Es
+   una comodidad y no importa si se pierde. */
+function ponPestana(nombre) {
+  var botones = document.querySelectorAll(".pestana");
+  var hojas = document.querySelectorAll("#panel .hoja");
+  botones.forEach(function (b) {
+    b.classList.toggle("acto", b.getAttribute("data-panel") === nombre);
+  });
+  hojas.forEach(function (h) {
+    h.classList.toggle("acto", h.getAttribute("data-panel") === nombre);
+  });
+  try { localStorage.setItem("editorV2Pestana", nombre); } catch (e) { /* da igual */ }
+}
+
+/* =====================================================================
+   12. ARRANQUE
+   =====================================================================
+   Se pregunta al servidor, se pinta todo, y se conecta. El fondo se sirve desde
+   aqui para poder trabajar sin conexion. */
+function arranca() {
+  s = $("s"); M = s; ZON = $("gZonas"); ICN = $("gIconos"); AYU = $("gAyudas");
+  F = document.getElementById("ficha");
+  fondo = $("fondo"); hoja = $("hoja"); panel = $("panel");
+  avisos = $("avisos"); mensaje = $("mensaje"); marcaGit = $("marcaGit");
+  btnGuardar = $("btnGuardar"); btnDeshacer = $("btnDeshacer"); btnRehacer = $("btnRehacer");
+
+  fetch("/api/estado").then(json).then(function (r) {
+    if (!r[0]) { aviso("No se pudo leer el croquis.", "err"); return; }
+    var d = r[1];
+    for (var k in d) E[k] = d[k];
+    E.tope = d.topee || d.topes || {};
+    E.ancho = d.ancho || 1224; E.alto = d.alto || 792;
+    // El fondo se sirve desde el propio servidor.
+    fondo.setAttribute("href", "/mapa");
+    fondo.setAttribute("x", 0); fondo.setAttribute("y", 0);
+    fondo.setAttribute("width", E.ancho); fondo.setAttribute("height", E.alto);
+    hoja.setAttribute("width", E.ancho); hoja.setAttribute("height", E.alto);
+
+    if (E.codigoViejo) $("reinicia").classList.add("on");
+    $("enlacePublicado").href = E.publicado || "#";
+
+    // Llenar los desplegables.
+    llena("fAnim", E.animaciones);
+    llena("fAnimZona", E.animacionesZona);
+    llena("fAnimBorde", E.animacionesBorde);
+    llena("fSentido", E.sentidosCamina);
+    llenaDestinos();
+
+    conecta();
+    verTodo();
+    dibuja(); pintaPanel(); pintaAvisos(); pintaHistorial();
+    // Abrir en la pestaña donde se dejo.
+    var guardada = null;
+    try { guardada = localStorage.getItem("editorV2Pestana"); } catch (e) { }
+    ponPestana(guardada || "mapa");
+  });
+}
+
+function llena(id, objeto) {
+  var sel = $(id);
+  sel.innerHTML = "";
+  for (var k in objeto) {
+    var o = document.createElement("option");
+    o.value = k; o.textContent = objeto[k];
+    sel.appendChild(o);
+  }
+}
+function llenaDestinos() {
+  var sel = $("fBotonDestino");
+  sel.innerHTML = "";
+  var o = document.createElement("option");
+  o.value = "url"; o.textContent = "Una dirección web";
+  sel.appendChild(o);
+  (E.recursos || []).forEach(function (r) {
+    var op = document.createElement("option");
+    op.value = "RecursosExtra/" + r.n;
+    op.textContent = r.n + (r.imagen ? " (imagen)" : " (archivo)");
+    sel.appendChild(op);
+  });
+}
+
+// Los atajos de teclado: deshacer, rehacer, copiar, pegar.
+addEventListener("keydown", function (ev) {
+  if (!(ev.ctrlKey || ev.metaKey)) return;
+  var k = ev.key.toLowerCase();
+  if (k === "z" && !ev.shiftKey) { ev.preventDefault(); deshacer(); }
+  else if (k === "y" || (k === "z" && ev.shiftKey)) { ev.preventDefault(); rehacer(); }
+  else if (k === "c") { ev.preventDefault(); copiaIcono(); }
+  else if (k === "v") { ev.preventDefault(); pegaIcono(); }
+  else if (k === "s") { ev.preventDefault(); guardar(); }
+});
+
+arranca();
+</script>
+
+</script>
+
+</body>
+</html>

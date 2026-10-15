@@ -87,9 +87,9 @@ body{
    26 px encima se leia casi siempre como un rectángulo translúcido desplazado.
    Ese coste, sin nada a cambio.
 
-   El filo de `#hoja` (`croquis.html`, el `rect` de `stroke:#b8d4bb`) se queda:
-   ese separa la hoja del fondo de verdad y no cuesta nada, porque es un trazo
-   y no un filtro. */
+   Y con el fondo entero, el filo de `#hoja` (`stroke:#b8d4bb`) se quitó también:
+   separaba el mapa de los banners, y con el poster entero en una pieza no hay
+   nada que separar. */
 /* Los iconos son los simbolos de punto: banos, primeros auxilios, comida...
    Van encima del mapa y por defecto NO reciben el toque, que sigue siendo de
    las zonas; si no, un icono plantado en medio de un estacionamiento se
@@ -770,8 +770,11 @@ body{
            ningun error, solo un mapa que no cambia. -->
       <image id="arte" href="FinalSinCosas.svg?v=14a13a19" x="0" y="-217"
              width="1224" height="1224" preserveAspectRatio="none"/>
-      <rect x="1" y="1" width="1222" height="790" fill="none"
-            stroke="#b8d4bb" stroke-width="2"/>
+      <!-- Y aquí ya no hay ningún filo. Estaba el rect de `stroke:#b8d4bb`, que
+           separaba la hoja del fondo de verdad, y se quitó con el fondo entero:
+           el poster ya no se recorta en un mapa con dos banners alrededor, es una
+           sola pieza, y el filo solo conseguía un marco verde por encima de todo
+           el dibujo. -->
     </g>
     <g id="zonas"></g>
     <g id="iconos"></g>
