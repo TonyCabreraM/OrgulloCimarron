@@ -3398,8 +3398,13 @@ fetch("/api/estado").then(function (r) {
   document.getElementById("reinicia").hidden = !E.codigoViejo;
   hoja.setAttribute("width", E.ancho);
   hoja.setAttribute("height", E.alto);
-  fondo.setAttribute("x", 0); fondo.setAttribute("y", 0);
-  fondo.setAttribute("width", E.ancho); fondo.setAttribute("height", E.alto);
+  // El fondo se coloca como en el croquis y no pegado a 0,0: con el poster de
+  // una sola pieza el mapa esta un poco mas abajo que el banner de arriba, y
+  // estirar el poster entero al hueco del mapa correria las zonas y los iconos
+  // respecto al dibujo. Los numeros los manda el servidor, leidos del croquis.
+  var arte = E.arte || {x: 0, y: 0, w: E.ancho, h: E.alto};
+  fondo.setAttribute("x", arte.x); fondo.setAttribute("y", arte.y);
+  fondo.setAttribute("width", arte.w); fondo.setAttribute("height", arte.h);
   fondo.setAttribute("href", "/mapa");
   // Los topes del tamano vienen del servidor, que es quien los comprueba: si
   // los deslizadores se movieran a otra cosa, dejarian pasar lo que luego

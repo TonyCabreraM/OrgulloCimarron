@@ -226,6 +226,52 @@ def _json(trozo: str, nombre: str):
             f"Si lo has editado a mano, revisa comas y comillas.") from None
 
 
+# El tipo de contenido de una imagen, por su extension. El fondo puede ser un
+# SVG o un JPG segun lo que use el croquis, y mandarlo con el tipo equivocado
+# hace que el navegador no lo pueda pintar: la pestaña sale con el mapa sin
+# fondo y sin un solo error en la consola.
+TIPOS_IMAGEN = {
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".avif": "image/avif",
+    ".bmp": "image/bmp",
+}
+
+
+def tipo_de_imagen(ruta: Path) -> str:
+    return TIPOS_IMAGEN.get(ruta.suffix.lower(), "application/octet-stream")
+
+
+def archivo_mapa() -> Path:
+    """El arte que usa el croquis, leido del propio croquis.
+
+    Se busca el `<image id="arte">` y se quita el `?v=` del final, que es solo
+    para romper la cache. Asi el editor ensena EXACTAMENTE el mismo fondo que
+    el croquis publicado, aunque cambie de nombre o de formato (SVG o JPG), sin
+    tocar este archivo nunca mas. Si no se encuentra o no esta en el disco, se
+    cae al de reserva.
+    """
+    try:
+        texto = CROQUIS.read_text(encoding="utf-8")
+    except OSError:
+        return MAPA
+    m = re.search(r'<image id="arte"[^>]+href="([^"?]+)', texto)
+    if m:
+        ruta = CROQUIS.parent / m.group(1)
+        if ruta.is_file():
+            return ruta
+    return MAPA
+
+
+def _num_atributo(tag: str, atributo: str, defecto: float) -> float:
+    m = re.search(r"(?:^|\s)" + re.escape(atributo) + r'="(-?[\d.]+)"', tag)
+    return float(m.group(1)) if m else defecto
+
+
 def leer_croquis() -> dict:
     """Las zonas, los iconos y el encuadre por defecto que hay ahora mismo."""
     if not CROQUIS.is_file():
@@ -239,7 +285,19 @@ def leer_croquis() -> dict:
     # sale: antes el primer `<image>` del documento era el banner de arriba, y el
     # editor acababa enseñando un banner en la pestana del mapa. Con una sola
     # pieza ya no hay duda, pero el nombre sigue siendo el que dice que es.
-    mapa = re.search(r'<image id="arte"[^>]+href="([^"]+)"', texto)
+    mapa = re.search(r'<image id="arte"[^>]+href="([^"?]+)', texto)
+    # La colocacion del arte en el lienzo, tal cual esta en el croquis. El
+    # editor coloca el fondo con estos mismos numeros: con el poster de una
+    # sola pieza el mapa no empieza en 0 sino un poco mas abajo, debajo del
+    # banner de arriba, y estirar el poster entero al hueco del mapa dejaria
+    # las zonas y los iconos fuera de sitio respecto al dibujo.
+    arte = re.search(r'<image id="arte"([^>]*)>', texto)
+    caja_arte = None
+    if arte:
+        caja_arte = {"x": _num_atributo(arte.group(1), "x", 0),
+                     "y": _num_atributo(arte.group(1), "y", 0),
+                     "w": _num_atributo(arte.group(1), "width", ANCHO),
+                     "h": _num_atributo(arte.group(1), "height", ALTO)}
     # El boton del croquis. Se busca con una expresion y no con los marcadores
     # a proposito: asi tambien se lee en un croquis guardado antes de que el
     # bloque existiera, y en ese caso sale sin boton en vez de dar un error.
@@ -254,6 +312,7 @@ def leer_croquis() -> dict:
         "enlace": enlace,
         "vista": [int(v) for v in vista.group(1).split(",")] if vista else [0, 0, ANCHO, ALTO],
         "mapa": mapa.group(1) if mapa else "FinalSinCosas.svg",
+        "arte": caja_arte,
     }
 
 
@@ -1106,10 +1165,14 @@ class Manejador(BaseHTTPRequestHandler):
                     return
                 self._archivo(EDITOR_V2_HTML, "text/html; charset=utf-8")
             elif ruta == "/mapa":
-                # La misma imagen que usa el croquis publicado. Se sirve desde
-                # aqui y no desde la web para poder trabajar sin conexion y
-                # para no depender de que Pages ya haya reconstruido.
-                self._archivo(MAPA, "image/webp")
+                # La misma imagen que usa el croquis publicado, con su tipo de
+                # verdad. Se sirve desde aqui y no desde la web para poder
+                # trabajar sin conexion y para no depender de que Pages ya haya
+                # reconstruido. El tipo se saca de la extension: declarar un SVG
+                # como webp -o al reves- deja la pestaña con el mapa sin fondo y
+                # sin un solo error en la consola, que es lo que pasaba.
+                archivo = archivo_mapa()
+                self._archivo(archivo, tipo_de_imagen(archivo))
             elif ruta == "/api/estado":
                 datos = leer_croquis()
                 # Los iconos propios se mandan como se editan y no como se
