@@ -738,8 +738,15 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <h2>Iconos</h2>
       <div id="paleta"></div>
       <div class="campo" style="margin-top:11px">
-        <label for="fTamNuevo">Tamaño de los nuevos · <b id="vTamNuevo">46</b></label>
-        <input type="range" id="fTamNuevo" min="16" max="160" step="1" value="46">
+        <label for="fTamNuevo">Tamaño de los nuevos</label>
+        <div class="fila">
+          <input type="range" id="fTamNuevo" min="16" max="400" step="1" value="46">
+          <input type="number" id="nTamNuevo" min="16" step="1" value="46"
+                 style="width:82px" aria-label="Tamaño de los nuevos, exacto">
+        </div>
+        <div class="pista">
+          La barra es para el ajuste rápido; en la casilla cabe cualquier tamaño.
+        </div>
       </div>
       <div class="fila" style="margin-top:10px">
         <button class="boton" id="btnImagen">Subir una imagen…</button>
@@ -769,8 +776,15 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <input type="text" id="fEtiqueta" maxlength="40">
       </div>
       <div class="campo">
-        <label for="fTam">Tamaño · <b id="vTam">46</b></label>
-        <input type="range" id="fTam" min="16" max="160" step="1" value="46">
+        <label for="fTam">Tamaño</label>
+        <div class="fila">
+          <input type="range" id="fTam" min="16" max="400" step="1" value="46">
+          <input type="number" id="nTam" min="16" step="1" value="46"
+                 style="width:82px" aria-label="Tamaño exacto">
+        </div>
+        <div class="pista">
+          La barra es para el ajuste rápido; en la casilla cabe cualquier tamaño.
+        </div>
       </div>
       <div class="campo">
         <label for="fRot">Giro · <b id="vRot">0°</b></label>
@@ -962,8 +976,12 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
           </div>
         </div>
         <div class="campo">
-          <label for="dTam">Tamaño · <b id="vDTam">46</b></label>
-          <input type="range" id="dTam" min="16" max="160" step="1" value="46">
+          <label for="dTam">Tamaño</label>
+          <div class="fila">
+            <input type="range" id="dTam" min="16" max="400" step="1" value="46">
+            <input type="number" id="nDTam" min="16" step="1" value="46"
+                   style="width:82px" aria-label="Tamaño exacto">
+          </div>
         </div>
         <div class="campo">
           <label for="dAnim">Animación</label>
@@ -1076,6 +1094,8 @@ var s = document.getElementById("s"),
     fIntZona = document.getElementById("fIntZona"),
     fTam = document.getElementById("fTam"),
     fTamNuevo = document.getElementById("fTamNuevo"),
+    nTam = document.getElementById("nTam"),
+    nTamNuevo = document.getElementById("nTamNuevo"),
     fRot = document.getElementById("fRot"),
     fAnim = document.getElementById("fAnim"),
     fInt = document.getElementById("fInt"),
@@ -1105,6 +1125,7 @@ var s = document.getElementById("s"),
     PREVIO = document.getElementById("previoDialogo"),
     dNombre = document.getElementById("dNombre"),
     dTam = document.getElementById("dTam"),
+    nDTam = document.getElementById("nDTam"),
     dAnim = document.getElementById("dAnim"),
     dInt = document.getElementById("dInt"),
     campoDIntensidad = document.getElementById("campoDIntensidad"),
@@ -1297,7 +1318,12 @@ function sePisan(a, b) {
 
 // Lo que dice el servidor (editor/validar.py). Aquí se adelanta para avisar
 // mientras se edita y no al pulsar Guardar; el que decide es el servidor.
-var TAM_MIN = 16, TAM_MAX = 160, ROT_MIN = -180, ROT_MAX = 180;
+var TAM_MIN = 16, TAM_MAX = 100000, ROT_MIN = -180, ROT_MAX = 180;
+// El tope de la BARRA de tamaño. No es el maximo de verdad, que es TAM_MAX y
+// lo manda el servidor: es hasta donde llega la barra. La barra esta para
+// ajustar rapido los tamaños normales, y en la casilla de al lado cabe
+// cualquiera. Con la barra hasta TAM_MAX (100000) no se podria ni elegir 50.
+var TAM_BARRA = 400;
 var TIT_MAX = 60, TEX_MAX = 600;
 // Los topes del boton con enlace de la ventana.
 var BOT_MAX = 40, URL_MAX = 300;
@@ -1599,7 +1625,7 @@ function pintaPanel(mal) {
   if (hayIcono) {
     var ic = E.iconos[sel.i], t = Math.round(tamDe(ic)), rot = Math.round(ic.r || 0);
     if (document.activeElement !== fTam) fTam.value = t;
-    document.getElementById("vTam").textContent = t;
+    if (document.activeElement !== nTam) nTam.value = t;
     if (document.activeElement !== fRot) fRot.value = rot;
     document.getElementById("vRot").textContent = rot + "°";
     if (document.activeElement !== fAnim) fAnim.value = ic.a || "";
@@ -2336,11 +2362,18 @@ addEventListener("keydown", function (ev) {
 // el tamaño de los nuevos y sin nada mas; los iconos propios, con los ajustes
 // que se eligieron al subirlos, que es lo que hace que repetir un icono propio
 // no obligue a configurarlo cada vez.
+// El tamaño con el que nacen los iconos: lo que hay en la casilla, no lo que
+// marca la barra, que se queda en TAM_BARRA cuando el número la pasa.
+function tamNuevo() {
+  var v = Math.round(+nTamNuevo.value);
+  return (isFinite(v) && v >= TAM_MIN) ? v : TAM_ICONO;
+}
+
 function ajustesDe(tipo) {
   if (E.propios[tipo]) {
-    return Object.assign({s: +fTamNuevo.value}, E.ajustesPropios[tipo] || {});
+    return Object.assign({s: tamNuevo()}, E.ajustesPropios[tipo] || {});
   }
-  return {s: +fTamNuevo.value};
+  return {s: tamNuevo()};
 }
 
 function estampaDe(tipo) {
@@ -2533,6 +2566,14 @@ s.addEventListener("drop", function (ev) {
 //
 // Después cada icono colocado en el mapa se puede cambiar como cualquier otro:
 // esto solo decide con qué nace.
+// Coloca el tamaño en el menú: la barra hasta su tope y la casilla con el
+// valor de verdad, que puede pasarlo.
+function ponTamDialogo(s) {
+  s = Math.round(s) || TAM_ICONO;
+  dTam.value = Math.min(s, TAM_BARRA);
+  nDTam.value = s;
+}
+
 function abrirDialogo(datosUrl, nombreArchivo, tipoReemplazo) {
   imagenPendiente = datosUrl;
   reemplazo = tipoReemplazo || null;
@@ -2542,7 +2583,7 @@ function abrirDialogo(datosUrl, nombreArchivo, tipoReemplazo) {
     // querer cuando lo único que se toca es el dibujo.
     var aj = E.ajustesPropios[reemplazo] || {};
     dNombre.value = reemplazo;
-    dTam.value = aj.s || +fTamNuevo.value;
+    ponTamDialogo(aj.s || tamNuevo());
     dAnim.value = aj.a || "";
     dInt.value = (typeof aj.m === "number") ? aj.m : 1;
     dAro.checked = aj.c !== 0;
@@ -2554,7 +2595,7 @@ function abrirDialogo(datosUrl, nombreArchivo, tipoReemplazo) {
     // Y los ajustes arrancan con lo que el usuario tenga puesto en el panel, que
     // es lo que estaba usando: el tamaño de los nuevos, sin animación y con
     // círculo, que es lo de siempre.
-    dTam.value = +fTamNuevo.value;
+    ponTamDialogo(tamNuevo());
     dAnim.value = "";
     dInt.value = 1;
     dAro.checked = true;
@@ -2595,7 +2636,7 @@ function cerrarDialogo() {
 // servidor la rechaza, y sin ninguna animación no significa nada.
 function ajustesDelDialogo() {
   var aj = {
-    s: +dTam.value,
+    s: +nDTam.value || tamNuevo(),
     a: dAnim.value || "",
     c: dAro.checked ? 1 : 0
   };
@@ -2611,7 +2652,6 @@ function pintaPrevio() {
   var ic = ajustesDelDialogo();
   PREVIO.setAttribute("class", dAro.checked ? "" : "sinAro");
   PREVIO.innerHTML = contenidoMiniatura(ic, imagenPendiente);
-  document.getElementById("vDTam").textContent = dTam.value;
   document.getElementById("vDInt").textContent = (+dInt.value).toFixed(1);
   refrescaIntensidad(dAnim.value, campoDIntensidad, dInt, null);
   document.getElementById("nombreDialogo").textContent =
@@ -2621,7 +2661,16 @@ function pintaPrevio() {
 // Los deslizadores avisan en `input` (mientras se arrastran) y las casillas y
 // los desplegables en `change` (al soltar). Escuchar el evento que no toca
 // deja la vista previa sin actualizar hasta que se toque otra cosa.
-dTam.addEventListener("input", pintaPrevio);
+dTam.addEventListener("input", function () {
+  nDTam.value = dTam.value;
+  pintaPrevio();
+});
+nDTam.addEventListener("input", function () {
+  var v = Math.round(+nDTam.value);
+  if (!isFinite(v) || v < TAM_MIN) return;
+  dTam.value = Math.min(v, TAM_BARRA);
+  pintaPrevio();
+});
 dInt.addEventListener("input", pintaPrevio);
 [dAnim, dAro].forEach(function (c) { c.addEventListener("change", pintaPrevio) });
 dNombre.addEventListener("input", function () {
@@ -3024,17 +3073,33 @@ function tocaIcono(cambio) {
 }
 
 fTam.addEventListener("input", function () {
-  document.getElementById("vTam").textContent = fTam.value;
+  nTam.value = fTam.value;
   tocaIcono(function (ic) { ic.s = +fTam.value });
+});
+// La casilla de numero manda sobre la barra: por la barra no se pasa de
+// TAM_BARRA, pero escribiendo cabe cualquier tamaño. El icono se actualiza ya,
+// mientras se teclea, siempre que el valor sea un tamaño valido.
+nTam.addEventListener("input", function () {
+  var v = Math.round(+nTam.value);
+  if (!isFinite(v) || v < TAM_MIN) return;
+  fTam.value = Math.min(v, TAM_BARRA);
+  tocaIcono(function (ic) { ic.s = v });
 });
 // El tamaño de los nuevos no toca ningún icono: es con el que nace el
 // siguiente. Y como la paleta dibuja sus miniaturas a ese tamaño, hay que
 // repintarla para que se vea.
-fTamNuevo.addEventListener("input", function () {
-  document.getElementById("vTamNuevo").textContent = fTamNuevo.value;
-  if (estampa) estampa.s = +fTamNuevo.value;
+function aplicaTamNuevo() {
+  var v = Math.round(+nTamNuevo.value);
+  if (!isFinite(v) || v < TAM_MIN) return;
+  fTamNuevo.value = Math.min(v, TAM_BARRA);
+  if (estampa) estampa.s = v;
   pintaPaleta();
+}
+fTamNuevo.addEventListener("input", function () {
+  nTamNuevo.value = fTamNuevo.value;
+  aplicaTamNuevo();
 });
+nTamNuevo.addEventListener("input", aplicaTamNuevo);
 fRot.addEventListener("input", function () {
   document.getElementById("vRot").textContent = fRot.value + "°";
   tocaIcono(function (ic) { ic.r = +fRot.value });
@@ -3409,9 +3474,16 @@ fetch("/api/estado").then(function (r) {
   // Los topes del tamano vienen del servidor, que es quien los comprueba: si
   // los deslizadores se movieran a otra cosa, dejarian pasar lo que luego
   // rechazaria el guardado.
-  var t = (E.topes && E.topes.tam) || [16, 160];
+  var t = (E.topes && E.topes.tam) || [16, 100000];
   TAM_MIN = t[0]; TAM_MAX = t[1];
-  [fTam, fTamNuevo].forEach(function (c) { c.min = t[0]; c.max = t[1] });
+  // La barra llega hasta TAM_BARRA, no hasta TAM_MAX: con la barra a 100000 no
+  // se podría elegir ni 50. La casilla de número sí llega al máximo de verdad.
+  [fTam, fTamNuevo, dTam].forEach(function (c) {
+    c.min = t[0]; c.max = Math.min(t[1], TAM_BARRA);
+  });
+  [nTam, nTamNuevo, nDTam].forEach(function (c) {
+    c.min = t[0]; c.max = t[1];
+  });
   var r = (E.topes && E.topes.rot) || [-180, 180];
   ROT_MIN = r[0]; ROT_MAX = r[1];
   fRot.min = r[0]; fRot.max = r[1];

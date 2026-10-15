@@ -38,11 +38,17 @@ SIMBOLOS = {
 MARGEN_ICONO = 12
 
 # Lo que mide un icono, en unidades del mapa. El de por defecto es el que
-# tenian todos antes de que se pudieran ajustar; el minimo se sigue leyendo
-# en la vista general y el maximo no llega a tapar una zona entera.
+# tenian todos antes de que se pudieran ajustar, y el minimo se sigue leyendo
+# en la vista general.
+#
+# El maximo es solo un tope de cordura, no un limite de diseno: quien edita
+# puede hacer un icono tan grande como quiera. El mapa mide 1224 de ancho, asi
+# que cualquier cosa por encima de eso ya lo tapa entero; el tope se deja
+# altisimo para que en la practica no haya, pero existe para que un dedazo (un
+# cero de mas) no meta un numero absurdo en el croquis.
 TAM_ICONO = 46
 MIN_TAM_ICONO = 16
-MAX_TAM_ICONO = 160
+MAX_TAM_ICONO = 100_000
 
 # Los iconos propios son imagenes guardadas DENTRO del propio croquis, en
 # base64. El archivo publicado no puede pedir nada de fuera (hay una prueba
@@ -64,13 +70,6 @@ MAX_VECTOR = 120_000
 # limitan a minusculas, numeros y guiones. Es lo mismo que hace el editor al
 # preparar la imagen, y evita que un nombre raro rompa el archivo.
 NOMBRE_PROPIO = re.compile(r"[a-z0-9][a-z0-9-]{0,23}")
-
-# Lo que mide un icono, en unidades del mapa. El de por defecto es el que
-# tenian todos antes de que se pudieran ajustar; el minimo se sigue leyendo
-# en la vista general y el maximo no llega a tapar una zona entera.
-TAM_ICONO = 46
-MIN_TAM_ICONO = 16
-MAX_TAM_ICONO = 160
 
 # La rotacion, en grados. Se admiten vueltas completas porque girar un icono
 # es girarlo: -90 y 270 son lo mismo y no hay razon para rechazar ninguna.
