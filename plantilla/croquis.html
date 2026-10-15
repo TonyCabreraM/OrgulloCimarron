@@ -62,6 +62,13 @@ body{
 
 
 #iconos .toque{fill:none;pointer-events:fill}
+/* --- El area clicable de un vector -----------------------------------------
+   Un icono propio que es un vector y va SIN aro no lleva el circulo de toque:
+   su area clicable es el dibujo mismo. `visiblePainted` solo da por bueno lo
+   que esta pintado, asi que los huecos transparentes del SVG -entre las barras
+   de un menu, por ejemplo- no reciben el toque y ahi se pulsa el mapa, no el
+   icono. Con aro no hace falta: el aro es un circulo visible y ya es el area. */
+#iconos.deCerca .conInfo.vect .fig{pointer-events:visiblePainted}
 
 
 #iconos .an{transform-box:fill-box;transform-origin:center}
@@ -702,13 +709,19 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
 
   var clase = "an" + (ic.a ? " " + ic.a + " pausa" : "");
   var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
-  var clases = "ic" + (conAro ? "" : " sinAro") + (ic.i ? " conInfo" : "");
+  // Un icono propio que es un vector y va sin aro tiene el area clicable en el
+  // dibujo mismo, no en un circulo: los huecos transparentes del SVG -entre las
+  // barras de un menu, por ejemplo- no abren la ventana. Por eso no lleva el
+  // circulo de toque; el `<use>` del vector recibe el toque donde hay tinta.
+  var vector = !conAro && !!ES_VECTOR[ic.t];
+  var clases = "ic" + (conAro ? "" : " sinAro")
+             + (vector ? " vect" : "") + (ic.i ? " conInfo" : "");
   var caja = ic.i ? ' class="' + clases + '" data-info="' + k + '"'
                   : ' class="' + clases + '"';
 
 
 
-  var toque = ic.i ? '<circle class="toque" r="13.4"/>' : "";
+  var toque = (ic.i && !vector) ? '<circle class="toque" r="13.4"/>' : "";
 
 
 

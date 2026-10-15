@@ -749,6 +749,35 @@ def propios_para_editar(propios: dict) -> dict:
     return salida
 
 
+def vectores_listos(propios: dict) -> dict:
+    """El SVG de cada icono propio vectorial, listo para pintarlo con `<use>`.
+
+    Es la MISMA preparacion que hace el croquis al publicar: les pone el nombre
+    delante a las clases y a los ids para que no choquen entre iconos. Se manda
+    aparte del data URL porque el editor, hasta ahora, dibujaba los propios en
+    un `<image>`, y un `<image>` es un rectangulo: el toque caia tambien en los
+    huecos transparentes del dibujo. Pintados como vector de verdad, el area
+    clicable es lo que esta pintado.
+
+    Un SVG que no se pueda dejar suelto (una regla de estilo que no sea de
+    clase) se omite, y ese icono se queda como estaba.
+    """
+    salida = {}
+    for nombre in list(propios):
+        ruta = _archivo_de(nombre)
+        if ruta is not None and ruta.suffix.lower() == ".svg":
+            svg = ruta.read_text(encoding="utf-8")
+        else:
+            valor = propios[nombre]
+            if not (isinstance(valor, str) and valor.lstrip().startswith("<svg")):
+                continue
+            svg = valor
+        listo = vector.prepara_para_incluir(svg, nombre)
+        if listo is not None:
+            salida[nombre] = listo
+    return salida
+
+
 def _ajustes_de(nombre: str) -> dict:
     """Los ajustes guardados de un icono de la biblioteca. Vacio si no hay.
 
@@ -805,14 +834,20 @@ def lee_de_biblioteca(nombre: str) -> dict:
     tope = MAX_VECTOR if es_vector else MAX_ICONO
     # El data URL ocupa mas que el archivo, asi que se comprueba el data URL.
     if es_vector:
-        url = vector.a_data_url(datos.decode("utf-8"))
+        texto_svg = datos.decode("utf-8")
+        url = vector.a_data_url(texto_svg)
     else:
         url = "data:image/png;base64," + base64.b64encode(datos).decode("ascii")
     if len(url) > tope:
         raise ErrorEditor(
             f"«{nombre}» ocupa {len(url) // 1024} KB y el tope son "
             f"{tope // 1024} KB, asi que no cabe en el croquis.")
-    return {"datos": url, "vector": es_vector, "ajustes": _ajustes_de(nombre)}
+    salida = {"datos": url, "vector": es_vector, "ajustes": _ajustes_de(nombre)}
+    if es_vector:
+        # El vector listo para `<use>`, como en el estado: asi al recuperarlo de
+        # la biblioteca el editor lo pinta como vector y no como `<image>`.
+        salida["svg_listo"] = vector.prepara_para_incluir(texto_svg, nombre)
+    return salida
 
 
 def borra_de_biblioteca(nombre: str) -> None:
@@ -1175,6 +1210,10 @@ class Manejador(BaseHTTPRequestHandler):
                 self._archivo(archivo, tipo_de_imagen(archivo))
             elif ruta == "/api/estado":
                 datos = leer_croquis()
+                # El vector de cada icono propio, listo para un `<use>`: es lo
+                # que hace que su area clicable sea el dibujo y no el
+                # rectangulo entero del `<image>`.
+                datos["vectoresSvg"] = vectores_listos(datos["propios"])
                 # Los iconos propios se mandan como se editan y no como se
                 # publican: en el croquis van convertidos a PNG cuando eso pesa
                 # menos, y la biblioteca guarda el archivo original.
@@ -1302,9 +1341,21 @@ class Manejador(BaseHTTPRequestHandler):
                 if reemplazar:
                     borra_de_biblioteca(nombre)
                 guarda_en_biblioteca(nombre, contenido, extension, ajustes)
+                # Si es vector, se manda tambien su version lista para `<use>`,
+                # para que el editor lo dibuje como vector nada mas subirlo, sin
+                # tener que recargar. Si no se puede dejar suelto, va None y el
+                # editor tira del `<image>`.
+                svg_listo = None
+                if extension == "svg":
+                    try:
+                        svg_listo = vector.prepara_para_incluir(
+                            vector.de_data_url(imagen).decode("utf-8"), nombre)
+                    except (UnicodeDecodeError, vector.SvgInvalido):
+                        svg_listo = None
                 self._json({"ok": True, "nombre": nombre, "datos": imagen,
                             "bytes": len(imagen), "ajustes": ajustes,
                             "vector": extension == "svg", "quitado": quitado,
+                            "svg_listo": svg_listo,
                             "reemplazo": bool(reemplazar)})
             elif ruta == "/api/biblioteca":
                 # Recuperar un icono guardado, o quitarlo de la despensa.

@@ -1209,18 +1209,73 @@ function intDe(ic) { return typeof ic.m === "number" ? ic.m : 1; }
 // de animaciones: dos listas separadas acabarian diciendo cosas distintas.
 function sinIntensidad(anim) { return E.sinIntensidad.indexOf(anim || "") >= 0; }
 
+// Los tipos cuyo SVG ya esta metido en el documento como `<symbol>`, para
+// pintarlos con `<use>` en vez de con `<image>`. Ver `sueltaVectores`.
+var SIMB_VEC = {};
+
+// Mete en el `<defs>` un `<symbol>` por cada icono propio vectorial que aun no
+// lo tenga, y lo apunta en `SIMB_VEC`. Se llama al empezar `dibuja`, asi que da
+// igual cuando lleguen los vectores: el primero que los vea los suelta.
+//
+// El SVG viene ya preparado por el servidor (las clases y los ids con el nombre
+// delante), que es lo que evita que dos iconos se pisen los estilos al convivir
+// en el mismo documento.
+function sueltaVectores() {
+  if (!E.vectoresSvg) return;
+  var defs = s.querySelector("defs");
+  if (!defs) return;
+  var trozos = [];
+  Object.keys(E.vectoresSvg).forEach(function (nombre) {
+    if (SIMB_VEC[nombre]) return;
+    var svg = E.vectoresSvg[nombre];
+    if (typeof svg !== "string" || !/^\s*<svg[\s>]/.test(svg)) return;
+    var caja = /\bviewBox="([^"]*)"/.exec(svg);
+    var abre = svg.indexOf(">"), cierra = svg.lastIndexOf("</svg>");
+    if (!caja || abre < 0 || cierra < abre) return;
+    trozos.push('<symbol id="edv-' + nombre + '" viewBox="' + caja[1] + '">'
+              + svg.slice(abre + 1, cierra) + "</symbol>");
+    SIMB_VEC[nombre] = true;
+  });
+  if (trozos.length) defs.insertAdjacentHTML("beforeend", trozos.join(""));
+}
+
+// Olvida el simbolo de un icono, para que se vuelva a soltar con su version
+// nueva. Se llama al cambiarle la imagen, quitarlo o recuperarlo.
+function olvidaVector(nombre) {
+  delete SIMB_VEC[nombre];
+  if (E.vectoresSvg) delete E.vectoresSvg[nombre];
+  var viejo = s.querySelector('[id="edv-' + nombre + '"]');
+  if (viejo) viejo.parentNode.removeChild(viejo);
+}
+
+// Apunta el SVG listo de un icono para que `sueltaVectores` lo monte. Sin
+// vector (o sin SVG que se pueda dejar suelto) no hace nada.
+function apuntaVector(nombre, listo) {
+  if (!listo) return;
+  if (!E.vectoresSvg) E.vectoresSvg = {};
+  E.vectoresSvg[nombre] = listo;
+}
+
 // El dibujo de un icono: o la forma del simbolo, o la imagen propia. Se usa en
 // el mapa, en la paleta, en las listas y en los modelos, para que lo que se
 // elige sea exactamente lo que se va a ver.
 //
 // El recorte en circulo de las imagenes y el aro van juntos: sin circulo, la
 // imagen tambien pierde el recorte y sale como es.
+//
+// Un icono propio vectorial se pinta con `<use>` sobre su `<symbol>`, no con un
+// `<image>`: asi el area clicable es lo que esta pintado y no el rectangulo
+// entero, y los huecos transparentes del dibujo no cuentan como icono.
 function figuraDe(tipo, conAro) {
   if (E.formas[tipo]) return '<g class="lam">' + E.formas[tipo] + "</g>";
   if (E.propios[tipo]) {
+    var recorte = conAro ? ' clip-path="url(#recorte)"' : "";
+    if (SIMB_VEC[tipo]) {
+      return '<use class="fig" href="#edv-' + tipo + '" x="-12.2" y="-12.2"'
+           + ' width="24.4" height="24.4"' + recorte + "/>";
+    }
     return '<image class="fig" href="' + E.propios[tipo] + '" x="-12.2" y="-12.2"'
-         + ' width="24.4" height="24.4"'
-         + (conAro ? ' clip-path="url(#recorte)"' : "") + "/>";
+         + ' width="24.4" height="24.4"' + recorte + "/>";
   }
   return "";
 }
@@ -1489,6 +1544,7 @@ function aMapa(ev) { return aMapaCliente({x: ev.clientX, y: ev.clientY}) }
 
 // --- dibujo ---------------------------------------------------------------
 function dibuja() {
+  sueltaVectores();
   var mal = problemas();
 
   gZonas.innerHTML = E.zonas.map(function (z, k) {
@@ -2697,9 +2753,11 @@ document.getElementById("btnAceptarDialogo").addEventListener("click", function 
       var ok = par[0], d = par[1];
       cerrarOcupado();
       if (!ok) { aviso(d.mensaje || "No se pudo preparar la imagen.", "mal"); return }
+      olvidaVector(d.nombre);
       E.propios[d.nombre] = d.datos;
       E.ajustesPropios[d.nombre] = d.ajustes || {};
       E.vectores[d.nombre] = !!d.vector;
+      apuntaVector(d.nombre, d.vector ? d.svg_listo : null);
       cerrarDialogo();
       hayCambios();
       pintaPaleta();
@@ -2843,6 +2901,7 @@ listaPropios.addEventListener("click", function (ev) {
   // Se va tambien de los iconos que lo usaban: dejarlos con un tipo que ya no
   // existe los volveria invisibles, y eso es peor que quitarlos y decirlo.
   if (usos) E.iconos = E.iconos.filter(function (ic) { return ic.t !== n });
+  olvidaVector(n);
   delete E.propios[n];
   if (sel && sel.tipo === "icono") sel = null;
   multi = [];
@@ -2897,11 +2956,13 @@ listaBiblioteca.addEventListener("click", function (ev) {
     .then(function (par) {
       var ok = par[0], d = par[1];
       if (!ok) { aviso(d.mensaje || "No se pudo recuperar.", "mal"); return }
+      olvidaVector(d.nombre);
       E.propios[d.nombre] = d.datos;
       // Los ajustes vuelven con el icono: si se subio sin circulo y con
       // animacion, al volver a ponerlo sale asi, no con los de fabrica.
       E.ajustesPropios[d.nombre] = d.ajustes || {};
       E.vectores[d.nombre] = !!d.vector;
+      apuntaVector(d.nombre, d.vector ? d.svg_listo : null);
       E.biblioteca = E.biblioteca.filter(function (x) { return x.nombre !== d.nombre });
       hayCambios();
       pintaPaleta();
