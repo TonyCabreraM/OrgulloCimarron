@@ -25,71 +25,16 @@ body{
   touch-action:none;-webkit-tap-highlight-color:transparent;
 }
 #s{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
-/* `will-change` avisa al navegador de que este <g> se va a transformar, para
-   que lo prepare en su propia capa y la animacion no tenga que repintar el
-   mapa entero en cada fotograma. Sin esto, en un movil el zoom va a tirones.
 
-   Pero va SOLO MIENTRAS el mapa se mueve, en la clase `.acercando`, y eso es
-   tan importante como el propio `will-change`:
 
-   Una capa se dibuja UNA vez, en una textura, y a partir de ahi se escala esa
-   textura como si fuera una foto. Con `will-change` puesto para siempre, al
-   acercar el mapa tres veces lo que se ve es la textura ampliada, y TODO sale
-   pixelado: los iconos, que son vectores, y las lineas de las zonas. En un
-   ordenador el navegador rehace la capa al acabar el movimiento y no se nota;
-   en un movil se queda la textura escalada, que es justo el sintoma de «los
-   iconos se ven pixelados al hacer zoom». Se suelta al terminar y el
-   navegador vuelve a dibujar el mapa a la resolucion nueva. */
-/* --- La duracion del zoom, y por que no hay sombra ------------------------
-   Las dos cosas de este trozo se quitaron por lo mismo: el zoom iba a tirones
-   en telefonos de gama baja, y no era el dibujo sino lo que habia que rehacer
-   en cada fotograma. Con 650 ms son unos 39 fotogramas, y en cada uno el
-   navegador vuelve a renderizar el mapa entero: no es escalar una textura ya
-   hecha. */
 
 #m{transform-box:view-box;transform-origin:0 0;
-   /* De 650 ms a 300. No es un capricho de duracion: cada fotograma de mas es
-      una opcion mas de que uno caiga, y un fotograma caido en un telefono de
-      gama baja se ve como un tirón, no como un cuadro perdido. Ademas 300 ms
-      es lo que ya llevaba el editor en su propio lienzo (`editor.html`), que
-      se ve bien: el mismo movimiento, con el mismo `cubic-bezier`, es fluido
-      ahi y no lo era aqui.
 
-      El `cubic-bezier` no se toca. Es el que hace que el mapa salga disparado y
-      frene al llegar, y con el lineal se lee como un tobogán. */
    transition:transform .3s cubic-bezier(.22,1,.36,1)}
 #m.acercando{will-change:transform}
 
-/* `#hoja` ya no lleva `filter: drop-shadow(0 10px 26px #0a484233)`.
 
-   Era una sombra de 26 px de desenfoque sobre TODA la hoja, puesta en un
-   elemento que esta DENTRO del `<g>` que se transforma al hacer zoom. Eso es
-   justo lo que peor le sienta a un telefono de gama baja: un filtro obliga a
-   sacar el subarbol del camino barato, con lo que en vez de mover una textura
-   hay que rehacer el filtro entero en cada escala. Un desenfoque de 26 px sobre
-   el mapa completo, unas treinta y nueve veces seguidas.
 
-   Se quito del todo en vez de rebajarlo porque el efecto era casi nulo: la hoja
-   es un rectángulo opaco con las esquinas vivas, y una sombra de ambiente de
-   26 px encima se leia casi siempre como un rectángulo translúcido desplazado.
-   Ese coste, sin nada a cambio.
-
-   Y con el fondo entero, el filo de `#hoja` (`stroke:#b8d4bb`) se quitó también:
-   separaba el mapa de los banners, y con el poster entero en una pieza no hay
-   nada que separar. */
-/* Los iconos son los simbolos de punto: banos, primeros auxilios, comida...
-   Van encima del mapa y por defecto NO reciben el toque, que sigue siendo de
-   las zonas; si no, un icono plantado en medio de un estacionamiento se
-   comeria la pulsacion de esa parte del estacionamiento.
-
-   La excepcion son los que llevan informacion: esos si se tocan, porque al
-   pulsarlos sale una ventana. Son pocos y pequenos, asi que lo que le quitan
-   a la zona de debajo es un trozo minusculo a cambio de algo que se puede
-   consultar.
-
-   El aro claro los despega del pasto, que es una textura cargada y se come
-   los trazos finos. El grosor va con vector-effect para que no engorde al
-   ampliar: un icono ampliado 4x con el trazo escalado se ve como un garabato. */
 #iconos{pointer-events:none}
 #iconos .aro{fill:#fffffff2;stroke:#0a4842;stroke-opacity:.32;stroke-width:1.2;
              vector-effect:non-scaling-stroke}
@@ -98,35 +43,16 @@ body{
                vector-effect:non-scaling-stroke}
 #iconos .lam .relleno{fill:var(--tinta);stroke:none}
 
-/* Las imagenes propias ya vienen recortadas en circulo por el clipPath, asi
-   que aqui no hay nada que hacer salvo que no se salgan del aro. */
+
 #iconos .fig{pointer-events:none}
 
-/* --- Sin circulo -----------------------------------------------------------
-   Un icono puede ir sin el aro, solo con su dibujo. Es lo que conviene para
-   una imagen que ya es redonda de por si, o para un simbolo que se lee mejor
-   suelto.
 
-   Quitarle el aro tiene un precio: las lineas finas se pierden sobre el pasto,
-   que es una textura cargada. Se compensa con un halo blanco alrededor del
-   trazo, hecho con drop-shadow en las cuatro direcciones. El halo es de la
-   misma medida en unidades del mapa, asi que crece con el icono y no se
-   convierte en una mancha al ampliar. */
 #iconos .sinAro .lam{filter:drop-shadow(0 0 1.6px #fff) drop-shadow(0 0 1.6px #fff)}
-/* Una imagen sin aro tampoco lleva el recorte en circulo: si se quita el
-   circulo, se quita entero, y una foto sale como es. */
+
 #iconos .sinAro .fig{clip-path:none}
 
-/* Un icono con informacion se puede pulsar, y lo dice: se le marca el filo y
-   sale la manita. Sin esa pista no hay forma de saber cuales llevan algo
-   detras.
 
-   El pointer-events hay que devolverselo uno por uno: el grupo de arriba lo
-   tiene en `none` y eso lo heredan los hijos, asi que sin esta linea el icono
-   seguiria sin recibir el toque por mucho cursor:pointer que tenga. */
-/* El filo verde de los iconos con informacion solo sale con el mapa acercado:
-   es cuando de verdad se pueden pulsar. Un filo que promete un toque que no
-   hace nada es peor que no tenerlo. */
+
 #iconos .conInfo{cursor:pointer}
 #iconos.deCerca .conInfo{pointer-events:auto}
 #iconos.deCerca .conInfo .aro{stroke:var(--verde);stroke-opacity:.55}
@@ -134,108 +60,45 @@ body{
 #iconos.deCerca .conInfo:focus-visible .aro{
   stroke:var(--verde);stroke-opacity:1;stroke-width:2;fill:#fff}
 
-/* --- La superficie que recibe el toque -------------------------------------
-   Devolverle el pointer-events al grupo del icono NO basta: el grupo no tiene
-   forma propia, asi que el toque lo tiene que recoger algo de dentro. Cuando
-   el icono lleva aro lo recoge el aro, que esta pintado.
 
-   Sin aro no quedaba nada: la imagen tiene el toque desactivado a proposito
-   (para no quitarle la pulsacion a la zona de debajo) y el dibujo de un
-   simbolo son trazos sueltos. El toque se colaba hasta el mapa, asi que
-   pulsar un icono con informacion no abria la ventana: deshacia el zoom.
-
-   Este circulo se dibuja siempre en los iconos con informacion y es la
-   superficie de verdad. Va con `fill:none` para que no se vea y con
-   `pointer-events:fill`, que da por bueno el relleno aunque no se pinte:
-   con `pointer-events:auto` no valdria, porque ese valor exige que la forma
-   este pintada, y con `fill:none` no lo esta. */
 #iconos .toque{fill:none;pointer-events:fill}
 
-/* --- Las animaciones -------------------------------------------------------
-   Se aplican a un <g> INTERIOR, nunca al que lleva la posicion. En SVG el
-   `transform` de CSS pisa al atributo `transform`, asi que animar el <g> de
-   fuera borraria el translate que pone el icono en su sitio y todos se
-   apilarian en la esquina.
 
-   Se mueven transform y opacidad, que el navegador compone sin repintar, y
-   son suaves a proposito: esto es un mapa, no un anuncio. `transform-box` y
-   `transform-origin` hacen que giren y latan sobre su propio centro (el 0,0
-   donde estan dibujados) y no sobre la esquina de la hoja.
-
-   La INTENSIDAD va en la variable `--m`, que cada icono lleva puesta en su
-   <g> de fuera (por defecto 1). Los keyframes la usan dentro de un calc(), asi
-   que la misma animacion sirve para todos y cada uno se mueve lo suyo sin
-   duplicar reglas. La variable se hereda, asi que ponerla en el <g> de fuera
-   basta; y ahi es seguro porque un `style` con solo una variable no toca el
-   atributo `transform` que lleva ese mismo elemento. */
 #iconos .an{transform-box:fill-box;transform-origin:center}
 #iconos .an.late{animation:icLate 2.4s ease-in-out infinite}
 #iconos .an.flota{animation:icFlota 3.2s ease-in-out infinite}
 #iconos .an.gira{animation:icGira 14s linear infinite}
 #iconos .an.brilla{animation:icBrilla 2.6s ease-in-out infinite}
 #iconos .an.ondas{animation:icOndas 2.6s ease-out infinite}
-/* Vibra y viento van mas rapido que las otras a proposito: son las dos que
-   imitan algo que se mueve solo, y a camara lenta no se reconocen. */
+
 #iconos .an.vibra{animation:icVibra .22s linear infinite}
-/* El viento pivota en su BASE, no en el centro como las demas. Un arbol no se
-   mueve entero: la raiz se queda quieta y la copa se dobla. Con el pivote en
-   el centro el icono se balancea sobre su propio eje y eso se lee como algo
-   que flota, no como algo que aguanta el aire desde abajo. */
+
 #iconos .an.viento{animation:icViento 3.4s ease-in-out infinite;
                    transform-origin:50% 100%}
 
-/* --- Cuando no hace falta animar -------------------------------------------
-   Estas dos reglas son la optimizacion mas importante del croquis en un movil
-   de gama baja, y no cambian nada de lo que se ve.
-
-   El motivo, medido en el navegador: en cuanto hay UNA animacion corriendo, el
-   compositor produce un fotograma a la frecuencia de la pantalla y no para
-   nunca. Cuesta lo mismo con un icono animado que con cuarenta (1.69 ms por
-   fotograma con uno, 2.32 ms con cuarenta): el gasto es del fotograma, no de
-   los iconos. Con cero animaciones el compositor no produce ni un fotograma y
-   el gasto es cero.
-
-   En un ordenador eso no se nota. En un telefono de gama baja son entre 15 y
-   30 ms por fotograma de forma continua, y ahi es donde se traba: no por un
-   icono de mas, sino por no parar nunca.
-
-   Asi que se para en los dos casos en que nadie las esta mirando:
-
-     .frenado  todo el mapa, mientras se mueve o la pagina no se ve
-     .fuera    un elemento concreto que ha quedado fuera de la pantalla
-
-   Lo segundo se nota sobre todo ampliado: en un movil, mirando una zona de
-   cerca, de los 48 iconos se ven cuatro o cinco. Los otros cuarenta estaban
-   gastando lo mismo sin que nadie los viera.
-
-   La regla que de verdad los para esta mas abajo, despues de las animaciones
-   de las zonas, y no aqui: se explica alli por que el sitio importa. */
 
 
-/* Un latido: crece y vuelve. */
+
+
 @keyframes icLate{
   0%,100%{transform:scale(1)}
   50%{transform:scale(calc(1 + .1 * var(--m, 1)))}}
-/* Sube y baja despacio. */
+
 @keyframes icFlota{
   0%,100%{transform:translateY(0)}
   50%{transform:translateY(calc(-1.6px * var(--m, 1)))}}
-/* Una vuelta completa. No tiene intensidad: no hay nada que ampliar, asi que
-   el editor no ofrece el control para esta. */
+
 @keyframes icGira{to{transform:rotate(360deg)}}
-/* Aparece y desaparece. La opacidad la recorta el navegador al rango 0..1 por
-   su cuenta, asi que con intensidad alta se queda en 0 un momento y ya esta. */
+
 @keyframes icBrilla{
   0%,100%{opacity:1}
   50%{opacity:calc(1 - .58 * var(--m, 1))}}
-/* Un anillo que se expande desde el icono y se desvanece, como un radar. La
-   intensidad decide hasta donde llega: con poca, el anillo apenas asoma. */
+
 @keyframes icOndas{
   0%{transform:scale(1);opacity:.55}
   70%{transform:scale(calc(1 + .9 * var(--m, 1)));opacity:0}
   100%{transform:scale(calc(1 + .9 * var(--m, 1)));opacity:0}}
-/* Temblor: va y viene muy rapido y en diagonal, con un giro minimo. Cada paso
-   empuja hacia un lado distinto para que no se lea como un balanceo. */
+
 @keyframes icVibra{
   0%,100%{transform:translate(0,0) rotate(0)}
   12%{transform:translate(calc(-.5px * var(--m, 1)),calc(.15px * var(--m, 1)))
@@ -252,30 +115,7 @@ body{
      rotate(calc(.6deg * var(--m, 1)))}
   87%{transform:translate(calc(-.45px * var(--m, 1)),calc(.15px * var(--m, 1)))
      rotate(calc(-1.1deg * var(--m, 1)))}}
-/* Viento: se dobla hacia un lado y vuelve, con una racha mas fuerte despues.
-   Los tiempos no son simetricos a proposito; una racha pareja se lee como un
-   mecanismo y no como aire.
 
-   Son dos movimientos a la vez: el `rotate` inclina el icono entero sobre su
-   base, y el `skewX` lo dobla por arriba, que es lo que hace un arbol. Con
-   solo el giro queda un palo rigido; con solo el sesgo la base tambien se
-   mueve. Juntos, la base se queda clavada y la copa va y viene.
-
-   Con el `skewX`, cada punto se desplaza en X segun lo lejos que este del
-   origen, y el origen es la base: por eso lo de abajo no se mueve y lo de
-   arriba si.
-
-   **El sesgo va con el signo contrario al del nombre y eso no es un error.**
-   Los dos empujan a la copa, pero en sentidos opuestos: el `rotate` positivo
-   la manda a la derecha y un `skewX` positivo la manda a la izquierda, con lo
-   que se cancelan y el icono se queda casi quieto (medido: 0.8 de los 3.9
-   que deberia moverse). Con el `skewX` en negativo los dos suman y el doblez
-   se ve.
-
-   Los grados son mas altos que los de las otras animaciones porque el pivote
-   esta abajo: el mismo angulo mueve mucho menos la punta que si girara sobre
-   el centro. Con los 5 grados que tenia antes, la copa se movia menos de un
-   pixel y no se veia nada. */
 @keyframes icViento{
   0%,100%{transform:rotate(0) skewX(0)}
   20%{transform:rotate(calc(3.2deg * var(--m, 1)))
@@ -287,107 +127,40 @@ body{
   84%{transform:rotate(calc(2deg * var(--m, 1)))
      skewX(calc(-1.3deg * var(--m, 1)))}}
 
-/* El anillo que se expande en las ondas. Va con el trazo del color de la
-   tinta y sin relleno, para que se lea como una onda y no como un aro solido. */
+
 #iconos .onda{fill:none;stroke:var(--verde);stroke-width:1.6;stroke-opacity:.9;
               vector-effect:non-scaling-stroke}
 
-/* --- Un ajuste del sistema que se quito a proposito -------------------------
-   Aqui vivia una regla que apagaba todas las animaciones cuando el sistema
-   pedia menos movimiento:
 
-       @media (prefers-reduced-motion:reduce){
-         #iconos .an,#zonas .g{animation:none !important}
-       }
 
-   Ya no esta, y no es un olvido.
 
-   El motivo es que las animaciones de este mapa NO son adorno de fondo: las
-   elige una por una quien edita, en el editor, y son parte de lo que el mapa
-   cuenta. Un ajuste del sistema no debe borrar lo que el autor ha decidido
-   poner. Ademas la regla tenia una historia enganosa: durante toda la vida del
-   proyecto NO hacia nada, porque las reglas que dan animacion a cada clase
-   tienen mas fuerza que una que solo nombre el grupo. Al ponerle `!important`
-   para que por fin funcionara, se apago el mapa entero de golpe: en un equipo
-   con el ajuste puesto, ni los iconos ni las lineas se movian, y el sintoma
-   parecia «la animacion no funciona» en vez de «el sistema la esta tapando».
-
-   Si algun dia se quiere recuperar, esta es la linea, y hay que probarla en un
-   equipo CON el ajuste puesto:
-
-       @media (prefers-reduced-motion:reduce){
-         #iconos .an,#zonas .g{animation:none !important}
-       }
-*/
-
-/* --- Los adornos de las zonas ----------------------------------------------
-   Una zona nace invisible: es un poligono transparente que solo existe para
-   recibir el toque. Los adornos son opcionales y no cambian eso: sin relleno y
-   sin linea, la zona se comporta igual que antes de que existieran.
-
-   El toque y lo que se ve van en el MISMO poligono. No hace falta uno aparte
-   encima: con el relleno transparente el navegador ya lo da por pintado y
-   recibe la pulsacion, que es como funcionaba antes. Poner un segundo poligono
-   solo para pintar seria duplicar los puntos y tener dos cosas que se pueden
-   desincronizar.
-
-   El `vector-effect` mantiene la linea del mismo grosor al ampliar. Vale
-   tambien para los guiones: al no escalar, la raya de la carretera mide lo
-   mismo de cerca que de lejos, en vez de engordar con el zoom. */
 #zonas .g{stroke-width:2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
-/* El punteado de la linea quieta: corto y apretado, para que se lea como un
-   filo punteado y no como una carretera. */
+
 #zonas .g.punteada{stroke-dasharray:3 4}
 
-/* --- Las animaciones de las zonas ------------------------------------------
-   Dos familias, porque son dos cosas distintas y se pueden combinar:
 
-     .za-*  la zona entera, relleno y linea
-     .zb-*  solo el borde, o sea la linea
-
-   Se mueven `opacity` (la zona) y `stroke-opacity` / `stroke-dashoffset` (el
-   borde). Son propiedades distintas, asi que se pueden animar a la vez sin
-   pisarse: una zona puede latir mientras su borde avanza.
-
-   Pero para que de verdad convivan hay que declararlas como VARIABLES y
-   juntarlas en una sola regla. `animation` es una propiedad de taquigrafia, y
-   eso quiere decir que la ultima regla que la toca BORRA la anterior: con una
-   declaracion por clase, una zona con las dos animaciones solo se quedaba con
-   la del borde -que va despues- y la de la zona desaparecia sin dar ningun
-   error. Con las variables, cada familia pone la suya y la regla comun las
-   suma.
-
-   La intensidad va en la misma variable `--m` que los iconos, puesta en el
-   propio poligono. Por defecto 1, que es el movimiento de fabrica. */
 #zonas .g{animation:var(--az, none), var(--ab, none)}
 #zonas .g.za-late{--az:zonaLate 3s ease-in-out infinite}
 #zonas .g.za-brilla{--az:zonaBrilla 2.8s ease-in-out infinite}
 #zonas .g.za-destello{--az:zonaDestello 4s ease-out infinite}
-/* `camina` se pone DESPUES de `.punteada` a proposito: las dos reglas tienen
-   la misma fuerza, asi que gana la ultima. Una linea que avanza necesita
-   guiones mas largos que un punteado quieto, y si el punteado ganara, la
-   carretera saldria con rayitas de hormiga. */
+
 #zonas .g.zb-camina{
   stroke-dasharray:calc(9 * var(--m, 1) * 1px) calc(7 * var(--m, 1) * 1px);
   --ab:bordeCamina 1.6s linear infinite}
-/* Y la misma carretera al reves. Se le da la vuelta con `reverse` en vez de
-   escribir un segundo keyframe: el viaje es el mismo y lo unico que cambia es
-   el sentido, asi que `reverse` dice exactamente eso y no deja dos numeros que
-   se puedan separar. Recorrido al reves, de -16 a 0, que es el mismo periodo:
-   el bucle sigue siendo continuo. */
+
 #zonas .g.zb-camina.zd-reves{--ab:bordeCamina 1.6s linear infinite reverse}
 #zonas .g.zb-late{--ab:bordeLate 3s ease-in-out infinite}
 #zonas .g.zb-brilla{--ab:bordeBrilla 2.8s ease-in-out infinite}
 
-/* La zona late: se aclara y vuelve, sin llegar a desaparecer nunca. */
+
 @keyframes zonaLate{
   0%,100%{opacity:1}
   50%{opacity:calc(1 - .45 * var(--m, 1))}}
-/* Aparece y desaparece del todo. */
+
 @keyframes zonaBrilla{
   0%,100%{opacity:1}
   50%{opacity:0}}
-/* Un aviso: sube y baja rapido, y se queda quieta el resto del ciclo. */
+
 @keyframes zonaDestello{
   0%,12%,100%{opacity:1}
   5%{opacity:calc(1 - .75 * var(--m, 1))}}
@@ -397,111 +170,22 @@ body{
 @keyframes bordeBrilla{
   0%,100%{stroke-opacity:1}
   50%{stroke-opacity:0}}
-/* La carretera: los guiones van avanzando por todo el borde.
 
-   El desplazamiento tiene que ser EXACTAMENTE un periodo de guiones para que el
-   bucle no de un salto. El periodo es 9 + 7 = 16, y por eso el numero de aqui
-   abajo tiene que ser 16 y no otro: con 15 o 17, cada vuelta daria un tiron
-   visible. Y va en negativo porque el patron se mueve al reves que el
-   desplazamiento: en positivo, la linea pareceria ir hacia atras.
-
-   El `* 1px` del final NO es un adorno, y quitarlo rompe la animacion entera:
-   sin el, el calculo da un numero sin unidad, y el navegador NO lo interpola.
-   Medido: sin el `1px` el desplazamiento pasa por 2 valores y salta de 0 a -16
-   de golpe, o sea que los guiones PARPADEAN en el sitio en vez de avanzar; con
-   el, pasa por 34 valores y recorre el camino. Lo peor es que no da ningun
-   error: la animacion figura como corriendo y el valor final es el correcto,
-   asi que el sintoma se lee como «la animacion no se ve», que es justo lo que
-   se reporto. */
 @keyframes bordeCamina{
   to{stroke-dashoffset:calc(-16 * var(--m, 1) * 1px)}}
 
-/* --- La regla que para las animaciones -------------------------------------
-   Va AQUI, al final de todas las animaciones, y el sitio no es casual: las
-   reglas que dan animacion a cada clase y esta tienen la misma fuerza, asi que
-   decide el orden. Puesta antes, las de las zonas la pisaban y el mapa seguia
-   animandose durante el zoom aunque los iconos ya estuvieran parados: un fallo
-   que no da ningun error, solo un telefono que se sigue trabando.
 
-   El freno va en #m, que es el padre comun de las zonas y de los iconos, asi
-   que una sola clase los para todos. Y `.pausa` marca lo que de verdad anima,
-   que no es lo mismo en los dos casos: en un icono es el grupo de dentro y en
-   una zona es el propio poligono. El `#m` del segundo selector tambien hace
-   falta: sin el, la regla seria mas debil que las de las animaciones y no
-   pararia nada.
-
-   `animation-play-state` en vez de quitar la animacion: al reanudar sigue por
-   donde iba, asi que los elementos no dan un salto al volver a mirarlos. */
 #m.frenado .pausa{animation-play-state:paused}
 
-/* Y lo de «fuera» SOLO cuenta con el mapa ampliado, que es lo unico donde
-   hay algo fuera de la pantalla.
 
-   El motivo es un fallo real de iOS, medido con el comprobador de
-   `plantilla/diagnostico.html`: alli el IntersectionObserver dice que NO
-   intersecta NADA, ni con el mapa entero a la vista. Los 56 elementos pillan
-   «fuera», los 44 animados se quedan con `animation-play-state: paused` y el
-   mapa aparece congelado entero, sin un error en la consola. Por ahi empezo todo:
-   parecia un freno pegado, y el freno estaba suelto desde el principio. */
 #m.acercado .pausa.fuera{animation-play-state:paused}
 
-/* --- Sin `acercado`, tampoco hay nada animandose --------------------------
-   Este deja el mapa quieto en la vista general, y es lo que hace que no se trabe.
-
-   Lo de arriba decia justo lo contrario -«sin `acercado` no se para nada, y no
-   se pierde nada, porque en la vista normal se ve el mapa entero»-, y estaba
-   equivocado en lo que importa. Que se vean todos los iconos no es lo mismo que
-   que animarlos salga gratis.
-
-   MEDIDO, en Chromium con la CPU frenada ocho veces y densidad 3, que es lo mas
-   parecido a un telefono de gama media que se puede tener en un portatil:
-
-       vista general, tal cual        30 fps   66 % de los fotogramas tardan
-                                                 mas de 32 ms
-       vista general, sin animaciones  60 fps   0 %
-       vista general, con esta regla   60 fps   0 %
-       mapa ampliado, con esta regla   igual que antes
-
-   El suelo de 0 % dice que el problema no es que las animaciones sean pesadas
-   una a una -eso ya estaba medido-, sino que EN QUE HAY ALGO MOVIENDOSE el
-   navegador tiene que componer un fotograma a la frecuencia de la pantalla, sin
-   parar, para siempre. Con las animaciones de los iconos corriendo a 60 Hz eso
-   son miles de fotogramas por segundo de composicion para un mapa que, en un
-   movil, se ve entero con los iconos de veinte pixeles.
-
-   Y ahi no se ve la animacion, que es justo lo que hace que la parada no se
-   note: en la vista general un icono que flota de tres pixeles no se distingue
-   de uno parado. Al ampliar, los iconos se vuelven grandes, la animacion se ve,
-   y `.acercado` las deja correr. Como va con `animation-play-state` y no
-   quitando la animacion, reanudan por donde iban: no hay ningun salto al
-   acercar.
-
-   Lo que NO se ha hecho, y esta medido tambien, porque sale peor: darle una
-   capa propia a cada icono animado (`will-change: transform` en los cuarenta y
-   cuatro) no mejora nada en la vista general -66 %-, y combinado con esta regla
-   el mapa ampliado pasa de 28 % a 52 % de fotogramas caidos. Una capa para todo
-   el mapa, tampoco: 66 %. */
 
 
-/* La del sistema (`prefers-reduced-motion`) se quito a proposito. Donde estaba
-   y por que se explica arriba, en la seccion de las animaciones de los iconos. */
 
-/* --- La ventana de informacion ---------------------------------------------
-   Mismo lenguaje que el panel: mismo fondo, mismo filo, mismo radio y el
-   verde institucional. Sale del centro hacia arriba y desaparece sin dejar
-   rastro, para que se vea que es algo que se abre encima del mapa y no una
-   pantalla aparte.
 
-   Sale CENTRADA, tambien en el movil. Antes se pegaba abajo y ocupaba el
-   ancho: la idea era no tener que acertarle al boton de cerrar, pero en un
-   telefono alto la ventana quedaba a media pantalla de distancia del icono
-   que se acababa de tocar, y parecia que no habia pasado nada.
 
-   El `safe center` de la segunda linea es por si la caja no cupiera de alto:
-   con un `center` a secas, lo que sobra se sale por ARRIBA y de ahi no se
-   puede bajar con el dedo. `safe` lo pega al borde en ese caso. Si el
-   navegador no lo entiende, se queda con el `center` de la linea anterior,
-   que es lo normal: la caja nunca pasa del 78% del alto de la pantalla. */
+
 #ventana{position:fixed;inset:0;z-index:9;display:grid;place-items:center;
          align-items:safe center;
          padding:16px;background:#0a484233;opacity:0;
@@ -523,18 +207,9 @@ body{
 #cierraVentana:hover{background:var(--lima);border-color:#8fbf9a}
 #cierraVentana svg{width:15px;height:15px;display:block}
 
-/* La vista previa de un archivo de RecursosExtra. Va aparte de la ventana de
-   informacion y no dentro, porque son dos cosas distintas: la ventana cuenta
-   algo de un icono, y esto ensena un archivo entero. Ademas la ventana se
-   cierra al tocar el mapa -esta pensada para leer dos lineas y seguir- y un
-   plano que se esta mirando no deberia irse porque un dedo roce fuera. */
+
 #vista{position:fixed;inset:0;z-index:10;display:grid;place-items:center;
-       /* Las dos pistas con `minmax(0,1fr)`: sin eso la fila se mide por el
-          contenido, y un `max-height:100%` dentro de una pista que se mide
-          por el contenido se resuelve como `none`. En un movil no se notaba
-          porque la pantalla es mas chica que la imagen; en un monitor, donde
-          la foto de un plano es mas grande que la ventana, se salia por los
-          cuatro lados. */
+
        grid-template-columns:minmax(0,1fr);
        grid-template-rows:minmax(0,1fr);
        padding:18px;background:#0a4842b8;opacity:0;
@@ -544,8 +219,7 @@ body{
 #vista img{max-width:100%;max-height:100%;border-radius:14px;
            background:#fff;box-shadow:0 24px 60px #0a484266}
 #accionesVista{position:absolute;top:14px;right:14px;display:flex;gap:10px}
-/* Los dos botones de arriba a la derecha: descargar y cerrar. Miden lo mismo y
-   se ven igual, porque son hermanos y ninguno manda sobre el otro. */
+
 #accionesVista a,#accionesVista button{
   width:42px;height:42px;border:0;border-radius:99px;background:#fff;
   color:var(--tinta);display:grid;place-content:center;cursor:pointer;
@@ -554,31 +228,19 @@ body{
 #accionesVista a:hover,#accionesVista button:hover{background:var(--lima)}
 #accionesVista svg{width:17px;height:17px;display:block}
 #selloVentana{display:flex;align-items:center;gap:14px;margin-bottom:14px}
-/* El sello mide siempre lo mismo, y el icono se coloca dentro con un margen
-   calculado. El hueco NO lo da un `padding`: lo da el `viewBox`, que el script
-   ajusta al dibujo de verdad. Con un padding fijo, un icono alargado se sale
-   de la caja o se queda diminuto segun su forma.
 
-   Aqui solo queda el fondo. */
 #selloVentana svg{width:52px;height:52px;flex:none;border-radius:14px;
                   background:var(--crema)}
 #selloVentana svg *{fill:none;stroke:var(--tinta);stroke-width:1.9;
                     stroke-linecap:round;stroke-linejoin:round}
 #selloVentana svg .relleno{fill:var(--tinta);stroke:none}
-/* Si el icono va sin circulo en el mapa, aqui va sin marco. El icono de la
-   ventana es el mismo que se acaba de tocar, asi que tiene que verse igual:
-   con el marco puesto, un icono suelto en el mapa aparecia metido en una caja
-   al abrirlo, y parece que el toque abrio otro icono. */
+
 #selloVentana.sinAro svg{background:none}
 #tVentana{font-size:19px;font-weight:780;letter-spacing:-.015em;line-height:1.25;
           color:var(--tinta)}
 #xVentana{font-size:14px;line-height:1.6;color:var(--texto);white-space:pre-line;
           margin:0}
-/* El boton de enlace, si el icono lleva uno. Va pegado al texto y con el aire
-   justo para que se lea como una salida y no como parte de la explicacion.
 
-   El `:empty` lo esconde: el hueco no existe cuando no hay enlace, en vez de
-   quedar un margen suelto al final de la ventana. */
 #botonVentana{margin-top:16px}
 #botonVentana:empty{display:none}
 #botonVentana .enlace{width:100%;justify-content:center}
@@ -590,24 +252,11 @@ body{
   #cajaVentana{transform:translateY(10px) scale(.97)}
 }
 
-/* Al tocar, solo se hace zoom. Las zonas no se resaltan ni se oscurece el
-   resto del mapa: el diseno de Illustrator ya se lee solo y cualquier
-   adorno encima lo ensucia. */
 
-/* El encabezado de texto se fue con el banner, que ya lleva el titulo. Lo que
-   queda de el es el alto libre de arriba, que `encuadra()` necesita para
-   centrar el mapa: sin nada encima, es un margen fijo. El degradado que tenia
-   tambien: existia para que el texto se leyera sobre el dibujo, y sin texto no
-   hay nada que tapar. */
 
-/* El panel lleva los accesos rapidos: en el movil acertarle a una banda
-   diagonal es dificil, asi que ademas de informar sirve para navegar.
 
-   Llevaba un backdrop-filter con desenfoque de 14 px que se quito: con el
-   fondo al 97% de opacidad (#f3f9eef7) no se veia nada de lo de detras, y
-   en cambio obligaba a recalcular el desenfoque en CADA fotograma del zoom,
-   porque debajo hay un mapa que se esta moviendo. Pagaba un precio alto por
-   un efecto invisible. */
+
+
 #ficha{position:fixed;z-index:2;display:flex;flex-direction:column;gap:12px;
        padding:14px 16px;border:1px solid var(--borde);border-radius:18px;
        background:#f3f9eef7;
@@ -635,17 +284,10 @@ body{
 .chip:hover{border-color:#8fbf9a}
 .chip.act{border-color:var(--tinta);background:var(--tinta);color:#fff}
 
-/* Debajo de los accesos rapidos va el enlace de fuera: el programa del
-   evento, que vive en el ownCloud de la UABC. Es otra cosa que los chips de
-   arriba (aquellos llevan a una zona del mapa; este sale del mapa), asi que
-   va separado con un filo y con un boton lleno del verde institucional, que
-   no se confunde con el chip activo.
 
-   Lleva el icono de salir a otro sitio porque abre en pestana nueva: sin esa
-   pista, que el mapa no cambie al pulsar desconcierta. */
 #enlaces{display:flex;flex-wrap:wrap;gap:8px;padding-top:13px;
          border-top:1px solid var(--borde)}
-/* Sin boton no hay fila: un filo suelto al final del panel parece un error. */
+
 #enlaces:empty{display:none}
 .enlace{display:inline-flex;align-items:center;gap:9px;padding:12px 18px;
         border-radius:99px;background:var(--verde);color:#fff;
@@ -656,22 +298,7 @@ body{
 .enlace:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
 .enlace svg{width:14px;height:14px;flex:none;opacity:.85}
 
-/* En pantalla ancha el panel pasa a lateral: una barra inferior desperdicia
-   el ancho sobrante y deja el mapa chico y centrado.
 
-   Va anclado de arriba a abajo en vez de centrado con translateY. Centrado
-   funcionaba con las seis filas de chips de antes, pero un movil acostado
-   tiene unos 360 px de alto: en cuanto el panel crece un poco se sale por
-   los dos lados, y lo primero que se pierde es el boton del programa, que va
-   al final. Anclado y con scroll propio, siempre se alcanza.
-
-   Aqui si puede recibir el toque (en vertical no, para no comerse el mapa):
-   el encuadre deja el mapa a la derecha del panel, asi que debajo no hay
-   mapa que se pierda y en cambio hace falta para poder desplazar la lista.
-
-   La barra de desplazamiento va oculta, como la de los chips: es un menu,
-   no un documento, y el filo gris al lado del mapa afea. El desplazamiento
-   sigue funcionando. */
 @media (min-width:760px) and (orientation:landscape){
   #ficha{left:22px;right:auto;top:14px;bottom:14px;width:330px;
          transform:none;overflow-y:auto;pointer-events:auto;
@@ -684,71 +311,18 @@ body{
 </style>
 </head>
 <body>
-<!-- El lienzo es el POSTER ENTERO, y el poster es una sola pieza: un unico
-     `<image>` con el SVG, con los dos banners y el mapa dentro. Antes eran tres
-     imagenes -el mapa y los dos banners-, y eso hacia posible que una se
-     quedara atras: el mapa unloaded mientras el titulo ya estaba, o al reves.
 
-     El `viewBox` empieza en -216 y no en 0 porque el mapa se queda donde
-     estaba, de 0 a 792, y los banners van alrededor: el de arriba de -216 a 0 y
-     el de abajo de 791 a 1007.
 
-<svg id="s" viewBox="0 -216 1224 1223" preserveAspectRatio="xMidYMid meet">
-  <defs>
-    <clipPath id="recorte"><circle cx="0" cy="0" r="12.2"/></clipPath>
-  </defs>
-  <g id="m">
-    <g id="hoja">
-      <!-- El papel de debajo del dibujo es el gris del propio arte, #e4e0e4: el
-           papel del poster -#eae8e8- con el velo morado del 5 % que le pone la
-           exportacion de VectorCraft encima. Antes era #e5e7e7, el gris del .ai de
-           Illustrator. Solo se ve mientras el SVG baja, que es bastante rato,
-           pero si no cuadrara se veria un cambio de color al abrir el mapa. Una
-           prueba lo comprueba contra los colores del propio SVG, y no se escribe
-           a mano.
-
-           Ahora el rect cubre el POSTER entero y no solo el mapa, porque ahora
-           el papel esta debajo de los tres: si se dejara en 0,0 1224 x 792, al
-           abrir el mapa se veria el gris en las franjas de los banners.
-
-           El `--papel` de la hoja CSS sigue siendo verde palido a proposito, y no
-           es contradiccion: ese lo usa la ventana de informacion, que es una
-           tarjeta que flota ENCIMA del mapa, y sobre un fondo gris se separa
-           mucho mejor en verde. -->
-      <!-- EL POSTER, UNA SOLA PIEZA. Va DENTRO de `#m` a proposito: al ampliar
-           una zona se va con el mapa, que es lo que tiene que pasar. Si se
-           dejara fuera se quedaria pegado al borde de la pantalla mientras el
-           mapa se mueve debajo.
-
-           Es el SVG tal cual, sin recortar ni rasterizar: por eso el mapa se ve
-           igual de nitido a dos que a seis veces, y por eso no hace falta una
-           version en alta para el acercar. Lo que se paga es el peso, que se
-           mide en el README.
-
-           El `?v=` es el sha1 del archivo en corto, y sirve para lo unico que
-           hace falta: que al cambiar el arte cambie la direccion. Sin el, el
-           navegador y el CDN de GitHub Pages se quedan con la copia vieja y se
-           sigue viendo el mapa de antes. Y no es una teoria: Pages manda
-           `Cache-Control: max-age=600`, asi que durante diez minutos despues de
-           subir un cambio se ve el anterior, recargando inclusive.
-
-           El numero NO se escribe a mano: lo comprueba una prueba contra el
-           sha1 real del archivo, porque un numero que se queda viejo no da
-           ningun error, solo un mapa que no cambia. -->
       <image id="arte" href="FinalSinCosas.jpg?v=14a13a19" x="0" y="-217"
              width="1224" height="1224" preserveAspectRatio="none"/>
-      <!-- Y aquí ya no hay ningún filo. Estaba el rect de `stroke:#b8d4bb`, que
-           separaba la hoja del fondo de verdad, y se quitó con el fondo entero:
-           el poster ya no se recorta en un mapa con dos banners alrededor, es una
-           sola pieza, y el filo solo conseguía un marco verde por encima de todo
-           el dibujo. -->
+
     </g>
     <g id="zonas"></g>
     <g id="iconos"></g>
   </g>
 </svg>
 
-<!-- El titulo va en el arte -->
+
 <footer id="ficha">
   <div id="rotulo">
     <span id="punto">
@@ -762,19 +336,14 @@ body{
   </div>
   <div id="chips"></div>
   <div id="enlaces">
-    <!-- El boton no esta escrito aqui: lo arma el script a partir del bloque
-         ENLACE, que es lo que escribe el editor. Escrito en el marcado
-         habria dos sitios diciendo el mismo texto y la misma direccion, y el
-         dia que se cambie uno el otro se queda mintiendo. -->
+
   </div>
 </footer>
 
 <div id="vista" hidden aria-modal="true" role="dialog">
   <img id="fvista" alt="">
   <div id="accionesVista">
-    <!-- Solo el boton de cerrar. El de descargar lo arma el script, porque
-         lleva un `href` que solo se sabe cuando se abre la vista: escrito
-         aqui seria un enlace sin destino, y eso el croquis no lo admite. -->
+
     <button id="cierraVista" aria-label="Cerrar la vista previa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2.6" stroke-linecap="round" aria-hidden="true">
@@ -784,20 +353,7 @@ body{
   </div>
 </div>
 
-<!-- La ventana que sale al tocar un icono con informacion. Es una sola para
-     todos los iconos: se cambia su contenido y se muestra, en vez de tener
-     una por icono. Con una sola no hay forma de que queden dos abiertas ni
-     de que se acumulen en el DOM.
 
-     El boton de enlace NO esta aqui escrito: lo arma el script. La direccion
-     sale del archivo, y con `innerHTML` habria que escapar la URL a mano con
-     el riesgo de que un despiste convierta el texto en una etiqueta. Con
-     `createElement` y `href`, el navegador la trata como direccion y no como
-     codigo, aunque lleve comillas o parentesis.
-
-     Empieza en `hidden`, que ademas de esconderla la saca del alcance del
-     teclado: con solo opacidad, el boton de cerrar seguiria siendo tabulable
-     y el foco se iria a un sitio invisible. -->
 <div id="ventana" hidden>
   <div id="cajaVentana" role="dialog" aria-modal="true" aria-labelledby="tVentana">
     <button id="cierraVentana" aria-label="Cerrar">
@@ -813,30 +369,7 @@ body{
 </div>
 
 <script>
-// ===========================================================================
-// Zonas interactivas, trazadas sobre el mapa de Illustrator.
-//
-// El mapa mide 1224 x 792 pt (432 x 279 mm) y todo se define en ese mismo
-// espacio de coordenadas, que es el que usa el viewBox. Asi los numeros de
-// aqui se leen directamente sobre el archivo de Illustrator.
-//
-// Cada zona es [nombre, nombre corto, poligono, descripcion]. La caja que se
-// encuadra al hacer zoom NO se guarda aparte: se calcula del poligono. Tener
-// los dos datos a mano era pedir que se desincronizaran, y de hecho paso:
-// ajuste los poligonos y las cajas se quedaron viejas, asi que el zoom
-// dejaba parte de la zona fuera de cuadro.
-//
-// Las bandas diagonales (estacionamientos y zonas de stands) van como
-// cuadrilateros que siguen la banda. Un rectangulo normal las cubriria mal:
-// al ir en diagonal, su caja incluiria medio prado.
-//
-// Dos zonas no pueden solaparse: al tocar caeria la de encima y la otra
-// quedaria inalcanzable justo ahi. Hay una prueba que lo comprueba con los
-// ejes separadores, y otra que verifica que todas quepan en el mapa.
-//
-// Lo de abajo lo reescribe editor/editor.py. Si se edita a mano aqui, el
-// editor no se entera y lo pisa la proxima vez que se guarde desde el.
-// ===========================================================================
+
 /* === INICIO ZONAS === */
 var ZONAS = [
   ["Teatro al aire libre", "Teatro",
@@ -881,36 +414,14 @@ var ZONAS = [
 ];
 /* === FIN ZONAS === */
 
-// Vista general: el POSTER entero, que es una sola pieza. Lo mismo que el
-// `viewBox`, y por eso se escribe con los mismos numeros: de -216 a 1007 en
-// vertical -los dos banners de 216 y el mapa de 792 en medio-, y 1224 de ancho.
-//
-// Antes era `[110, 100, 1005, 640]`, un recorte del campus con las calles que lo
-// enmarcan. Con los banners no vale: ese rectangulo no los incluye, con lo que
-// en la vista general no se veria ni el titulo ni el dibujo de abajo, que es
-// justo lo que se ha pedido.
+
 var VISTA = [0, -216, 1224, 1223];
 
 /* === INICIO ENLACE === */
 var ENLACE = {"t": "Programa del evento", "u": "RecursosExtra/11x17pl_Orgullo CImarron_Vrs4.jpg"};
 /* === FIN ENLACE === */
 
-// ===========================================================================
-// Iconos: los simbolos de punto del mapa (banos, primeros auxilios, comida).
-//
-// Cada icono es [tipo, x, y, etiqueta, tamano]. El tamano es opcional: si
-// falta se usa TAM_ICONO, que es lo que median todos antes de que se pudiera
-// ajustar. El tipo elige la forma en SIMBOLOS, o una imagen de PROPIOS, y la
-// etiqueta es para lectores de pantalla y para el editor; en el mapa solo se
-// ve el simbolo, porque a 46 unidades de mapa el texto saldria de 6 px y no
-// lo leeria nadie.
-//
-// El tipo se valida contra las dos listas: uno desconocido saldria como un
-// hueco vacio y sin ningun error en la consola, que es la peor forma de
-// fallar.
-//
-// Lo de abajo lo reescribe editor/editor.py, igual que las zonas.
-// ===========================================================================
+
 /* === INICIO ICONOS === */
 var ICONOS = [
   {"t": "extintor-png", "x": 437, "y": 566, "n": "extintor-png", "s": 16, "a": "flota", "c": 0},
@@ -966,17 +477,7 @@ var ICONOS = [
 ];
 /* === FIN ICONOS === */
 
-// Los iconos propios: imagenes que se suben desde el editor, guardadas aqui
-// dentro como data URL.
-//
-// Van incrustadas y no en un archivo aparte porque el croquis tiene que
-// abrirse solo, sin pedirle nada a nadie: es lo que abre un QR escaneado en
-// la calle. El precio es que cada byte pesa dos veces (los datos y el texto
-// base64), asi que las imagenes se guardan pequenas, a 160 px de lado.
-//
-// Se dibujan recortadas en circulo, igual que los simbolos van dentro del
-// aro, para que todas se lean como iconos del mapa y no como fotos pegadas
-// encima.
+
 /* === INICIO PROPIOS === */
 var PROPIOS = {
   "agua-2": "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"agua-2-Capa_1\" version=\"1.1\" viewBox=\"0 0 20.08 32.8\"><defs><style>\n      .agua-2-st0, .agua-2-st1 {\n        fill: #009fe3;\n      }\n\n      .agua-2-st2 {\n        filter: url(#agua-2-drop-shadow-1);\n      }\n\n      .agua-2-st1 {\n        stroke: #fff;\n        stroke-linecap: round;\n        stroke-linejoin: round;\n        stroke-width: 4px;\n      }\n    </style><filter id=\"agua-2-drop-shadow-1\" x=\"0\" y=\"0\" width=\"22.13\" height=\"34.34\" filterUnits=\"userSpaceOnUse\"><feOffset dx=\"2.05\" dy=\"1.54\" /><feGaussianBlur result=\"blur\" stdDeviation=\"0\" /><feFlood flood-color=\"#124942\" flood-opacity=\".7\" /><feComposite in2=\"blur\" operator=\"in\" /><feComposite in=\"SourceGraphic\" /></filter></defs><g class=\"agua-2-st2\"><g><path class=\"agua-2-st1\" d=\"M11.43,5.47c-.18.57-.7,1.11-1.38,1.11-.69,0-1.23-.54-1.41-1.11-.17-.54,0-1.03.16-1.53.14-.41.47-1.2,1.26-1.93.75.75,1.07,1.52,1.21,1.96.17.51.32.98.15,1.5Z\" /><path class=\"agua-2-st1\" d=\"M18.08,17.5v-.93c0-.44-.35-.79-.79-.79h-.15c-.48-1.84-1.99-3.26-3.87-3.64l-1.58-.63v-1.31h0c.35,0,.64-.29.64-.64v-1.23c0-.35-.29-.64-.64-.64h-3.31c-.35,0-.64.29-.64.64v1.23c0,.35.29.64.64.64h0v1.31l-1.58.63c-1.88.37-3.38,1.8-3.87,3.64h-.15c-.44,0-.79.35-.79.79v.93c0,.43.34.78.77.79v6.25c-.43,0-.77.36-.77.79v.93c0,.43.34.78.77.79v.05c0,2.05,1.66,3.72,3.72,3.72h7.1c2.05,0,3.72-1.66,3.72-3.72v-.05c.43,0,.77-.36.77-.79v-.93c0-.43-.34-.78-.77-.79v-6.25c.43,0,.77-.36.77-.79Z\" /></g><g><path class=\"agua-2-st0\" d=\"M11.43,5.47c-.18.57-.7,1.11-1.38,1.11-.69,0-1.23-.54-1.41-1.11-.17-.54,0-1.03.16-1.53.14-.41.47-1.2,1.26-1.93.75.75,1.07,1.52,1.21,1.96.17.51.32.98.15,1.5Z\" /><path class=\"agua-2-st0\" d=\"M18.08,17.5v-.93c0-.44-.35-.79-.79-.79h-.15c-.48-1.84-1.99-3.26-3.87-3.64l-1.58-.63v-1.31h0c.35,0,.64-.29.64-.64v-1.23c0-.35-.29-.64-.64-.64h-3.31c-.35,0-.64.29-.64.64v1.23c0,.35.29.64.64.64h0v1.31l-1.58.63c-1.88.37-3.38,1.8-3.87,3.64h-.15c-.44,0-.79.35-.79.79v.93c0,.43.34.78.77.79v6.25c-.43,0-.77.36-.77.79v.93c0,.43.34.78.77.79v.05c0,2.05,1.66,3.72,3.72,3.72h7.1c2.05,0,3.72-1.66,3.72-3.72v-.05c.43,0,.77-.36.77-.79v-.93c0-.43-.34-.78-.77-.79v-6.25c.43,0,.77-.36.77-.79Z\" /></g></g></svg>",
@@ -998,16 +499,7 @@ var PROPIOS = {
 };
 /* === FIN PROPIOS === */
 
-// Las formas de los iconos, dibujadas a mano en una caja de 24x24 centrada en
-// (0,0), para que colocar una sea solo translate + scale. Solo el contenido:
-// el <g> que las envuelve pone el color y el grosor del trazo.
-//
-// Se dibujan aqui y no se cargan de fuera para que el mapa no dependa de
-// ninguna biblioteca de iconos ni de ninguna red.
-//
-// Tienen que ser las mismas que la lista SIMBOLOS de editor/validar.py: el
-// editor ofrece esos tipos y el croquis solo sabe dibujar estos. Hay una
-// prueba que compara las dos listas.
+
 /* === INICIO SIMBOLOS === */
 var SIMBOLOS = {
   bano: '<circle cx="-4.7" cy="-7.1" r="2.3"/><path d="M-4.7 -4.8v6.4M-7.8 -1.6h6.2"/>'
@@ -1044,16 +536,7 @@ var SIMBOLOS = {
 };
 /* === FIN SIMBOLOS === */
 
-// Como se llama cada simbolo cuando el icono no lleva etiqueta propia. Es lo
-// que sale en el <title> del icono, que es lo que leen los lectores de
-// pantalla y lo que se ve al dejar el raton encima.
-//
-// Va aparte del bloque de arriba a proposito: SIMBOLOS lo reescribe el editor
-// y esto no, porque los nombres son los mismos para todos los mapas.
-//
-// Tienen que ser los mismos que los de la lista SIMBOLOS de editor/validar.py.
-// Hay una prueba que compara las dos listas, nombres incluidos: si se separan,
-// un icono acabaria anunciandose como «bano» en vez de «Baños».
+
 var NOMBRES = {
   bano: "Baños", primeros: "Primeros auxilios", comida: "Alimentos",
   bebida: "Bebidas", escenario: "Escenario", entrada: "Entrada",
@@ -1061,10 +544,7 @@ var NOMBRES = {
   basura: "Basura", sonido: "Audio", estrella: "Punto de interés"
 };
 
-// Cuanto mide un icono por defecto, en unidades del mapa y no en pixeles:
-// los iconos son parte del plano y crecen con el zoom igual que las calles.
-// Cada icono puede llevar su propio tamano; este es el que se usa cuando no
-// lo lleva.
+
 var TAM_ICONO = 46;
 
 var s = document.getElementById("s"), M = document.getElementById("m"),
@@ -1074,46 +554,21 @@ var s = document.getElementById("s"), M = document.getElementById("m"),
     ICN = document.getElementById("iconos"),
     CH = document.getElementById("chips"), K = [], A = -1, i;
 
-// El alto libre que hay ARRIBA, en pixeles de pantalla, para `encuadra()`.
-//
-// Antes se media el borde inferior del encabezado de texto. Ese encabezado se
-// fue con el banner de arriba, que ya lleva el titulo, asi que ahora no hay
-// nada encima del mapa y el hueco es un margen fijo.
-//
-// Es un margen y no cero porque el banner es una imagen con fondo blanco y el
-// resto de la pagina es verde palido: pegado al borde, el blanco se ve como un
-// recorte. Con aire, la composicion respira y el mapa no queda aplastado contra
-// los limites de la pantalla.
+
 var ARRIBA_LIBRE = 14;
 
-// Un texto que va a acabar dentro del SVG. Las etiquetas de los iconos las
-// escribe una persona, asi que pueden traer un & o un < y romper el dibujo.
+
 function escapa(t) {
   return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// Los adornos de una zona: su relleno, su linea y sus animaciones. Vacio si la
-// zona no lleva ninguno, que es como nacen todas.
-//
-// Van en un objeto aparte, en quinto lugar, para no seguir alargando la tupla
-// de la zona: los cuatro primeros campos son de siempre y meter los adornos
-// detras seria volver a contar comas con la vista.
+
 function adornosDe(z) {
   var a = (z.length > 4 && z[4]) ? z[4] : null;
   return (a && typeof a === "object") ? a : {};
 }
 
-// El contorno de una zona, en la forma que entiende un <path>. Con `radio` en 0
-// salen las esquinas en angulo recto de siempre.
-//
-// Se dibuja SIEMPRE un <path>, aunque no haya redondeo, para que haya un solo
-// camino de codigo: lo que se prueba con las esquinas rectas es exactamente lo
-// mismo que se usa con las redondeadas. Un <polygon> y un <path> se comportan
-// igual para el relleno, la linea y el toque, asi que no se pierde nada.
-//
-// El redondeo de cada esquina se recorta a la mitad del lado mas corto que la
-// toca. Sin ese recorte, un radio mayor que el lado haria que las curvas de dos
-// esquinas se cruzaran y el contorno se retorciera en un lazo.
+
 function contorno(puntos, radio) {
   var n = puntos.length;
   if (n < 3) return "";
@@ -1124,13 +579,12 @@ function contorno(puntos, radio) {
     var lSig = Math.hypot(sig[0] - aca[0], sig[1] - aca[1]);
     var r = Math.min(radio || 0, lAnt / 2, lSig / 2);
     if (r > 0.05) {
-      // Los dos puntos donde la curva entra y sale, medidos sobre los lados.
+
       var entra = [aca[0] + (ant[0] - aca[0]) * r / lAnt,
                    aca[1] + (ant[1] - aca[1]) * r / lAnt];
       var sale = [aca[0] + (sig[0] - aca[0]) * r / lSig,
                   aca[1] + (sig[1] - aca[1]) * r / lSig];
-      // Una curva que pasa por la esquina de verdad, con la esquina como punto
-      // de control: asi el contorno no se separa del poligono que se edito.
+
       d += (i ? "L" : "M") + dos(entra[0]) + " " + dos(entra[1])
          + "Q" + dos(aca[0]) + " " + dos(aca[1]) + " "
          + dos(sale[0]) + " " + dos(sale[1]);
@@ -1141,43 +595,29 @@ function contorno(puntos, radio) {
   return d + "Z";
 }
 
-// Las zonas existen para recibir el toque. De fabrica son transparentes, para
-// no dibujar nada encima del arte del mapa; si la zona lleva adornos, se pintan
-// con ellos en el MISMO contorno.
-//
-// No hace falta un segundo contorno encima para pintar: con el relleno
-// transparente el navegador ya lo da por pintado y recibe la pulsacion, que es
-// como funcionaba antes. Duplicarlo seria tener dos listas de puntos que se
-// pueden desincronizar.
+
 ZON.innerHTML = ZONAS.map(function (z, k) {
   var a = adornosDe(z), clases = ["g"], pintas = "";
-  // La animacion de la zona mueve el relleno y la linea; la del borde, solo la
-  // linea. Son dos clases distintas y se pueden llevar las dos a la vez.
+
   if (a.a) clases.push("za-" + a.a);
   if (a.b) clases.push("zb-" + a.b);
   if (a.p) clases.push("punteada");
-  // El sentido de `camina`, cuando va al reves. La clase sola no hace nada sin
-  // la animacion del borde: son dos cosas de la misma linea.
+
   if (a.d === -1) clases.push("zd-reves");
-  // `pausa` marca lo que de verdad anima, para poder pararlo cuando no se ve.
+
   if (a.a || a.b) clases.push("pausa");
-  // La intensidad, en el propio contorno y en la misma variable que los
-  // iconos. Se omite cuando vale 1, que es el movimiento de fabrica.
+
   if (a.m && a.m !== 1) pintas += ' style="--m:' + a.m + '"';
-  // Sin color de relleno el contorno queda transparente, como siempre. El
-  // color de la linea solo se pone si lo hay: sin `stroke`, el navegador no
-  // dibuja ninguna linea.
+
+
   pintas += ' fill="' + (a.f || "transparent") + '"';
   if (a.l) pintas += ' stroke="' + a.l + '"';
-  // El grosor y la opacidad, que llegaron con la version 2 del editor. Antes
-  // el grosor estaba clavado en el CSS (2) y no se podia tocar.
-  //
-  // El grosor va como ATRIBUTO y no en el `style` a proposito: hay una regla
-  // que pone el de la zona animada en 2.5 para que la linea que se mueve se vea
-  // por encima de la quieta, y esa gana a un atributo de presentacion, pero no a
-  // un `style` en linea. Asi el grosor que puso quien edita manda siempre, y si
-  // en el futuro se quiere que la animacion tenga otro comportamiento, se
-  // cambia el `style` y no el atributo.
+
+
+
+
+
+
   if (a.w) pintas += ' stroke-width="' + a.w + '"';
   if (a.o !== undefined && a.o !== 1) pintas += ' stroke-opacity="' + a.o + '"';
   return '<path class="' + clases.join(" ") + '" data-i="' + k + '" d="'
@@ -1189,55 +629,20 @@ CH.innerHTML = ZONAS.map(function (z, k) {
 K = CH.querySelectorAll(".chip");
 var G = ZON.querySelectorAll(".g");
 
-// Si un icono lleva el aro de fondo. Por defecto SI lo lleva, asi que lo que
-// se guarda es lo contrario: `"c": 0` para quitarselo.
-//
-// El cero se mira con `in` y nunca por lo que vale, porque 0 es un valor
-// legitimo y un `if (!ic.c)` lo tomaria por ausencia: el circulo seguiria
-// saliendo y no habria forma de quitarlo.
-//
-// Esta en su propia funcion porque la usan tres sitios (el mapa, la ventana y
-// el editor) y con la cuenta repetida en cada uno, el dia que se cambie una
-// las otras dos se quedan atras y el icono sale de una forma en el mapa y de
-// otra al abrirlo.
+
 function conAroDe(ic) {
   return !("c" in ic) || !!ic.c;
 }
 
-// La forma de un icono: el dibujo del simbolo, o la imagen propia. Vacio si
-// el tipo no existe, que es lo que hace que un icono desconocido se salte en
-// vez de salir como un hueco.
-//
-// El recorte en circulo de las imagenes y el aro van juntos: si el icono va
-// sin circulo, la imagen tambien pierde el recorte y sale como es. Media
-// medida (aro fuera, recorte dentro) dejaria la imagen redonda sin nada que
-// lo explique.
-// --- Los iconos que son vectores --------------------------------------------
-// Cada uno se define UNA vez en un `<symbol>` de `<defs>`, y se usa con
-// `<use>`.
-//
-// No se dibujan con `<image href="data:image/svg+xml...">`, que seria lo
-// corto, porque el navegador lo dibuja UNA vez a una resolucion pequena y
-// despues escala esa foto: los iconos salian pixelados al acercar. Los trazos
-// de las zonas y el fondo no pasan por ahi y se veian nitidos, y por eso el
-// sintoma parecia cosa de los iconos.
-//
-// Esta medido con el motor de Safari: el mismo dibujo, como `<image>`, sale
-// 2,3 veces menos nitido que como vector de verdad. En Chromium el navegador
-// lo vuelve a dibujar al cambiar la escala y no se nota, y de ahi que el fallo
-// solo se viera en iPhone. Forzar un repintado y declarar el tamano dentro del
-// SVG se probaron, y no cambian nada.
-//
-// Un mapa de bits si va como `<image>`: es lo que es, y escalarlo es normal.
+
 var ES_VECTOR = {};
 
 function sueltaIconosVector() {
   var trozos = [];
   Object.keys(PROPIOS).forEach(function (nombre) {
     var svg = PROPIOS[nombre];
-    // Lo guardado es un `<svg viewBox="...">` entero. Aqui se convierte en el
-    // `<symbol>`, que es lo mismo pero para poder usarlo desde otro sitio: el
-    // `viewBox` se queda, que es lo que dice la proporcion del dibujo.
+
+
     if (typeof svg !== "string" || !/^\s*<svg[\s>]/.test(svg)) return;
     var caja = /\bviewBox="([^"]*)"/.exec(svg);
     var abre = svg.indexOf(">"), cierra = svg.lastIndexOf("</svg>");
@@ -1256,9 +661,8 @@ function figuraDe(tipo, conAro) {
   if (SIMBOLOS[tipo]) return '<g class="lam">' + SIMBOLOS[tipo] + "</g>";
   if (!PROPIOS[tipo]) return "";
   var recorte = conAro ? ' clip-path="url(#recorte)"' : "";
-  // El vector, con un `<use>`: el dibujo esta en su `<symbol>` y aqui solo se
-  // dice cual y donde. El navegador lo DIBUJA a la escala a la que se este
-  // viendo, que es lo que lo mantiene nitido por mucho que se acerque.
+
+
   if (ES_VECTOR[tipo]) {
     return '<use class="fig" href="#ico-' + tipo + '" x="-12.2" y="-12.2"'
          + ' width="24.4" height="24.4"' + recorte + "/>";
@@ -1267,41 +671,12 @@ function figuraDe(tipo, conAro) {
        + ' width="24.4" height="24.4"' + recorte + "/>";
 }
 
-// Como se llama un icono cuando no lleva etiqueta propia.
+
 function nombreDe(tipo) {
   return NOMBRES[tipo] || tipo;
 }
 
-// Los iconos, encima del mapa. Uno con un tipo que no exista se salta en vez
-// de dibujar un hueco: mejor un icono de menos que un circulo vacio que nadie
-// sabe de donde sale.
-//
-// El transform lleva tres cosas, y el orden importa: translate al sitio, scale
-// al tamano y rotate para girarlo. La rotacion va la ultima para que gire sobre
-// su propio centro (el 0,0 donde esta dibujado), que es lo que uno espera al
-// girar un icono. Si fuera antes del scale, giraria sobre un centro ya escalado
-// y se iria del sitio.
-//
-// LAS TRANSFORMACIONES, entre el scale y el rotate
-// -----------------------------------------------
-// `sx`, `sy`, `sk` y `op` llegaron con la version 2 del editor. Van en el mismo
-// atributo `transform`, entre el tamaño y el giro, y en este orden por dos
-// razones:
-//
-//   - la escala despues del tamaño, para que `sx` y `sy` sean la forma FINAL del
-//     icono y no se multipliquen por `s`. Un icono de tamano 30 con `sy` de 0.5
-//     sale bajo, no la mitad de grande y aplastado.
-//
-//   - el `skew` antes del giro, porque inclinar despues de girar lean «caido a
-//     un lado», y inclinar antes rotado lee «apegado a la rotacion». Lo segundo
-//     es lo que se quiere.
-//
-// El signo de `sx`/`sy` da la vuelta: -1 es el icono del reves, y no hace falta
-// una clave aparte porque una escala negativa ES un espejo.
-//
-// Y si no hay ninguna transformacion no se escribe nada: el `transform` de un
-// icono corriente tiene que seguir siendo el de siempre, byte a byte, para que el
-// archivo no se llene de `scale(1,1) rotate(0)` que no hacen nada.
+
 function transformacionesDe(ic) {
   var trozos = [];
   var sx = ic.sx === undefined ? 1 : ic.sx;
@@ -1312,41 +687,33 @@ function transformacionesDe(ic) {
 }
 
 ICN.innerHTML = ICONOS.map(function (ic, k) {
-  // `c` en 0 es "sin circulo". Se comprueba en `conAroDe`, que lo mira con
-  // `in` y no por lo que vale.
+
   var conAro = conAroDe(ic);
   var dentro = figuraDe(ic.t, conAro);
   if (!dentro) return "";
 
-  // El <g> de dentro es el que anima. El de fuera lleva la posicion y no se
-  // puede tocar: en SVG el transform de CSS pisa al atributo transform, asi
-  // que animar el de fuera mandaria el icono a la esquina de la hoja.
-  //
-  // `pausa` marca lo que de verdad anima, para poder pararlo cuando no se ve.
-  // Solo se pone si hay animacion: en un icono quieto la clase no haria nada y
-  // solo ensuciaria el DOM.
+
+
+
+
+
   var clase = "an" + (ic.a ? " " + ic.a + " pausa" : "");
   var ondas = ic.a === "ondas" ? '<circle class="onda" r="13.4"/>' : "";
   var clases = "ic" + (conAro ? "" : " sinAro") + (ic.i ? " conInfo" : "");
   var caja = ic.i ? ' class="' + clases + '" data-info="' + k + '"'
                   : ' class="' + clases + '"';
-  // La superficie que recibe el toque, solo en los que llevan informacion.
-  // El aro la daria si lo llevaran, pero un icono sin aro se queda sin nada
-  // que recoja la pulsacion: la imagen tiene el toque desactivado y el dibujo
-  // de un simbolo son trazos sueltos. Sin este circulo el toque se cuela
-  // hasta el mapa y lo que hace es deshacer el zoom.
+
+
+
   var toque = ic.i ? '<circle class="toque" r="13.4"/>' : "";
-  // La intensidad del movimiento va en un `style` con solo la variable, para
-  // que no pise el atributo `transform` de este mismo elemento, que es el que
-  // pone el icono en su sitio. Se omite cuando vale 1, que es lo normal.
-  // Lo mismo con la opacidad, que tambien va en el `style` porque es una
-  // propiedad distinta y no se puede expresar en el `transform`.
+
+
+
   var Variables = (ic.m && ic.m !== 1) ? "--m:" + ic.m : "";
   if (ic.op !== undefined && ic.op !== 1) Variables += ";opacity:" + ic.op;
   var fuerza = Variables ? ' style="' + Variables + '"' : "";
-  // La comilla que cierra el transform va al principio del ultimo trozo. Es
-  // facil dejarla fuera (paso dos veces) y el navegador se traga la etiqueta
-  // entera: el icono desaparece y solo sale un aviso en la consola.
+
+
   return "<g" + caja + fuerza + ' transform="translate(' + ic.x + "," + ic.y
        + ") scale(" + ((ic.s || TAM_ICONO) / 24) + ")"
        + transformacionesDe(ic)
@@ -1358,12 +725,7 @@ ICN.innerHTML = ICONOS.map(function (ic, k) {
        + ondas + dentro + "</g></g>";
 }).join("");
 
-// La caja de una zona, sacada de su poligono: [x, y, ancho, alto].
-//
-// Se calcula en vez de guardarse a mano. Tener las dos cosas era pedir que se
-// desincronizaran, y paso: al ajustar los poligonos las cajas se quedaron
-// viejas y el zoom dejaba parte de la zona fuera de cuadro. Hay una prueba
-// que comprueba que cada caja cubra su poligono.
+
 function caja(puntos) {
   var xs = [], ys = [], p;
   for (var j = 0; j < puntos.length; j++) {
@@ -1375,20 +737,7 @@ function caja(puntos) {
   return [x, y, Math.max.apply(null, xs) - x, Math.max.apply(null, ys) - y];
 }
 
-// Coloca el dibujo para que el rectangulo [x,y,ancho,alto] quepa centrado en
-// el hueco libre que dejan el encabezado y el panel, ampliandolo lo posible.
-//
-// Es un transform CSS sobre el <g>, no un viewBox animado: asi el navegador lo
-// interpola solo y no hace falta ningun bucle en JS.
-//
-// Tres detalles que importan:
-//  - getScreenCTM() del <svg> (que nunca se transforma) trae dos escalas
-//    distintas, c.a para el eje X y c.d para el Y. Usar c.a en los dos ejes
-//    descentra la vista.
-//  - El centro util es el del hueco, no el del svg: si se centra en el svg,
-//    la zona ampliada queda tapada por el panel.
-//  - El panel es barra inferior en vertical y lateral en apaisado, asi que el
-//    hueco se mide de sus rectangulos en vez de suponer donde esta.
+
 function encuadra(x, y, w, h, aire) {
   var c = s.getScreenCTM(), ux = c.a, uy = c.d,
       W = s.clientWidth, H = s.clientHeight,
@@ -1400,10 +749,9 @@ function encuadra(x, y, w, h, aire) {
       ancho = W - izq, alto = H - arriba - abajo,
       k = Math.min(ancho / (ux * w * aire), alto / (uy * h * aire)),
       cx = izq + ancho / 2, cy = arriba + alto / 2;
-  // Solo se frena si el encuadre cambia de verdad. En un movil, `resize` salta
-  // cada vez que se esconde o se asoma la barra del navegador, y encuadra() se
-  // llama tambien ahi: sin esta comprobacion, mover el dedo por la pantalla
-  // dejaria las animaciones congeladas un rato largo sin que nada se moviera.
+
+
+
   var puesto = M.style.transform;
   var nuevo = "translate(" + ((cx - c.e) / ux - k * (x + w / 2)) + "px,"
             + ((cy - c.f) / uy - k * (y + h / 2)) + "px) scale(" + k + ")";
@@ -1415,15 +763,13 @@ function encuadra(x, y, w, h, aire) {
 function pinta(k) {
   A = k;
   for (var j = 0; j < K.length; j++) K[j].classList.toggle("act", j == k);
-  // El mapa avisa de si esta acercado, y los iconos con informacion se agarran
-  // a eso: con el mapa entero delante no reciben el toque, asi que un dedo
-  // encima de uno acerca la zona que tiene debajo, como en cualquier otro
-  // sitio del plano. Con una zona ampliada, el icono manda.
+
+
+
   ICN.classList.toggle("deCerca", k >= 0);
-  // El mismo aviso en `#m`, que es el padre comun de todo lo que dibuja. Lo
-  // necesita la regla que para lo que queda fuera de la pantalla: sin esto, en
-  // iOS, el observador dice que no hay nada a la vista y apaga las 44
-  // animaciones con el mapa entero delante. Se explica en la regla.
+
+
+
   M.classList.toggle("acercado", k >= 0);
 }
 
@@ -1444,32 +790,17 @@ function todo() {
   encuadra(VISTA[0], VISTA[1], VISTA[2], VISTA[3], 1.04);
 }
 
-// --- Cuando no hace falta animar -------------------------------------------
-// Las animaciones son lo unico de esta pagina que trabaja sin parar, y medido
-// resulta que el gasto esta en el fotograma, no en los iconos: da casi lo
-// mismo un icono animado que cuarenta. Lo que de verdad cuesta es no parar
-// nunca, porque el navegador tiene que componer un fotograma a la frecuencia
-// de la pantalla mientras haya algo moviendose. Con cero animaciones no
-// compone ninguno.
-//
-// En un ordenador no se nota. En un telefono de gama baja si, y ahi es donde
-// el mapa se traba. Asi que se para en los dos casos en que nadie mira:
 
-// 1. Mientras el mapa se mueve. Durante el zoom hay que reencuadrar y volver a
-//    dibujar el mapa entero en cada fotograma; si ademas hay cuarenta iconos
-//    animandose, las dos cosas se pelean por el mismo sitio. Se paran un
-//    momento y el movimiento sale limpio. Al acabar siguen por donde iban,
-//    porque `animation-play-state` no reinicia la animacion.
+
+
 var relojFreno = 0;
 
 function frenaUnRato(ms) {
-  // El freno va en #m, que es el padre comun de las zonas y de los iconos: una
-  // sola clase los para todos.
+
   M.classList.add("frenado");
-  // Y `acercando` pone el `will-change` que sube el mapa a su propia capa. Va
-  // aqui porque dura exactamente lo mismo que el freno: mientras el mapa se
-  // mueve. Al soltarse, el navegador vuelve a dibujarlo a la resolucion nueva
-  // en vez de escalar la textura de antes, que es lo que lo saca pixelado.
+
+
+
   M.classList.add("acercando");
   clearTimeout(relojFreno);
   relojFreno = setTimeout(sueltaAnimaciones, ms);
@@ -1477,74 +808,41 @@ function frenaUnRato(ms) {
 
 function sueltaAnimaciones() {
   clearTimeout(relojFreno);
-  // SE SUELTA SIEMPRE, sin mirar si la pagina esta escondida.
-  //
-  // Antes decia `if (!document.hidden)`. Ese `if` era una trampa: en iOS, abrir
-  // el mapa desde la camara deja la pagina un instante en `hidden`, asi que el
-  // reloj de `frenaUnRato` podia saltar mientras la pagina ya no se miraba, veia
-  // `document.hidden` a true y NO quitaba `frenado` - sin dejar ninguna vuelta
-  // atras, porque el reloj ya estaba limpiado. La unica recuperacion que
-  // quedaba era `visibilitychange`, que en iOS no esta garantizado: con la
-  // pagina restaurada de la cache de atras no llega a dispararse.
-  //
-  // El resultado era el mapa entero congelado para siempre - iconos y zonas, los
-  // dos a la vez - sin un solo error en la consola: el zoom seguia funcionando
-  // y la ventana abria, solo las animaciones se quedaban paradas. Ahora lo
-  // unico que decide si el mapa esta escondido es `visibilitychange`, que es
-  // de donde viene, y si ese evento se cuelga ya no importa: al volver a mirar
-  // se llama a esta funcion desde `pageshow` y desde `focus`.
+
+
+
+
+
+
+
+
+
+
+
   M.classList.remove("frenado");
-  // La capa se suelta SIEMPRE, tambien con la pagina escondida. Si se quedara
-  // puesta, el mapa se quedaria escalado como una foto y al volver a mirarlo
-  // los iconos saldrian pixelados.
+
+
   M.classList.remove("acercando");
 }
 
-// 2. Con la pagina escondida (otra pestana delante, o el movil bloqueado). Un
-//    mapa abierto detras no tiene por que seguir gastando bateria.
+
 addEventListener("visibilitychange", function () {
   if (document.hidden) M.classList.add("frenado");
   else sueltaAnimaciones();
 });
 
-// --- Las otras dos puertas de vuelta ----------------------------------------
-// `visibilitychange` es la puertanormal, pero no es la unica que ofrece iOS, y en
-// iOS no siempre llega. Estos dos son la red debajo.
-//
-// `pageshow` se dispara al restaurar la pagina desde la cache de atras, que es
-// justo el camino por el que se pierde `visibilitychange`, y tambien en la carga
-// normal. `focus` se dispara al volver a la pestana.
-//
-// Sueltan SIEMPRE, sin preguntar por `document.hidden`, y esa es la gracia: si
-// el problema de verdad es que iOS se equivoca al decir que la pagina esta
-// escondida, un `if (!document.hidden)` aqui dejaria el mapa congelado igual,
-// que es el fallo que se estaba arreglando. Preguntarle seria volver al mismo
-// error.
-//
-// No se corre el riesgo de soltar el freno con la pagina tapada: ninguno de los
-// dos se dispara al pasar a segundo plano, solo al volver a ella.
+
 addEventListener("pageshow", function () { sueltaAnimaciones(); });
 addEventListener("focus", function () { sueltaAnimaciones(); });
 
-// 3. Lo que ha quedado fuera de la pantalla. Se nota sobre todo ampliado: en un
-//    movil, mirando una zona de cerca, se ven cuatro o cinco cosas de las 58
-//    que hay, y el resto estaba costando lo mismo sin que nadie las viera.
-//
-// Se hace con un IntersectionObserver y no calculando a mano que cae dentro:
-// asi vale tambien al girar el movil, al cambiar de zona y al redimensionar,
-// sin repetir la cuenta en cada sitio. El `rootMargin` deja animandose lo que
-// esta un poco fuera, para que al asomar por el borde ya vaya moviendose.
-//
-// Se observan los dos grupos: las zonas se pausan en su propio poligono y los
-// iconos en su grupo de dentro, asi que se busca quien lleve la clase `pausa`.
+
 function elQueSePausa(nodo) {
   return nodo.classList.contains("pausa") ? nodo : nodo.querySelector(".pausa");
 }
 
 if (window.IntersectionObserver) {
-  // Todos los nodos observados, en una sola lista. Hace falta para el
-  // cortocircuito: la cuenta de «fuera» y la de «cuantos hay» tienen que salir
-  // del MISMO conjunto, o la comparacion no significa nada.
+
+
   var pausables = [], observerRoto = false;
   var vigia = new IntersectionObserver(function (entradas) {
     if (observerRoto) return;
@@ -1552,22 +850,17 @@ if (window.IntersectionObserver) {
       var pausable = elQueSePausa(entradas[j].target);
       if (pausable) pausable.classList.toggle("fuera", !entradas[j].isIntersecting);
     }
-    // --- El cortocircuito ---------------------------------------------------
-    // Si el observador dice que CASI TODO esta fuera, esta mintiendo, y hay que
-    // dejar de hacerle caso. No es una teoria: en iOS dice eso siempre, con el
-    // mapa entero a la vista (medido con `plantilla/diagnostico.html`: 54 de 56
-    // marcados «fuera»).
-    //
-    // Por que hace falta aunque la regla de arriba ya exija `#m.acercado`: con el
-    // mapa ampliado el cortocircuito es lo unico que impide que un observador
-    // que miente se lleve por delante tambien lo que se ve de verdad. Y un
-    // observador que se equivoca no se equivoca en un elemento, se equivoca en
-    // bloque: o acierta o esta roto.
-    //
-    // El precio de que esto se dispare sin querer es pequeno: se pierde la
-    // optimizacion y las animaciones se quedan andando. El precio de que NO se
-    // dispare, con el observador roto, es un mapa congelado sin explicacion.
-    // Ante la duda, que las animaciones anden.
+
+
+
+
+
+
+
+
+
+
+
     if (pausables.length >= 8) {
       var fuera = 0;
       for (var f = 0; f < pausables.length; f++)
@@ -1588,25 +881,20 @@ if (window.IntersectionObserver) {
       }
     }
   };
-  // Empezar a observar UN FOTOGRAMA DESPUES, y no nada mas empezar.
-  //
-  // El primer callback del observador sale antes de que iOS tenga el dibujo
-  // asentado, y con el `<svg>` en `position:fixed` y el mapa ya transformado
-  // es facil que diga que NO intersecta nada: es una pregunta que se hace sobre
-  // una caja que todavia no esta donde va a estar.
-  //
-  // Un fotograma despues el layout ya esta donde va a estar. Es tambien lo que
-  // ya se hace con el fondo grande: no se decide nada de la pagina hasta que hay
-  // algo pintado.
+
+
+
+
+
+
+
   requestAnimationFrame(function () {
     vigilar(ICN);
     vigilar(ZON);
   });
 }
 
-// --- La ventana de informacion ---------------------------------------------
-// Al tocar un icono con informacion sale una ventana con su titulo y su
-// texto. Es la misma ventana para todos: se cambia el contenido y se muestra.
+
 var VENT = document.getElementById("ventana"),
     SELLO = document.getElementById("selloVentana"),
     TVENT = document.getElementById("tVentana"),
@@ -1614,21 +902,12 @@ var VENT = document.getElementById("ventana"),
     BOTON = document.getElementById("botonVentana"),
     CVENT = document.getElementById("cierraVentana");
 
-// Solo http y https. La direccion es texto que viene del archivo, y el archivo
-// lo puede editar cualquiera a mano: un `javascript:` ahi seria una forma de
-// ejecutar codigo en la pagina de quien mira el mapa. Se comprueba aqui
-// ademas de en el editor, porque el editor es el que lo escribe pero el que lo
-// lee es esto.
-//
-// Se exige el dominio entero (`https://` y algo detras). Una direccion sin
-// esquema, como `owncloud.rec.uabc.mx`, el navegador la toma por una ruta
-// relativa a esta pagina y no lleva a ninguna parte.
+
 function enlaceSeguro(u) {
   return esRecurso(u) || /^https?:\/\/[^\s]+$/i.test(String(u || ""));
 }
 
-// La flecha de salir fuera, la misma que la del boton del panel. Es una
-// constante y no un dato del archivo, asi que puede ir con innerHTML.
+
 var FLECHA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
            + ' stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"'
            + ' aria-hidden="true">'
@@ -1636,32 +915,18 @@ var FLECHA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
            + '<path d="M18 14.5v5A1.5 1.5 0 0 1 16.5 21h-12A1.5 1.5 0 0 1 3 19.5'
            + 'v-12A1.5 1.5 0 0 1 4.5 6h5"/></svg>';
 
-// La flecha de descarga, para el boton que lleva a un documento. Es la misma
-// idea que la de salir fuera pero al reves: aqui el archivo se queda, no se
-// va a otra pagina, y de un vistazo hay que poder saber cual de las dos cosas
-// hace cada boton.
+
 var DESCARGA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
              + ' stroke-width="2.4" stroke-linecap="round"'
              + ' stroke-linejoin="round" aria-hidden="true">'
              + '<path d="M12 3.5v11"/><path d="M7.5 10 12 14.5 16.5 10"/>'
              + '<path d="M4.5 19.5h15"/></svg>';
 
-// --- Los archivos de RecursosExtra ------------------------------------------
-// Un boton puede llevar a una direccion de fuera o a un archivo del propio
-// repositorio. Los archivos viven en RecursosExtra, en la raiz, un nivel por
-// encima de esta pagina: el croquis esta dentro de plantilla/.
-//
-// No van dentro del croquis porque el croquis se descarga ENTERO al abrir el
-// QR: un PDF de unos megas en base64 dentro del HTML dejaria el mapa
-// inservible en un movil, y se bajaria aunque nadie lo abriera.
+
 var CARPETA_RECURSOS = "RecursosExtra/";
 var BASE_RECURSOS = "../" + CARPETA_RECURSOS;
 
-// Las extensiones que se ensenan en una vista previa. Las demas se descargan,
-// porque no hay nada que mirar dentro. La misma lista esta en
-// editor/validar.py, y una prueba comprueba que las dos dicen lo mismo: el
-// croquis decide al pulsar y el editor al elegir, y ninguno de los dos puede
-// preguntarle al otro en ese momento.
+
 var IMAGENES = ["png", "jpg", "jpeg", "webp", "gif", "avif", "svg", "bmp"];
 
 function esRecurso(u) {
@@ -1682,18 +947,11 @@ function esImagen(u) {
   return punto > 0 && IMAGENES.indexOf(limpio.slice(punto + 1)) >= 0;
 }
 
-// Arma un boton: el texto, la direccion y que pasa al pulsarlo.
-//
-// El elemento es un <a> de verdad, con su `href`, y no un boton que llame a
-// window.open: asi funcionan el clic con la rueda, el de en medio y el menu de
-// «abrir en otra pestana», que es lo que espera cualquiera al ver un enlace.
-// Y con `href` puesto, si el JavaScript fallara el boton seguiria llevando a
-// donde tiene que llevar.
+
 function montaEnlace(a, texto, destino) {
   a.textContent = "";
-  // La comprobacion va AQUI y no en quien llama: este es el unico sitio que
-  // pone la direccion en el enlace, asi que es el unico por el que se puede
-  // colar una mala, venga de donde venga.
+
+
   if (!texto || !enlaceSeguro(destino)) {
     a.hidden = true;
     a.removeAttribute("href");
@@ -1703,10 +961,9 @@ function montaEnlace(a, texto, destino) {
   a.hidden = false;
   a.href = direccionDe(destino);
   a.dataset.destino = destino;
-  // Un archivo del propio sitio se descarga con `download`, y eso solo
-  // funciona en el mismo dominio. Estos lo estan: los sirve el mismo GitHub
-  // Pages que sirve esta pagina. Fuera, `download` se ignora y el navegador
-  // abre el archivo, que es lo unico que puede hacer.
+
+
+
   if (archivo) {
     a.setAttribute("download", "");
     a.removeAttribute("target");
@@ -1718,16 +975,14 @@ function montaEnlace(a, texto, destino) {
   } else {
     a.removeAttribute("download");
     a.setAttribute("target", "_blank");
-    // `noopener` porque el destino es ajeno: sin el, esa pagina puede
-    // manipular esta desde `window.opener`.
+
     a.setAttribute("rel", "noopener noreferrer");
   }
   a.innerHTML = archivo ? DESCARGA : FLECHA;
   a.appendChild(document.createTextNode(texto));
 }
 
-// Lo unico que el <a> no puede hacer solo es ensenar la vista previa, asi que
-// es lo unico que se intercepta. Todo lo demas lo hace el navegador.
+
 function alPulsarEnlace(e) {
   var destino = e.currentTarget.dataset.destino;
   if (esRecurso(destino) && esImagen(destino)) {
@@ -1736,39 +991,32 @@ function alPulsarEnlace(e) {
   }
 }
 
-// --- La vista previa ---------------------------------------------------------
+
 var VISTA_F = document.getElementById("vista"),
     FVISTA = document.getElementById("fvista"),
     CERRAR_VISTA = document.getElementById("cierraVista"),
-    // Descargar. Se arma aqui y no en el marcado porque lleva un `href` que
-    // solo se sabe al abrir la vista, y un `<a>` sin destino no vale.
-    //
-    // Y es un `<a>` con `download` y no un boton que llame a nada: asi el
-    // navegador hace el trabajo entero -su barra de progreso, su nombre de
-    // archivo-, y funciona aunque el JavaScript falle despues. `download`
-    // solo se obedece en el mismo dominio, y estos archivos lo estan: los
-    // sirve el mismo GitHub Pages que sirve esta pagina.
+
+
+
+
+
     BAJA = document.createElement("a");
 BAJA.id = "bajaVista";
 BAJA.innerHTML = DESCARGA;
 BAJA.setAttribute("download", "");
 BAJA.setAttribute("aria-label", "Descargar la imagen");
-// A la izquierda de cerrar: descargar es lo que se hace a proposito y cerrar
-// lo que se hace al acabar, y el que se pulsa sin querer conviene que sea el
-// de la punta.
+
 CERRAR_VISTA.parentNode.insertBefore(BAJA, CERRAR_VISTA);
 
 function abreVista(destino) {
   var url = direccionDe(destino);
   FVISTA.src = url;
   FVISTA.alt = nombreDeRecurso(destino);
-  // El boton de descargar apunta al mismo archivo, con su nombre por delante
-  // para que se guarde con el que tiene y no con el que le ponga el navegador.
+
   BAJA.href = url;
   BAJA.setAttribute("download", nombreDeRecurso(destino));
   VISTA_F.hidden = false;
-  // Un fotograma con `hidden` ya quitado antes de la clase, o el navegador no
-  // ve el cambio y la vista aparece de golpe sin la transicion.
+
   requestAnimationFrame(function () { VISTA_F.classList.add("on") });
   document.getElementById("cierraVista").focus({preventScroll: true});
 }
@@ -1779,8 +1027,7 @@ function cierraVista() {
   setTimeout(function () {
     if (VISTA_F.classList.contains("on")) return;
     VISTA_F.hidden = true;
-    // Se suelta la imagen: un plano grande se quedaria en memoria sin que
-    // nadie lo mire, y esto se abre en un movil.
+
     FVISTA.removeAttribute("src");
   }, 220);
 }
@@ -1790,10 +1037,7 @@ VISTA_F.addEventListener("pointerdown", function (e) {
   if (e.target === VISTA_F) cierraVista();
 });
 
-// El boton del mapa, el que sale debajo de los accesos rapidos. Se arma aqui
-// entero, texto y direccion, desde el bloque ENLACE: el marcado solo tiene el
-// hueco donde va. Un croquis sin boton -ENLACE en null- se queda con el hueco
-// vacio y el filo no se pinta (lo esconde `#enlaces:empty`).
+
 var ENLACES = document.getElementById("enlaces");
 if (ENLACE && ENLACE.t && ENLACE.u) {
   var ENLACE_MAPA = document.createElement("a");
@@ -1803,9 +1047,7 @@ if (ENLACE && ENLACE.t && ENLACE.u) {
   ENLACES.appendChild(ENLACE_MAPA);
 }
 
-// El boton que sale dentro de la ventana, si el icono lleva uno. Se vacia
-// siempre antes: la ventana es una sola para todos los iconos, asi que si no
-// se limpiara, el enlace del icono de antes seguiria ahi al abrir otro.
+
 function pintaBoton(ic) {
   BOTON.textContent = "";
   var u = ic.u;
@@ -1813,61 +1055,29 @@ function pintaBoton(ic) {
   var a = document.createElement("a");
   a.className = "enlace";
   a.addEventListener("click", alPulsarEnlace);
-  // El texto y la direccion salen del archivo. La direccion la comprueba
-  // `montaEnlace` antes de ponerla en el `href`: lo que no pase la prueba no
-  // llega a ser un enlace.
+
+
   montaEnlace(a, u[0], u[1]);
   if (!a.hidden) BOTON.appendChild(a);
 }
 
-// Cuanto mide el sello de la ventana y cuantos pixeles se dejan libres a cada
-// lado del dibujo. El lado tiene que ser el mismo que el `width` del sello en
-// el CSS; si no coincide, el margen sale mas grande o mas pequeno de lo pedido.
+
 var SELLO_LADO = 52, SELLO_LIBRES = 5;
 
-// Encaja el dibujo dentro del sello dejandole `SELLO_LIBRES` pixeles libres por
-// los cuatro lados.
-//
-// El hueco se hace moviendo el `viewBox`, no con un `padding`: un padding fijo
-// deja el mismo hueco en unidades del dibujo, y como cada icono ocupa su caja
-// lo que quiere, unos salen pegados al borde y otros diminutos. Midiendo el
-// dibujo de verdad, todos acaban del mismo tamano con el mismo aire.
-//
-// Se mide con `getBBox()`, que da la caja del DIBUJO y no la del elemento: en
-// un simbolo son sus trazos y en una imagen es su recuadro. Necesita el
-// elemento dentro del documento y con caja, asi que esto va despues de meter
-// el dibujo en el sello y con la ventana ya sin `hidden`.
-//
-// Si algo de esto falla, se deja el `viewBox` que traia el SVG: un icono algo
-// mas pequeno es mucho mejor que una ventana que no abre.
+
 function encajaSello(svg) {
   if (!svg || !svg.getBBox) return;
   var caja = cajaDeLaFigura(svg);
   if (!caja || !(caja.width > 0) || !(caja.height > 0)) return;
   var ancho = svg.getBoundingClientRect().width || SELLO_LADO;
-  // El lado del viewBox para que el dibujo quepa en (ancho - 2 * libres).
+
   var lado = Math.max(caja.width, caja.height) * ancho / (ancho - 2 * SELLO_LIBRES);
   var cx = caja.x + caja.width / 2, cy = caja.y + caja.height / 2;
   svg.setAttribute("viewBox", (cx - lado / 2) + " " + (cy - lado / 2)
                               + " " + lado + " " + lado);
 }
 
-// La caja REAL que ocupa el dibujo dentro del `<svg>`, sin fiarse de `getBBox()`.
-//
-// Un `<use>` NO se puede medir con `getBBox()`. En Safari devuelve la caja de lo
-// que hay DENTRO del `<symbol>`, en el sistema de coordenadas del symbol, sin
-// aplicar el `x`, el `y`, el `width` y el `height` del `<use>`: mide una cosa y el
-// dibujo esta en otra. En Chromium si lo tiene en cuenta, y ahi se ve bien, que
-// es justo lo que hace que esto solo saliera en iOS.
-//
-// Con lo de `agua-2` salia de quitarle el 34% de abajo a la gota. Medido: el
-// dibujo va de y=-12.20 a y=12.20, y el viewBox se|centeraba en y=16.40 con medio
-// lado 20.30, o sea de y=-3.90 a y=36.70. Lo que queda por debajo de -3.90 se
-// sale del viewBox y el navegador lo recorta, sin decir nada.
-//
-// Asi que la caja se calcula, que es lo que haria el navegador: el `<symbol>`
-// dice su proporcion en su viewBox, y el `<use>` lo encaja en su rectangulo
-// conservando la proporcion y centrandolo, que es lo que hace `meet`.
+
 function cajaDeLaFigura(svg) {
   var dibujo = svg && svg.firstElementChild;
   if (!dibujo) return null;
@@ -1879,15 +1089,14 @@ function cajaDeLaFigura(svg) {
     if (!simbolo) return null;
     var vb = simbolo.viewBox && simbolo.viewBox.baseVal;
     var rx = numeroDe(dibujo, "x"), ry = numeroDe(dibujo, "y");
-    // Sin viewBox no hay proporcion que mirar y el dibujo va a su tamano: el
-    // rectangulo del <use> ES la caja.
+
     if (!vb || !(vb.width > 0) || !(vb.height > 0))
       return {x: rx, y: ry,
               width: numeroDe(dibujo, "width"),
               height: numeroDe(dibujo, "height")};
     var rw = numeroDe(dibujo, "width") || vb.width;
     var rh = numeroDe(dibujo, "height") || vb.height;
-    // `meet`: cabe entero, centrado, sin deformar.
+
     var k = Math.min(rw / vb.width, rh / vb.height);
     var dw = vb.width * k, dh = vb.height * k;
     return {x: rx + (rw - dw) / 2 + vb.x * k,
@@ -1895,12 +1104,12 @@ function cajaDeLaFigura(svg) {
             width: dw, height: dh};
   }
 
-  // Para un `<image>` y para un `<g>` con trazos, `getBBox()` si sirve.
+
   if (!dibujo.getBBox) return null;
   try {
     return dibujo.getBBox();
   } catch (e) {
-    return null;                    // el nodo no se puede medir todavia
+    return null;
   }
 }
 
@@ -1914,19 +1123,15 @@ function abreVentana(k) {
   if (!ic || !ic.i) return;
   TVENT.textContent = ic.i[0];
   XVENT.textContent = ic.i[1];
-  // La miniatura se dibuja con la misma figura que el icono del mapa, para
-  // que se vea de cual se trata. El SVG se arma aqui y no se copia del mapa
-  // porque alli el icono lleva el transform de la posicion, y copiarlo tal
-  // cual lo dejaria fuera de la caja.
-  //
-  // Los iconos propios van DENTRO del svg, como imagen, y no sueltos en un
-  // `<img>`: asi el encaje lo hace el propio SVG, que sabe mantener la
-  // proporcion, y el dibujo nunca se recorta. Un `<img>` con `object-fit:
-  // cover` escala la imagen hasta llenar la caja, y una gota alargada perdia
-  // la punta y la base.
-  //
-  // Se pide `figuraDe(..., false)`, sin el recorte en circulo: aqui el icono
-  // va suelto dentro del sello, y el circulo lo pone el fondo crema.
+
+
+
+
+
+
+
+
+
   var conAro = conAroDe(ic);
   SELLO.setAttribute("class", conAro ? "" : "sinAro");
   SELLO.innerHTML = '<svg viewBox="-13 -13 26 26">' + figuraDe(ic.t, false)
@@ -1934,13 +1139,11 @@ function abreVentana(k) {
   SELLO.setAttribute("aria-hidden", "true");
   pintaBoton(ic);
   VENT.hidden = false;
-  // El encaje va aqui: con la ventana en `display:none` no hay caja que medir.
-  // Y va antes del fotograma de la transicion, cuando el navegador todavia no
-  // ha pintado, asi que el ajuste no se llega a ver.
+
+
   encajaSello(SELLO.firstElementChild);
-  // Un fotograma con `hidden` ya quitado antes de poner la clase, o el
-  // navegador no ve el cambio de estado y la ventana aparece de golpe sin
-  // transicion.
+
+
   requestAnimationFrame(function () { VENT.classList.add("abierta") });
   CVENT.focus({preventScroll: true});
 }
@@ -1948,17 +1151,15 @@ function abreVentana(k) {
 function cierraVentana() {
   if (VENT.hidden) return;
   VENT.classList.remove("abierta");
-  // Se espera a que termine la transicion para volver a esconderla. Si se
-  // esconde antes, desaparece de golpe; y si se deja visible, el fondo sigue
-  // interceptando el toque y el mapa deja de responder.
+
+
   setTimeout(function () {
     if (!VENT.classList.contains("abierta")) VENT.hidden = true;
   }, 240);
 }
 
 CVENT.addEventListener("click", cierraVentana);
-// Tocar el fondo tambien cierra. Se compara contra el propio fondo y no
-// contra la caja, para que un clic dentro del texto no la cierre.
+
 VENT.addEventListener("pointerdown", function (e) {
   if (e.target === VENT) cierraVentana();
 });
@@ -1966,14 +1167,7 @@ addEventListener("keydown", function (e) {
   if (e.key === "Escape") cierraVentana();
 });
 
-// Un icono con informacion se toca, pero SOLO con una zona ampliada. Con el
-// mapa entero no se puede: en esa vista los iconos son marcas de referencia y
-// una ventana encima taparia justo lo que se estaba mirando.
-//
-// El toque no puede llegar al <svg>, que es el que hace el zoom: si llegara,
-// ademas de abrir la ventana se desharia el zoom por detras. Por eso se corta
-// en el pointerdown, que es cuando el <svg> escucha. Sin zoom no se corta
-// nada, y el toque acerca la zona de debajo igual que en el resto del mapa.
+
 ICN.addEventListener("pointerdown", function (e) {
   if (A >= 0 && e.target.closest(".conInfo")) e.stopPropagation();
 });
@@ -1983,9 +1177,7 @@ ICN.addEventListener("click", function (e) {
   if (g) abreVentana(+g.dataset.info);
 });
 
-// Si ya hay una zona ampliada, cualquier toque deshace el zoom, toque donde
-// toque: al ampliar, la zona ocupa casi toda la pantalla y no queda fondo
-// donde pulsar.
+
 s.addEventListener("pointerdown", function (e) {
   if (A >= 0) return todo();
   var g = e.target.closest(".g");
@@ -1996,28 +1188,10 @@ CH.addEventListener("click", function (e) {
   if (c) sel(+c.dataset.i);
 });
 
-// --- El fondo, que es una sola pieza ---------------------------------------
-// El fondo es el POSTER ENTERO -el mapa y los dos banners- en un solo archivo,
-// el SVG del que sale todo. Antes eran cuatro WebP: el fondo en dos tamanos y
-// los dos banners, y habia que decidir cual se pedia y cuando.
-//
-// Ahora no hay nada que decidir. El SVG es vectorial, asi que el mapa se ve
-// igual de nitido a dos que a seis veces, y por eso no hace falta una version
-// en alta ni pedirla al acercar: no habria nada que ganar. Lo que se paga es el
-// peso de arranque, que se mide en el README.
-//
-// Y el mapa no se ha movido ni un pixel: la pieza va en `y=-217`, que es donde
-// el poster estaba menos el pixel de `DESPLAZE_Y`, el mismo que arrastraba el
-// fondo rasterizado. Las diez zonas y los cuarenta y seis iconos siguen en las
-// coordenadas de siempre.
-//
-// Lo que si se necesita es esperar a que el SVG este antes de medir el lienzo:
-// hasta que no se ha pintado, el <svg> no tiene tamano real y el encuadre
-// saldria mal.
+
 var ARTE = document.getElementById("arte");
 
-// El encuadre depende del alto del encabezado y del panel, que cambian al
-// girar el movil o al cruzar el punto donde el panel pasa a lateral.
+
 addEventListener("resize", function () { A >= 0 ? sel(A) : todo() });
 if (!ARTE.complete) ARTE.addEventListener("load", todo);
 todo();
