@@ -361,7 +361,7 @@ def formas_simbolos() -> dict:
     for clave, trozos in re.findall(
             r"^\s*(\w+):\s*((?:\s*'[^']*'\s*\+?)+)", cuerpo, flags=re.M):
         formas[clave] = "".join(re.findall(r"'([^']*)'", trozos))
-    if not formas:
+    if not formas and "varSIMBOLOS={}" not in cuerpo.replace(" ", ""):
         raise ErrorEditor(
             "No se pudo leer ningun simbolo del bloque SIMBOLOS de croquis.html.\n"
             "Cada uno tiene que verse asi, en una linea que empiece por su nombre:\n"
@@ -1219,8 +1219,16 @@ class Manejador(BaseHTTPRequestHandler):
                 # menos, y la biblioteca guarda el archivo original.
                 datos["propios"] = propios_para_editar(datos["propios"])
                 formas = formas_simbolos()
-                datos["simbolos"] = SIMBOLOS
-                datos["formas"] = formas
+                # El editor no ofrece los simbolos de serie: quien edita solo usa
+
+                # los iconos que crea. Se siguen validando (validar.py los
+
+                # conoce) y se comprueba la coincidencia con el croquis, pero
+
+                # no se mandan, para que no aparezcan en la paleta.
+
+                datos["simbolos"] = {}
+                datos["formas"] = {}
                 datos["avisos"] = tipos_coinciden(formas)
                 datos["ancho"], datos["alto"] = ANCHO, ALTO
                 datos["topes"] = {"tam": [MIN_TAM_ICONO, MAX_TAM_ICONO],
