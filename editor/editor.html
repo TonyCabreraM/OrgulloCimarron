@@ -740,8 +740,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <div class="campo" style="margin-top:11px">
         <label for="fTamNuevo">Tamaño de los nuevos</label>
         <div class="fila">
-          <input type="range" id="fTamNuevo" min="16" max="400" step="1" value="46">
-          <input type="number" id="nTamNuevo" min="16" step="1" value="46"
+          <input type="range" id="fTamNuevo" min="1" max="400" step="1" value="46">
+          <input type="number" id="nTamNuevo" min="1" step="1" value="46"
                  style="width:82px" aria-label="Tamaño de los nuevos, exacto">
         </div>
         <div class="pista">
@@ -778,8 +778,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
       <div class="campo">
         <label for="fTam">Tamaño</label>
         <div class="fila">
-          <input type="range" id="fTam" min="16" max="400" step="1" value="46">
-          <input type="number" id="nTam" min="16" step="1" value="46"
+          <input type="range" id="fTam" min="1" max="400" step="1" value="46">
+          <input type="number" id="nTam" min="1" step="1" value="46"
                  style="width:82px" aria-label="Tamaño exacto">
         </div>
         <div class="pista">
@@ -978,8 +978,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
         <div class="campo">
           <label for="dTam">Tamaño</label>
           <div class="fila">
-            <input type="range" id="dTam" min="16" max="400" step="1" value="46">
-            <input type="number" id="nDTam" min="16" step="1" value="46"
+            <input type="range" id="dTam" min="1" max="400" step="1" value="46">
+            <input type="number" id="nDTam" min="1" step="1" value="46"
                    style="width:82px" aria-label="Tamaño exacto">
           </div>
         </div>
@@ -1373,7 +1373,7 @@ function sePisan(a, b) {
 
 // Lo que dice el servidor (editor/validar.py). Aquí se adelanta para avisar
 // mientras se edita y no al pulsar Guardar; el que decide es el servidor.
-var TAM_MIN = 16, TAM_MAX = 100000, ROT_MIN = -180, ROT_MAX = 180;
+var TAM_MIN = 1, TAM_MAX = 100000, ROT_MIN = -180, ROT_MAX = 180;
 // El tope de la BARRA de tamaño. No es el maximo de verdad, que es TAM_MAX y
 // lo manda el servidor: es hasta donde llega la barra. La barra esta para
 // ajustar rapido los tamaños normales, y en la casilla de al lado cabe
@@ -3535,7 +3535,7 @@ fetch("/api/estado").then(function (r) {
   // Los topes del tamano vienen del servidor, que es quien los comprueba: si
   // los deslizadores se movieran a otra cosa, dejarian pasar lo que luego
   // rechazaria el guardado.
-  var t = (E.topes && E.topes.tam) || [16, 100000];
+  var t = (E.topes && E.topes.tam) || [1, 100000];
   TAM_MIN = t[0]; TAM_MAX = t[1];
   // La barra llega hasta TAM_BARRA, no hasta TAM_MAX: con la barra a 100000 no
   // se podría elegir ni 50. La casilla de número sí llega al máximo de verdad.

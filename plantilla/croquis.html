@@ -25,6 +25,8 @@ body{
   touch-action:none;-webkit-tap-highlight-color:transparent;
 }
 #s{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+#s.panning{cursor:grabbing}
+#m.panning{transition:none}
 
 
 
@@ -1201,6 +1203,7 @@ function cierraVentana() {
 CVENT.addEventListener("click", cierraVentana);
 
 VENT.addEventListener("pointerdown", function (e) {
+  if (e.button !== 0) return;
   if (e.target === VENT) cierraVentana();
 });
 addEventListener("keydown", function (e) {
@@ -1209,19 +1212,59 @@ addEventListener("keydown", function (e) {
 
 
 ICN.addEventListener("pointerdown", function (e) {
+  // El boton central se deja pasar para poder arrastrar el mapa con el.
+  if (e.button === 1) return;
   if (A >= 0 && e.target.closest(".conInfo")) e.stopPropagation();
 });
 ICN.addEventListener("click", function (e) {
+  if (e.button !== 0) return;
   if (A < 0) return;
   var g = e.target.closest("[data-info]");
   if (g) abreVentana(+g.dataset.info);
 });
 
 
+var pan = null;
 s.addEventListener("pointerdown", function (e) {
+  if (e.button === 1) {
+    // Pan con el boton central del raton: se agarra y se arrastra el mapa.
+    e.preventDefault();
+    var t = M.style.transform || "";
+    var m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/.exec(t);
+    var x = m ? +m[1] : 0, y = m ? +m[2] : 0, k = m ? +m[3] : 1;
+    pan = {id: e.pointerId, startX: e.clientX, startY: e.clientY,
+           x: x, y: y, k: k};
+    s.classList.add("panning");
+    M.classList.add("panning");
+    M.classList.add("acercando");
+    try { s.setPointerCapture(e.pointerId); } catch (err) {}
+    return;
+  }
   if (A >= 0) return todo();
   var g = e.target.closest(".g");
   if (g) sel(+g.dataset.i);
+});
+s.addEventListener("pointermove", function (e) {
+  if (!pan || e.pointerId !== pan.id) return;
+  var dx = e.clientX - pan.startX, dy = e.clientY - pan.startY;
+  M.style.transform = "translate(" + (pan.x + dx) + "px,"
+                    + (pan.y + dy) + "px) scale(" + pan.k + ")";
+});
+function finPan(e) {
+  if (!pan || (e && e.pointerId !== pan.id)) return;
+  try { s.releasePointerCapture(pan.id); } catch (err) {}
+  pan = null;
+  s.classList.remove("panning");
+  M.classList.remove("panning");
+  M.classList.remove("acercando");
+}
+s.addEventListener("pointerup", finPan);
+s.addEventListener("pointercancel", finPan);
+s.addEventListener("mousedown", function (e) {
+  if (e.button === 1) e.preventDefault();
+});
+s.addEventListener("auxclick", function (e) {
+  if (e.button === 1) e.preventDefault();
 });
 CH.addEventListener("click", function (e) {
   var c = e.target.closest(".chip");

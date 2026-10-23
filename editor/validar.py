@@ -47,7 +47,7 @@ MARGEN_ICONO = 12
 # altisimo para que en la practica no haya, pero existe para que un dedazo (un
 # cero de mas) no meta un numero absurdo en el croquis.
 TAM_ICONO = 46
-MIN_TAM_ICONO = 16
+MIN_TAM_ICONO = 1
 MAX_TAM_ICONO = 100_000
 
 # Los iconos propios son imagenes guardadas DENTRO del propio croquis, en
