@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Mapa · Día del Orgullo Cimarrón 2026</title>
+<link rel="preload" as="image" href="FinalSinCosas.jpg?v=14a13a19" fetchpriority="high">
 <style>
 :root{
   --papel:#f3f9ee; --fondo:#dfeada; --tinta:#0a4842; --pasto:#179e68;
@@ -328,7 +329,8 @@ body{
   <g id="m">
     <g id="hoja">
       <image id="arte" href="FinalSinCosas.jpg?v=14a13a19" x="0" y="-217"
-             width="1224" height="1224" preserveAspectRatio="none"/>
+             width="1224" height="1224" preserveAspectRatio="none"
+             fetchpriority="high" decoding="sync"/>
     </g>
     <g id="zonas"></g>
     <g id="iconos"></g>
@@ -1276,8 +1278,8 @@ var ARTE = document.getElementById("arte");
 
 
 addEventListener("resize", function () { A >= 0 ? sel(A) : todo() });
-if (!ARTE.complete) ARTE.addEventListener("load", todo);
-todo();
+if (!ARTE.complete) ARTE.addEventListener("load", todo, {once: true});
+else todo();
 </script>
 </body>
 </html>

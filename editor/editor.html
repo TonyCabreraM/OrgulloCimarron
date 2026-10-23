@@ -131,6 +131,10 @@ main{display:grid;grid-template-columns:1fr 372px;min-height:0}
 /* --- panel --- */
 #panel{background:var(--panel);border-left:1px solid var(--linea);overflow-y:auto}
 .bloque{border-bottom:1px solid var(--linea);padding:13px 14px}
+.bloque h2{cursor:pointer;user-select:none}
+.bloque h2::after{content:" ▾";font-size:.85em;opacity:.5;margin-left:4px}
+.bloque.cerrado > :not(h2){display:none}
+.bloque.cerrado h2::after{content:" ▸"}
 .bloque h2{
   font-size:10.5px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;
   color:var(--tenue);margin:0 0 10px;
@@ -2921,6 +2925,29 @@ function recargaBiblioteca() {
     .then(function (d) { if (d && d.biblioteca) { E.biblioteca = d.biblioteca; dibuja() } })
     .catch(function () {});
 }
+
+// --- bloques colapsables ---------------------------------------------------
+// Los bloques del panel se pueden plegar pulsando su titulo, para no tener
+// veinte cosas abiertas a la vez cuando se edita una zona o un icono. El
+// estado se recuerda en el navegador, por nombre del bloque.
+(function () {
+  var clave = "editorBloquesCerrados";
+  var cerrados = {};
+  try { cerrados = JSON.parse(localStorage.getItem(clave) || "{}") } catch (e) {}
+  document.querySelectorAll(".bloque").forEach(function (b) {
+    var h = b.querySelector("h2");
+    if (!h) return;
+    var id = b.id || (h.textContent || "").trim();
+    if (!id) return;
+    if (cerrados[id]) b.classList.add("cerrado");
+    h.addEventListener("click", function () {
+      b.classList.toggle("cerrado");
+      if (b.classList.contains("cerrado")) cerrados[id] = true;
+      else delete cerrados[id];
+      try { localStorage.setItem(clave, JSON.stringify(cerrados)) } catch (e) {}
+    });
+  });
+})();
 
 listaBiblioteca.addEventListener("click", function (ev) {
   // La × de una fila: borra la imagen de la biblioteca. Es lo único del editor
