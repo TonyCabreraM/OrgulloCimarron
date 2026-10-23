@@ -403,6 +403,10 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
    marcada, y el filo rojo lo llevan todas las esquinas por igual. */
 #gZonas circle.acto{fill:var(--oro);stroke:#8a6a00;stroke-width:2.5}
 #gIconos g{cursor:move}
+/* Una capa oculta no se dibuja: ni se ve ni se puede tocar. Una bloqueada se
+   ve pero no se puede seleccionar ni mover: sirve para no tocar sin querer. */
+#gZonas .z.oculto, #gIconos g.oculto { display: none; }
+#gZonas .z.bloqueado, #gIconos g.bloqueado { opacity: .45; cursor: not-allowed; }
 #gIconos .aro{fill:#ffffffdd;stroke:#0a484266;stroke-width:1.2;
               vector-effect:non-scaling-stroke}
 #gIconos .lam *{fill:none;stroke:var(--tinta);stroke-width:1.9;
@@ -642,6 +646,8 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
               data-panel="modelos">Modelos</button>
       <button class="pestana" type="button" role="tab"
               data-panel="mapa">Mapa</button>
+      <button class="pestana" type="button" role="tab"
+              data-panel="capas">Capas</button>
     </div>
 
     <div class="hoja" data-panel="zona">
@@ -950,6 +956,32 @@ input[type=range]{width:100%;accent-color:var(--verde);margin:2px 0 0}
     </div>
 
     </div>
+
+    <div class="hoja" data-panel="capas">
+
+    <div class="bloque">
+      <h2>Capas</h2>
+      <div class="pista">
+        Las capas sirven para organizar el mapa mientras se edita: se pueden
+        ocultar o bloquear, y los elementos nuevos van a la capa activa. No se
+        publican: el croquis publicado dibuja todo.
+      </div>
+      <div class="fila" style="margin-top:8px">
+        <input type="text" id="nuevaCapa" maxlength="24"
+               placeholder="Nombre de la nueva capa" style="flex:1">
+        <button class="boton" id="btnNuevaCapa">Nueva capa</button>
+      </div>
+      <div id="listaCapas" style="margin-top:10px"></div>
+      <div class="campo" style="margin-top:10px">
+        <label for="capaActiva">Capa activa (donde van los elementos nuevos)</label>
+        <select id="capaActiva"></select>
+      </div>
+      <div class="fila" style="margin-top:10px">
+        <button class="boton" id="btnMoverACapa">Mover los seleccionados a esta capa</button>
+      </div>
+    </div>
+
+    </div>
   </aside>
 </main>
 
@@ -1125,6 +1157,11 @@ var s = document.getElementById("s"),
     listaPropios = document.getElementById("listaPropios"),
     listaBiblioteca = document.getElementById("listaBiblioteca"),
     listaModelos = document.getElementById("listaModelos"),
+    listaCapas = document.getElementById("listaCapas"),
+    nuevaCapa = document.getElementById("nuevaCapa"),
+    btnNuevaCapa = document.getElementById("btnNuevaCapa"),
+    capaActiva = document.getElementById("capaActiva"),
+    btnMoverACapa = document.getElementById("btnMoverACapa"),
     DIA = document.getElementById("dialogo"),
     PREVIO = document.getElementById("previoDialogo"),
     dNombre = document.getElementById("dNombre"),
@@ -1554,7 +1591,9 @@ function dibuja() {
   gZonas.innerHTML = E.zonas.map(function (z, k) {
     var a = adornosDe(z);
     var clase = "z" + (sel && sel.tipo === "zona" && sel.i === k ? " sel" : "")
-              + (mal.zonas[k].length ? " mal" : "");
+              + (mal.zonas[k].length ? " mal" : "")
+              + (capaVisible(capaDeElemento(z)) ? "" : " oculto")
+              + (capaBloqueada(capaDeElemento(z)) ? " bloqueado" : "");
     // Los adornos van como variables y no como colores a pelo: si se pusiera el
     // color directamente, ganaria al del resaltado y la zona elegida no se
     // distinguiria de las demas. Asi el filo de seleccion manda sobre el color
@@ -1597,6 +1636,8 @@ function dibuja() {
     if (ic.i) clases.push("conInfo");
     if (ic.a) clases.push("animado");
     if (!conAro) clases.push("sinAro");
+    if (!capaVisible(capaDeElemento(ic))) clases.push("oculto");
+    if (capaBloqueada(capaDeElemento(ic))) clases.push("bloqueado");
     // Ojo con las comillas del transform: si se cuela el > sin cerrar el
     // atributo, el navegador se traga la etiqueta entera y el icono no sale.
     // Es justo el fallo que documenta el README del croquis.
@@ -1618,6 +1659,7 @@ function dibuja() {
   }).join("");
 
   pintaPanel(mal);
+  pintaCapas();
 }
 
 function pintaPanel(mal) {
@@ -1647,6 +1689,7 @@ function pintaPanel(mal) {
   document.getElementById("sinIconos").style.display = E.iconos.length ? "none" : "";
   pintaPropios();
   pintaBiblioteca();
+  pintaCapas();
 
   var todos = [];
   E.zonas.forEach(function (z, k) {
@@ -1935,6 +1978,47 @@ function pintaBiblioteca() {
            + '" title="Borrar ' + escapa(b.nombre) + ' de Guardados">×</button>'
            + "</div>";
     }).join("");
+}
+
+// --- Capas -----------------------------------------------------------------
+// Las capas son solo una ayuda para organizar mientras se edita: una capa
+// oculta no se dibuja y una bloqueada no se puede tocar. No se publican: el
+// croquis publicado dibuja todo lo que hay.
+function capaDeElemento(el) {
+  if (Array.isArray(el)) {
+    var a = (el.length > 4 && el[4] && typeof el[4] === "object") ? el[4] : {};
+    return a.capa || "principal";
+  }
+  return (el && el.capa) || "principal";
+}
+function capaVisible(id) {
+  var c = (E.capas || []).find(function (x) { return x.id === id });
+  return c ? c.visible !== false : true;
+}
+function capaBloqueada(id) {
+  var c = (E.capas || []).find(function (x) { return x.id === id });
+  return c ? !!c.bloqueada : false;
+}
+function pintaCapas() {
+  if (!listaCapas) return;
+  listaCapas.innerHTML = (E.capas || []).map(function (c) {
+    var activa = E.capaActiva === c.id;
+    return '<div class="fila" style="margin-bottom:6px;align-items:center;gap:4px">'
+      + '<button class="boton chico" data-capa-vis="' + escapa(c.id) + '" title="Mostrar u ocultar">'
+      + (c.visible ? '👁' : '—') + '</button>'
+      + '<button class="boton chico' + (c.bloqueada ? ' principal' : '') + '" data-capa-lock="' + escapa(c.id) + '" title="Bloquear o desbloquear">'
+      + (c.bloqueada ? '🔒' : '🔓') + '</button>'
+      + '<input type="text" data-capa-nombre="' + escapa(c.id) + '" value="' + escapa(c.nombre) + '" style="flex:1;margin:0 6px" maxlength="24">'
+      + '<button class="boton chico" data-capa-arriba="' + escapa(c.id) + '" title="Subir">↑</button>'
+      + '<button class="boton chico" data-capa-abajo="' + escapa(c.id) + '" title="Bajar">↓</button>'
+      + '<button class="boton chico peligro" data-capa-borrar="' + escapa(c.id) + '" title="Borrar capa">×</button>'
+      + (activa ? ' <b>activa</b>' : '')
+      + '</div>';
+  }).join("");
+  capaActiva.innerHTML = (E.capas || []).map(function (c) {
+    return '<option value="' + escapa(c.id) + '"' + (E.capaActiva === c.id ? ' selected' : '') + '>'
+         + escapa(c.nombre) + '</option>';
+  }).join("");
 }
 
 // El contorno de una zona, en la forma que entiende un <path>. Calcado del que
@@ -2242,11 +2326,13 @@ s.addEventListener("pointerdown", function (ev) {
     arrastre = {que: "vertice", k: +vertice.dataset.zona, v: +vertice.dataset.vert,
                 desde: p, original: E.zonas[+vertice.dataset.zona][2].map(function (q) { return q.slice() })};
   } else if (zona) {
+    if (capaBloqueada(capaDeElemento(E.zonas[+zona.dataset.zona]))) return;
     elige("zona", +zona.dataset.zona);
     arrastre = {que: "zona", k: +zona.dataset.zona, desde: p,
                 original: E.zonas[+zona.dataset.zona][2].map(function (q) { return q.slice() })};
   } else if (icono) {
     var k = +icono.dataset.icono;
+    if (capaBloqueada(capaDeElemento(E.iconos[k]))) return;
     elige("icono", k, ev.shiftKey);
     // Arrastrar uno marcado mueve todo el grupo: es lo util de marcarlos.
     var grupo = multi.indexOf(k) >= 0 ? multi.slice() : [k];
@@ -2611,7 +2697,8 @@ s.addEventListener("drop", function (ev) {
   // modo. Dejarlo puesto pondria un icono en cada clic siguiente, y arrastrar
   // ya significa «quiero este aqui» y nada mas.
   estampa = null;
-  E.iconos.push(Object.assign(ic, {x: aMapa(ev)[0], y: aMapa(ev)[1]}));
+  E.iconos.push(Object.assign(ic, {x: aMapa(ev)[0], y: aMapa(ev)[1],
+                                  capa: E.capaActiva}));
   pintaPaleta();
   elige("icono", E.iconos.length - 1);
   hayCambios();
@@ -2925,6 +3012,104 @@ function recargaBiblioteca() {
     .then(function (d) { if (d && d.biblioteca) { E.biblioteca = d.biblioteca; dibuja() } })
     .catch(function () {});
 }
+
+// --- capas -----------------------------------------------------------------
+// Crear, renombrar, borrar, mostrar/ocultar, bloquear y reordenar capas.
+// Las capas no se publican: solo sirven para organizar mientras se edita.
+function capaActual() { return E.capas.find(function (c) { return c.id === E.capaActiva }) }
+function nuevaIdCapa(base) {
+  var ids = (E.capas || []).map(function (c) { return c.id });
+  var cid = (base || "capa").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "capa";
+  if (ids.indexOf(cid) < 0) return cid;
+  var n = 2;
+  while (ids.indexOf(cid + "-" + n) >= 0) n++;
+  return cid + "-" + n;
+}
+btnNuevaCapa.addEventListener("click", function () {
+  var nombre = (nuevaCapa.value || "").trim();
+  if (!nombre) { aviso("Ponle un nombre a la capa.", "aviso"); return }
+  var cid = nuevaIdCapa(nombre);
+  E.capas.push({id: cid, nombre: nombre, visible: true, bloqueada: false});
+  E.capaActiva = cid;
+  nuevaCapa.value = "";
+  hayCambios();
+  pintaCapas();
+  aviso("Capa «" + nombre + "» creada.", "ok");
+});
+listaCapas.addEventListener("input", function (ev) {
+  var inp = ev.target.closest("[data-capa-nombre]");
+  if (!inp) return;
+  var id = inp.dataset.capaNombre;
+  var c = (E.capas || []).find(function (x) { return x.id === id });
+  if (c) c.nombre = inp.value;
+});
+listaCapas.addEventListener("change", function (ev) {
+  var inp = ev.target.closest("[data-capa-nombre]");
+  if (!inp) return;
+  hayCambios();
+  pintaCapas();
+});
+listaCapas.addEventListener("click", function (ev) {
+  var vis = ev.target.closest("[data-capa-vis]");
+  var loc = ev.target.closest("[data-capa-lock]");
+  var arr = ev.target.closest("[data-capa-arriba]");
+  var aba = ev.target.closest("[data-capa-abajo]");
+  var bor = ev.target.closest("[data-capa-borrar]");
+  if (vis) {
+    var c = (E.capas || []).find(function (x) { return x.id === vis.dataset.capaVis });
+    if (c) { c.visible = !c.visible; hayCambios(); pintaCapas(); dibuja(); }
+    return;
+  }
+  if (loc) {
+    var c = (E.capas || []).find(function (x) { return x.id === loc.dataset.capaLock });
+    if (c) { c.bloqueada = !c.bloqueada; hayCambios(); pintaCapas(); }
+    return;
+  }
+  if (arr) {
+    var i = (E.capas || []).findIndex(function (x) { return x.id === arr.dataset.capaArriba });
+    if (i > 0) { var t = E.capas[i-1]; E.capas[i-1] = E.capas[i]; E.capas[i] = t; hayCambios(); pintaCapas(); }
+    return;
+  }
+  if (aba) {
+    var i = (E.capas || []).findIndex(function (x) { return x.id === aba.dataset.capaAbajo });
+    if (i >= 0 && i < E.capas.length - 1) { var t = E.capas[i+1]; E.capas[i+1] = E.capas[i]; E.capas[i] = t; hayCambios(); pintaCapas(); }
+    return;
+  }
+  if (bor) {
+    var id = bor.dataset.capaBorrar;
+    if (E.capas.length <= 1) { aviso("Tiene que quedar al menos una capa.", "aviso"); return }
+    if (!confirm("¿Borrar la capa? Los elementos que estaban en ella pasan a Principal.")) return;
+    E.capas = E.capas.filter(function (x) { return x.id !== id });
+    E.iconos.forEach(function (ic) { if (ic.capa === id) ic.capa = "principal" });
+    E.zonas.forEach(function (z) {
+      var a = (z.length > 4 && z[4] && typeof z[4] === "object") ? z[4] : null;
+      if (a && a.capa === id) a.capa = "principal";
+    });
+    if (E.capaActiva === id) E.capaActiva = E.capas[0].id;
+    hayCambios();
+    pintaCapas();
+    aviso("Capa borrada.", "ok");
+    return;
+  }
+});
+capaActiva.addEventListener("change", function () {
+  E.capaActiva = capaActiva.value;
+  pintaCapas();
+});
+btnMoverACapa.addEventListener("click", function () {
+  if (!multi.length && !(sel && sel.tipo === "icono")) {
+    aviso("Marca iconos (con Mayús) o elige uno para moverlos.", "aviso"); return;
+  }
+  var destino = E.capaActiva;
+  if (sel && sel.tipo === "icono" && E.iconos[sel.i]) {
+    E.iconos[sel.i].capa = destino;
+  }
+  multi.forEach(function (k) { if (E.iconos[k]) E.iconos[k].capa = destino });
+  multi = [];
+  hayCambios();
+  pintaCapas();
+  aviso("Movidos a la capa activa.", "ok");
+});
 
 // --- bloques colapsables ---------------------------------------------------
 // Los bloques del panel se pueden plegar pulsando su titulo, para no tener
@@ -3338,7 +3523,8 @@ document.getElementById("btnNueva").addEventListener("click", function () {
   var cx = E.ancho / 2, cy = E.alto / 2, r = 90;
   E.zonas.push(["Zona nueva", "Nueva " + (E.zonas.length + 1),
     [[cx - r, cy - r], [cx + r, cy - r], [cx + r, cy + r], [cx - r, cy + r]],
-    "Describe aqui que hay en esta zona del evento."]);
+    "Describe aqui que hay en esta zona del evento.",
+    {"capa": E.capaActiva}]);
   elige("zona", E.zonas.length - 1);
   hayCambios();
   fNombre.focus(); fNombre.select();
@@ -3444,7 +3630,8 @@ function guardar() {
   return fetch("/api/guardar", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({zonas: E.zonas, iconos: E.iconos,
-                          propios: E.propios, enlace: E.enlace})
+                          propios: E.propios, enlace: E.enlace,
+                          capas: E.capas})
   }).then(function (r) { return r.json().then(function (d) { return [r.ok, d] }) })
     .then(function (par) {
       var ok = par[0], d = par[1];
@@ -3533,6 +3720,11 @@ fetch("/api/estado").then(function (r) {
   return r.json();
 }).then(function (d) {
   E = Object.assign(E, d);
+  // Las capas: si el croquis no las tiene (uno viejo), se crea una sola
+  // "Principal" donde van todos los elementos.
+  if (!E.capas || !E.capas.length)
+    E.capas = [{id: "principal", nombre: "Principal", visible: true, bloqueada: false}];
+  if (!E.capaActiva) E.capaActiva = E.capas[0].id;
   // Los dos desplegables de destino llevan lo mismo: la direccion de fuera y
   // un archivo por cada cosa que haya en RecursosExtra. Se rellenan antes que
   // nada, porque el repintado del panel ya los consulta.

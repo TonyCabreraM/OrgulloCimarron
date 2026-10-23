@@ -280,6 +280,18 @@ def leer_croquis() -> dict:
     _, _, cuerpo_zonas = _tramos(texto, "ZONAS")
     _, _, cuerpo_iconos = _tramos(texto, "ICONOS")
     _, _, cuerpo_propios = _tramos(texto, "PROPIOS")
+    # Las capas son opcionales: un croquis viejo no las tiene, y en ese caso se
+    # crea una sola capa "principal" que es donde van todos los elementos.
+    try:
+        _, _, cuerpo_capas = _tramos(texto, "CAPAS")
+        capas = _valor(cuerpo_capas, "CAPAS")
+    except ErrorEditor:
+        capas = [{"id": "principal", "nombre": "Principal",
+                  "visible": True, "bloqueada": False}]
+    if not isinstance(capas, list) or not capas:
+        capas = [{"id": "principal", "nombre": "Principal",
+                  "visible": True, "bloqueada": False}]
+    # Cada elemento sin capa declarada pertenece a "principal".
     vista = re.search(r"var VISTA = \[([-\d,\s]+)\]", texto)
     # El fondo. Se busca el `<image>` que se llama `arte` y no el primero que
     # sale: antes el primer `<image>` del documento era el banner de arriba, y el
@@ -305,10 +317,21 @@ def leer_croquis() -> dict:
     enlace = None
     if enc and enc.group(1) != "null":
         enlace = _json(enc.group(1), "ENLACE")
+    zonas_leidas = _valor(cuerpo_zonas, "ZONAS")
+    iconos_leidos = _valor(cuerpo_iconos, "ICONOS")
+    # Cada zona e icono sin capa declarada pertenece a "principal", para que
+    # un croquis viejo o editado a mano siga funcionando.
+    for z in zonas_leidas:
+        if isinstance(z, (list, tuple)) and len(z) > 4 and isinstance(z[4], dict):
+            z[4].setdefault("capa", "principal")
+    for ic in iconos_leidos:
+        if isinstance(ic, dict):
+            ic.setdefault("capa", "principal")
     return {
-        "zonas": _valor(cuerpo_zonas, "ZONAS"),
-        "iconos": _valor(cuerpo_iconos, "ICONOS"),
+        "zonas": zonas_leidas,
+        "iconos": iconos_leidos,
         "propios": _objeto(cuerpo_propios, "PROPIOS"),
+        "capas": capas,
         "enlace": enlace,
         "vista": [int(v) for v in vista.group(1).split(",")] if vista else [0, 0, ANCHO, ALTO],
         "mapa": mapa.group(1) if mapa else "FinalSinCosas.svg",
@@ -394,6 +417,46 @@ def _n(v) -> str:
     return str(int(round(float(v))))
 
 
+def _limpia_capas(capas) -> list:
+    """Las capas limpias, con al menos una capa 'principal'."""
+    if not isinstance(capas, list) or not capas:
+        return [{"id": "principal", "nombre": "Principal",
+                 "visible": True, "bloqueada": False}]
+    salida = []
+    ids = set()
+    for c in capas:
+        if not isinstance(c, dict):
+            continue
+        cid = c.get("id") or "capa"
+        # Sin id repetido: si se repite, se le añade un numero.
+        base, n = cid, 1
+        while cid in ids:
+            n += 1
+            cid = f"{base}-{n}"
+        ids.add(cid)
+        salida.append({"id": cid,
+                       "nombre": c.get("nombre") or cid,
+                       "visible": bool(c.get("visible", True)),
+                       "bloqueada": bool(c.get("bloqueada", False))})
+    if not salida:
+        salida = [{"id": "principal", "nombre": "Principal",
+                   "visible": True, "bloqueada": False}]
+    return salida
+
+
+def _texto_capas(capas: list) -> str:
+    """El array de capas, una por linea."""
+    capas = _limpia_capas(capas)
+    lineas = []
+    for c in capas:
+        lineas.append(
+            f'  {{"id": {json.dumps(c["id"])}, '
+            f'"nombre": {json.dumps(c["nombre"], ensure_ascii=False)}, '
+            f'"visible": {"true" if c["visible"] else "false"}, '
+            f'"bloqueada": {"true" if c["bloqueada"] else "false"}}}')
+    return "var CAPAS = [\n" + ",\n".join(lineas) + "\n];"
+
+
 def _texto_zonas(zonas: list) -> str:
     """El array de zonas, formateado como estaba: una zona por parrafo.
 
@@ -452,6 +515,8 @@ def _texto_adornos(adornos: dict) -> str:
         trozos.append(f'"w": {round(float(adornos["w"]), 2):g}')
     if adornos.get("o") and float(adornos["o"]) != OPACIDAD:
         trozos.append(f'"o": {round(float(adornos["o"]), 2):g}')
+    if adornos.get("capa") and adornos["capa"] != "principal":
+        trozos.append(f'"capa": {json.dumps(adornos["capa"], ensure_ascii=False)}')
     return "{" + ", ".join(trozos) + "}"
 
 
@@ -527,6 +592,8 @@ def _campos_icono(ic: dict) -> list[str]:
         partes.append(f'"sk": {round(float(ic["sk"]), 2):g}')
     if ic.get("op") and float(ic["op"]) != OPACIDAD:
         partes.append(f'"op": {round(float(ic["op"]), 2):g}')
+    if ic.get("capa") and ic["capa"] != "principal":
+        partes.append(f'"capa": {json.dumps(ic["capa"], ensure_ascii=False)}')
     return partes
 
 
@@ -987,7 +1054,7 @@ def _texto_enlace(enlace: dict) -> str:
 
 
 def guardar_croquis(zonas: list, iconos: list, propios: dict,
-                    enlace=None) -> dict:
+                    enlace=None, capas=None) -> dict:
     """Valida y escribe las zonas, los iconos y los iconos propios.
 
     Deja una copia de seguridad antes de tocar nada, y si algo no cuadra no
@@ -1021,12 +1088,25 @@ def guardar_croquis(zonas: list, iconos: list, propios: dict,
     RESPALDO.mkdir(exist_ok=True)
     (RESPALDO / "croquis.html").write_text(texto, encoding="utf-8")
 
+    capas = _limpia_capas(capas)
     bloques = (("ZONAS", _texto_zonas(zonas)),
                ("ICONOS", _texto_iconos(iconos)),
                ("PROPIOS", _texto_propios(propios)),
+               ("CAPAS", _texto_capas(capas)),
                ("ENLACE", _texto_enlace(enlace)))
     for nombre, cuerpo in bloques:
-        a, b, _ = _tramos(texto, nombre)
+        try:
+            a, b, _ = _tramos(texto, nombre)
+        except ErrorEditor:
+            # Un croquis viejo puede no tener el bloque (las capas se anadieron
+            # despues). Se anade al final, antes de </script> si existe.
+            ini, fin = _marcadores(nombre)
+            bloque = "\n" + ini + "\n" + cuerpo + "\n" + fin + "\n"
+            if "</script>" in texto:
+                texto = texto.replace("</script>", bloque + "</script>", 1)
+            else:
+                texto += bloque
+            continue
         ini, fin = _marcadores(nombre)
         texto = texto[:a] + ini + "\n" + cuerpo + "\n" + fin + texto[b + len(fin):]
 
@@ -1309,7 +1389,8 @@ class Manejador(BaseHTTPRequestHandler):
                     raise ErrorEditor("Los iconos propios tienen que ser un diccionario.")
                 self._json({"ok": True,
                             "guardado": guardar_croquis(zonas, iconos, propios,
-                                                        datos.get("enlace")),
+                                                        datos.get("enlace"),
+                                                        datos.get("capas")),
                             "git": estado_git()})
             elif ruta == "/api/icono":
                 # Reemplazar la imagen de un icono que ya existe. El nombre que
